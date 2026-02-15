@@ -6,6 +6,7 @@ import {
   generalSettingsStore,
   llmProviderStore,
   analyticsSettingsStore,
+  serverSettingsStore,
 } from '@extension/storage';
 import { t } from '@extension/i18n';
 import BrowserContext from './browser/context';
@@ -18,11 +19,13 @@ import { DEFAULT_AGENT_OPTIONS } from './agent/types';
 import { SpeechToTextService } from './services/speechToText';
 import { injectBuildDomTreeScripts } from './browser/dom/service';
 import { analytics } from './services/analytics';
+import { ServerClient } from './services/server';
 
 const logger = createLogger('background');
 
 const browserContext = new BrowserContext({});
 let currentExecutor: Executor | null = null;
+let serverClient: ServerClient | null = null;
 let currentPort: chrome.runtime.Port | null = null;
 const SIDE_PANEL_URL = chrome.runtime.getURL('side-panel/index.html');
 
@@ -64,6 +67,32 @@ analyticsSettingsStore.subscribe(() => {
   analytics.updateSettings().catch(error => {
     logger.error('Failed to update analytics settings:', error);
   });
+});
+
+// Initialize server client
+async function initServerClient() {
+  serverClient = await ServerClient.create(serverSettingsStore);
+  if (serverClient) {
+    logger.info('Server client initialized');
+  } else {
+    logger.info('Server not configured, standalone mode');
+  }
+}
+
+initServerClient().catch(error => {
+  logger.error('Failed to initialize server client:', error);
+});
+
+let lastServerUrl = '';
+serverSettingsStore.subscribe(() => {
+  const settings = serverSettingsStore.getSnapshot();
+  const currentUrl = settings?.serverUrl ?? '';
+  if (currentUrl !== lastServerUrl) {
+    lastServerUrl = currentUrl;
+    initServerClient().catch(error => {
+      logger.error('Failed to reinitialize server client:', error);
+    });
+  }
 });
 
 // Listen for simple messages (e.g., from options page)
@@ -330,6 +359,7 @@ async function setupExecutor(taskId: string, task: string, browserContext: Brows
       planningInterval: generalSettings.planningInterval,
     },
     generalSettings: generalSettings,
+    serverClient,
   });
 
   return executor;

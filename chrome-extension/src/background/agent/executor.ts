@@ -24,6 +24,7 @@ import { URLNotAllowedError } from '../browser/views';
 import { chatHistoryStore } from '@extension/storage/lib/chat';
 import type { AgentStepHistory } from './history';
 import type { GeneralSettingsConfig } from '@extension/storage';
+import type { ServerClient } from '../services/server';
 import { analytics } from '../services/analytics';
 
 const logger = createLogger('Executor');
@@ -33,6 +34,7 @@ export interface ExecutorExtraArgs {
   extractorLLM?: BaseChatModel;
   agentOptions?: Partial<AgentOptions>;
   generalSettings?: GeneralSettingsConfig;
+  serverClient?: ServerClient | null;
 }
 
 export class Executor {
@@ -41,6 +43,7 @@ export class Executor {
   private readonly context: AgentContext;
   private readonly plannerPrompt: PlannerPrompt;
   private readonly navigatorPrompt: NavigatorPrompt;
+  private readonly serverClient: ServerClient | null;
   private readonly generalSettings: GeneralSettingsConfig | undefined;
   private tasks: string[] = [];
   constructor(
@@ -63,6 +66,7 @@ export class Executor {
       extraArgs?.agentOptions ?? {},
     );
 
+    this.serverClient = extraArgs?.serverClient ?? null;
     this.generalSettings = extraArgs?.generalSettings;
     this.tasks.push(task);
     this.navigatorPrompt = new NavigatorPrompt(context.options.maxActionsPerStep);
