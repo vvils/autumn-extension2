@@ -35,6 +35,7 @@ export enum ExecutionState {
   STEP_OK = 'step.ok',
   STEP_FAIL = 'step.fail',
   STEP_CANCEL = 'step.cancel',
+  STEP_STREAMING = 'step.streaming',
 
   // Action/Tool level states
   ACT_START = 'act.start',

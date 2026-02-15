@@ -77,7 +77,9 @@ export class PlannerAgent extends BaseAgent<typeof plannerOutputSchema, PlannerO
         plannerMessages[plannerMessages.length - 1] = new HumanMessage(newMsg);
       }
 
-      const modelOutput = await this.invoke(plannerMessages);
+      const modelOutput = await this.streamInvoke(plannerMessages, ['next_steps', 'final_answer'], text => {
+        this.context.emitEvent(Actors.PLANNER, ExecutionState.STEP_STREAMING, text);
+      });
       if (!modelOutput) {
         throw new Error('Failed to validate planner output');
       }

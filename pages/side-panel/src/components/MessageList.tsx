@@ -5,9 +5,10 @@ import { memo } from 'react';
 interface MessageListProps {
   messages: Message[];
   isDarkMode?: boolean;
+  isStreaming?: boolean;
 }
 
-export default memo(function MessageList({ messages, isDarkMode = false }: MessageListProps) {
+export default memo(function MessageList({ messages, isDarkMode = false, isStreaming = false }: MessageListProps) {
   return (
     <div className="max-w-full space-y-4">
       {messages.map((message, index) => (
@@ -16,6 +17,7 @@ export default memo(function MessageList({ messages, isDarkMode = false }: Messa
           message={message}
           isSameActor={index > 0 ? messages[index - 1].actor === message.actor : false}
           isDarkMode={isDarkMode}
+          isStreaming={isStreaming && index === messages.length - 1}
         />
       ))}
     </div>
@@ -26,9 +28,10 @@ interface MessageBlockProps {
   message: Message;
   isSameActor: boolean;
   isDarkMode?: boolean;
+  isStreaming?: boolean;
 }
 
-function MessageBlock({ message, isSameActor, isDarkMode = false }: MessageBlockProps) {
+function MessageBlock({ message, isSameActor, isDarkMode = false, isStreaming = false }: MessageBlockProps) {
   if (!message.actor) {
     console.error('No actor found');
     return <div />;
@@ -66,10 +69,13 @@ function MessageBlock({ message, isSameActor, isDarkMode = false }: MessageBlock
                 <div className="h-full animate-progress bg-blue-500" />
               </div>
             ) : (
-              message.content
+              <>
+                {message.content}
+                {isStreaming && <span className="ml-0.5 inline-block animate-pulse">▎</span>}
+              </>
             )}
           </div>
-          {!isProgress && (
+          {!isProgress && !isStreaming && (
             <div className={`text-right text-xs ${isDarkMode ? 'text-gray-500' : 'text-gray-300'}`}>
               {formatTimestamp(message.timestamp)}
             </div>

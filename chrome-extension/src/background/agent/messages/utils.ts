@@ -41,6 +41,69 @@ export function removeThinkTags(text: string): string {
 }
 
 /**
+ * Strip think tags for streaming: removes complete blocks and truncates any unclosed <think tag at buffer end.
+ */
+export function removeThinkTagsForStreaming(text: string): string {
+  let result = removeThinkTags(text);
+  const unclosedIdx = result.lastIndexOf('<think');
+  if (unclosedIdx !== -1 && !result.includes('</think>', unclosedIdx)) {
+    result = result.substring(0, unclosedIdx);
+  }
+  return result.trim();
+}
+
+/**
+ * Extract partial string value of a JSON field from a streaming buffer.
+ * Handles escape sequences so we don't break on embedded quotes.
+ * Returns null if the field hasn't started yet.
+ */
+export function extractStreamingFieldValue(buffer: string, fieldName: string): string | null {
+  const needle = `"${fieldName}"`;
+  const fieldIdx = buffer.indexOf(needle);
+  if (fieldIdx === -1) return null;
+
+  // Find the opening quote of the value
+  const afterKey = buffer.indexOf(':', fieldIdx + needle.length);
+  if (afterKey === -1) return null;
+
+  const openQuote = buffer.indexOf('"', afterKey + 1);
+  if (openQuote === -1) return null;
+
+  let result = '';
+  let i = openQuote + 1;
+  while (i < buffer.length) {
+    const ch = buffer[i];
+    if (ch === '\\' && i + 1 < buffer.length) {
+      const next = buffer[i + 1];
+      switch (next) {
+        case '"':
+          result += '"';
+          break;
+        case 'n':
+          result += '\n';
+          break;
+        case 't':
+          result += '\t';
+          break;
+        case '\\':
+          result += '\\';
+          break;
+        default:
+          result += next;
+          break;
+      }
+      i += 2;
+      continue;
+    }
+    if (ch === '"') break;
+    result += ch;
+    i++;
+  }
+
+  return result;
+}
+
+/**
  * Extract JSON from model output, handling both plain JSON and code-block-wrapped JSON.
  * @param content - The string content that potentially contains JSON.
  * @returns Parsed JSON object

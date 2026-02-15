@@ -5,7 +5,13 @@ import type { BasePrompt } from '../prompts/base';
 import type { BaseMessage } from '@langchain/core/messages';
 import { createLogger } from '@src/background/log';
 import type { Action } from '../actions/builder';
-import { convertInputMessages, extractJsonFromModelOutput, removeThinkTags } from '../messages/utils';
+import {
+  convertInputMessages,
+  extractJsonFromModelOutput,
+  extractStreamingFieldValue,
+  removeThinkTags,
+  removeThinkTagsForStreaming,
+} from '../messages/utils';
 import { isAbortedError, ResponseParseError } from './errors';
 import { ProviderTypeEnum } from '@extension/storage';
 
@@ -197,6 +203,72 @@ export abstract class BaseAgent<T extends z.ZodType, M = unknown> {
     const errorMessage = `Failed to parse response from ${this.modelName}`;
     logger.error(errorMessage);
     throw new ResponseParseError('Could not parse response');
+  }
+
+  protected async streamInvoke(
+    inputMessages: BaseMessage[],
+    targetFields: string[],
+    onChunk: (text: string) => void,
+  ): Promise<this['ModelOutput']> {
+    const DEBOUNCE_MS = 100;
+    const MIN_DELTA_CHARS = 5;
+
+    const convertedMessages = convertInputMessages(inputMessages, this.modelName);
+    let buffer = '';
+    let lastEmitted = '';
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const emitIfNeeded = () => {
+      const cleaned = removeThinkTagsForStreaming(buffer);
+      let displayText = '';
+      for (const field of targetFields) {
+        const value = extractStreamingFieldValue(cleaned, field);
+        if (value) displayText = value;
+      }
+      if (displayText && displayText.length - lastEmitted.length >= MIN_DELTA_CHARS) {
+        lastEmitted = displayText;
+        onChunk(displayText);
+      }
+    };
+
+    try {
+      const stream = await this.chatLLM.stream(convertedMessages, {
+        signal: this.context.controller.signal,
+        ...this.callOptions,
+      });
+
+      for await (const chunk of stream) {
+        const content = typeof chunk.content === 'string' ? chunk.content : '';
+        buffer += content;
+
+        if (debounceTimer) clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(emitIfNeeded, DEBOUNCE_MS);
+      }
+
+      if (debounceTimer) clearTimeout(debounceTimer);
+
+      // Final emission
+      const cleaned = removeThinkTagsForStreaming(buffer);
+      let finalText = '';
+      for (const field of targetFields) {
+        const value = extractStreamingFieldValue(cleaned, field);
+        if (value) finalText = value;
+      }
+      if (finalText && finalText !== lastEmitted) {
+        onChunk(finalText);
+      }
+
+      const parsed = this.manuallyParseResponse(buffer);
+      if (parsed) return parsed;
+
+      throw new ResponseParseError('Could not parse streamed response');
+    } catch (error) {
+      if (debounceTimer) clearTimeout(debounceTimer);
+      if (isAbortedError(error)) throw error;
+
+      logger.warning(`[${this.modelName}] Stream failed, falling back to invoke:`, error);
+      return this.invoke(inputMessages);
+    }
   }
 
   // Execute the agent and return the result

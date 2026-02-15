@@ -38,8 +38,10 @@ const SidePanel = () => {
   const [isProcessingSpeech, setIsProcessingSpeech] = useState(false);
   const [isReplaying, setIsReplaying] = useState(false);
   const [replayEnabled, setReplayEnabled] = useState(false);
+  const [isStreamingPlanner, setIsStreamingPlanner] = useState(false);
   const sessionIdRef = useRef<string | null>(null);
   const isReplayingRef = useRef<boolean>(false);
+  const plannerStreamingRef = useRef(false);
   const portRef = useRef<chrome.runtime.Port | null>(null);
   const heartbeatIntervalRef = useRef<number | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -197,13 +199,33 @@ const SidePanel = () => {
             case ExecutionState.STEP_START:
               displayProgress = true;
               break;
+            case ExecutionState.STEP_STREAMING:
+              setMessages(prev => {
+                const filtered = prev.filter(
+                  (msg, idx) => !(msg.content === progressMessage && idx === prev.length - 1),
+                );
+                if (plannerStreamingRef.current) {
+                  return [...filtered.slice(0, -1), { actor, content: content || '', timestamp }];
+                } else {
+                  plannerStreamingRef.current = true;
+                  setIsStreamingPlanner(true);
+                  return [...filtered, { actor, content: content || '', timestamp }];
+                }
+              });
+              return;
             case ExecutionState.STEP_OK:
+              plannerStreamingRef.current = false;
+              setIsStreamingPlanner(false);
               skip = false;
               break;
             case ExecutionState.STEP_FAIL:
+              plannerStreamingRef.current = false;
+              setIsStreamingPlanner(false);
               skip = false;
               break;
             case ExecutionState.STEP_CANCEL:
+              plannerStreamingRef.current = false;
+              setIsStreamingPlanner(false);
               break;
             default:
               console.error('Invalid step state', state);
@@ -1158,7 +1180,7 @@ const SidePanel = () => {
                 {messages.length > 0 && (
                   <div
                     className={`scrollbar-gutter-stable flex-1 overflow-x-hidden overflow-y-scroll scroll-smooth p-2 ${isDarkMode ? 'bg-slate-900/80' : ''}`}>
-                    <MessageList messages={messages} isDarkMode={isDarkMode} />
+                    <MessageList messages={messages} isDarkMode={isDarkMode} isStreaming={isStreamingPlanner} />
                     <div ref={messagesEndRef} />
                   </div>
                 )}
