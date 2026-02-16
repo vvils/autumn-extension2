@@ -66,7 +66,7 @@ export default function ChatInput({
 
   useEffect(() => {
     resizeTextarea();
-  }, [resizeTextarea]);
+  }, [text, resizeTextarea]);
 
   const handleSubmit = useCallback(() => {
     const trimmedText = text.trim();

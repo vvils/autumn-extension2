@@ -13,7 +13,7 @@ const defaultFavoritePrompts = [
   {
     title: '🏨 Hotel Group Booking Quote',
     content:
-      'Navigate to https://mail.google.com/mail/u/3/#inbox — the user will already be logged in. Search for group booking inquiries using the query: "group booking OR block reservation OR event inquiry OR RFP OR corporate rate OR wedding block OR room block". Open the matching email and read the full content.\nNext, navigate to the Autumn application at http://localhost:3000 and open the sidebar. Go to the Group Bookings section. Paste the email content into the Quick Import field and generate a quote. Once the quote is generated, scroll down and copy the generated email reply.\nNavigate back to Gmail at https://mail.google.com/mail/u/3/#inbox. Open the original email thread, click reply, and paste the generated reply into the compose window. Save it as a draft only — do NOT send it.',
+      'Navigate to https://mail.google.com/mail/u/3/#inbox — the user will already be logged in. Search for group booking inquiries using the query: "group booking OR block reservation OR event inquiry OR RFP OR corporate rate OR wedding block OR room block". Open the matching email and COPY the full content.\nNext, navigate to the Autumn application at http://localhost:3000/groups and click new quote. Paste the email content into the Quick Import field and generate a quote. Once the quote is generated, scroll down and copy the generated email reply.\nNavigate back to Gmail at https://mail.google.com/mail/u/3/#inbox. Open the original email thread, click reply, and paste the generated reply into the compose window. Save it as a draft only — do NOT send it.',
   },
 ];
 
