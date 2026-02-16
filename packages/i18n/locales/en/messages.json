@@ -208,6 +208,9 @@
   "options_tabs_firewall": {
     "message": "Firewall"
   },
+  "options_tabs_server": {
+    "message": "Server"
+  },
   "options_tabs_help": {
     "message": "Help"
   },
@@ -965,6 +968,54 @@
       "error": {
         "content": "$1",
         "example": "Option not found"
+      }
+    }
+  },
+  "options_server_url_label": {
+    "message": "Server URL"
+  },
+  "options_server_url_placeholder": {
+    "message": "http://localhost:3000"
+  },
+  "options_server_testConnection": {
+    "message": "Test Connection"
+  },
+  "options_server_status_notConfigured": {
+    "message": "Not configured"
+  },
+  "options_server_status_connected": {
+    "message": "Connected ($LATENCY$ms)",
+    "placeholders": {
+      "latency": {
+        "content": "$1",
+        "example": "42"
+      }
+    }
+  },
+  "options_server_status_failed": {
+    "message": "Connection failed"
+  },
+  "options_server_auth_title": {
+    "message": "Authentication"
+  },
+  "options_server_auth_email": {
+    "message": "Email"
+  },
+  "options_server_auth_password": {
+    "message": "Password"
+  },
+  "options_server_auth_login": {
+    "message": "Log In"
+  },
+  "options_server_auth_logout": {
+    "message": "Log Out"
+  },
+  "options_server_auth_loggedIn": {
+    "message": "Logged in as $USERID$",
+    "placeholders": {
+      "userid": {
+        "content": "$1",
+        "example": "user@example.com"
       }
     }
   }
