@@ -35,7 +35,6 @@ function MessageBlock({ message, isSameActor, isStreaming = false }: MessageBloc
     return <div />;
   }
   const actor = ACTOR_PROFILES[message.actor as keyof typeof ACTOR_PROFILES];
-  const isProgress = message.content === 'Showing progress...';
   const isUser = message.actor === Actors.USER;
 
   if (isUser) {
@@ -54,18 +53,10 @@ function MessageBlock({ message, isSameActor, isStreaming = false }: MessageBloc
         <div className="mb-1 text-[11px] font-medium uppercase tracking-wide text-gray-400">{actor.name}</div>
       )}
       <div className="whitespace-pre-wrap break-words text-[13px] leading-relaxed text-gray-900">
-        {isProgress ? (
-          <div className="h-1 overflow-hidden rounded bg-gray-100">
-            <div className="bg-accent-muted h-full animate-progress" />
-          </div>
-        ) : (
-          <>
-            {message.content}
-            {isStreaming && <span className="text-accent ml-0.5 inline-block animate-pulse">|</span>}
-          </>
-        )}
+        {message.content}
+        {isStreaming && <span className="text-accent ml-0.5 inline-block animate-pulse">|</span>}
       </div>
-      {!isProgress && !isStreaming && (
+      {!isStreaming && (
         <div className="mt-0.5 text-right text-[10px] text-gray-300">{formatTimestamp(message.timestamp)}</div>
       )}
     </div>

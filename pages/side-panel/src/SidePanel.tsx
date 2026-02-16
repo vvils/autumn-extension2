@@ -8,8 +8,10 @@ import MessageList from './components/MessageList';
 import ChatInput from './components/ChatInput';
 import ChatHistoryList from './components/ChatHistoryList';
 import BookmarkList from './components/BookmarkList';
+import ThinkingWidget from './components/ThinkingWidget';
 import { SlidePanel } from './components/SlidePanel';
 import { EventType, type AgentEvent, ExecutionState } from './types/event';
+import { useThinkingState } from './hooks/useThinkingState';
 import './SidePanel.css';
 
 declare global {
@@ -19,8 +21,8 @@ declare global {
 }
 
 const SidePanel = () => {
-  const progressMessage = 'Showing progress...';
   const [messages, setMessages] = useState<Message[]>([]);
+  const { state: thinkingWidgetState, handleEvent: handleThinkingEvent, reset: resetThinking } = useThinkingState();
   const [inputEnabled, setInputEnabled] = useState(true);
   const [showStopButton, setShowStopButton] = useState(false);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
@@ -112,18 +114,11 @@ const SidePanel = () => {
   }, [isReplaying]);
 
   const appendMessage = useCallback((newMessage: Message, sessionId?: string | null) => {
-    const isProgressMessage = newMessage.content === progressMessage;
-
-    setMessages(prev => {
-      const filteredMessages = prev.filter((msg, idx) => !(msg.content === progressMessage && idx === prev.length - 1));
-      return [...filteredMessages, newMessage];
-    });
+    setMessages(prev => [...prev, newMessage]);
 
     const effectiveSessionId = sessionId !== undefined ? sessionId : sessionIdRef.current;
 
-    console.log('sessionId', effectiveSessionId);
-
-    if (effectiveSessionId && !isProgressMessage) {
+    if (effectiveSessionId) {
       chatHistoryStore
         .addMessage(effectiveSessionId, newMessage)
         .catch(err => console.error('Failed to save message to history:', err));
@@ -135,7 +130,8 @@ const SidePanel = () => {
       const { actor, state, timestamp, data } = event;
       const content = data?.details;
       let skip = true;
-      let displayProgress = false;
+
+      handleThinkingEvent(event);
 
       switch (actor) {
         case Actors.SYSTEM:
@@ -185,19 +181,15 @@ const SidePanel = () => {
         case Actors.PLANNER:
           switch (state) {
             case ExecutionState.STEP_START:
-              displayProgress = true;
               break;
             case ExecutionState.STEP_STREAMING:
               setMessages(prev => {
-                const filtered = prev.filter(
-                  (msg, idx) => !(msg.content === progressMessage && idx === prev.length - 1),
-                );
                 if (plannerStreamingRef.current) {
-                  return [...filtered.slice(0, -1), { actor, content: content || '', timestamp }];
+                  return [...prev.slice(0, -1), { actor, content: content || '', timestamp }];
                 } else {
                   plannerStreamingRef.current = true;
                   setIsStreamingPlanner(true);
-                  return [...filtered, { actor, content: content || '', timestamp }];
+                  return [...prev, { actor, content: content || '', timestamp }];
                 }
               });
               return;
@@ -243,17 +235,13 @@ const SidePanel = () => {
         case Actors.NAVIGATOR:
           switch (state) {
             case ExecutionState.STEP_START:
-              displayProgress = true;
               break;
             case ExecutionState.STEP_OK:
-              displayProgress = false;
               break;
             case ExecutionState.STEP_FAIL:
               skip = false;
-              displayProgress = false;
               break;
             case ExecutionState.STEP_CANCEL:
-              displayProgress = false;
               break;
             case ExecutionState.ACT_START:
               if (content !== 'cache_content') {
@@ -274,7 +262,6 @@ const SidePanel = () => {
         case Actors.VALIDATOR:
           switch (state) {
             case ExecutionState.STEP_START:
-              displayProgress = true;
               break;
             case ExecutionState.STEP_OK:
               skip = false;
@@ -299,16 +286,8 @@ const SidePanel = () => {
           timestamp: timestamp,
         });
       }
-
-      if (displayProgress) {
-        appendMessage({
-          actor,
-          content: progressMessage,
-          timestamp: timestamp,
-        });
-      }
     },
-    [appendMessage],
+    [appendMessage, handleThinkingEvent],
   );
 
   const stopConnection = useCallback(() => {
@@ -683,6 +662,7 @@ const SidePanel = () => {
     setShowStopButton(false);
     setIsFollowUpMode(false);
     setIsHistoricalSession(false);
+    resetThinking();
     stopConnection();
   };
 
@@ -1064,6 +1044,7 @@ const SidePanel = () => {
                 <MessageList messages={messages} isStreaming={isStreamingPlanner} />
                 <div ref={messagesEndRef} />
               </div>
+              <ThinkingWidget state={thinkingWidgetState} />
               {renderChatInput()}
             </>
           )}
