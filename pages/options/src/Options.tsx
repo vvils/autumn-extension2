@@ -38,10 +38,9 @@ const Options = () => {
 
   const handleTabClick = (tabId: TabTypes) => {
     if (tabId === 'help') {
-      window.open('https://nanobrowser.ai/docs', '_blank');
-    } else {
-      setActiveTab(tabId);
+      return;
     }
+    setActiveTab(tabId);
   };
 
   const renderTabContent = () => {

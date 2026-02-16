@@ -39,7 +39,7 @@ function withOperaSidebar(manifest) {
   return deepmerge(manifest, {
     sidebar_action: {
       default_panel: 'side-panel/index.html',
-      default_title: 'Nanobrowser',
+      default_title: 'Autumn AI Co-Pilot',
       default_icon: 'icon-32.png',
     },
   });
@@ -71,6 +71,9 @@ const manifest = withOperaSidebar(
       default_icon: 'icon-32.png',
     },
     icons: {
+      16: 'icon-16.png',
+      48: 'icon-48.png',
+      96: 'icon-96.png',
       128: 'icon-128.png',
     },
     content_scripts: [
@@ -86,8 +89,11 @@ const manifest = withOperaSidebar(
           '*.js',
           '*.css',
           '*.svg',
-          'icon-128.png',
+          'icon-16.png',
           'icon-32.png',
+          'icon-48.png',
+          'icon-96.png',
+          'icon-128.png',
           'permission/index.html',
           'permission/permission.js',
         ],
