@@ -12,6 +12,12 @@ describe('findModelPricing', () => {
     expect(pricing).toEqual(MODEL_PRICING['claude-sonnet-4-5-20250929']);
   });
 
+  it('finds pricing for Anthropic base model names without date suffix', () => {
+    expect(findModelPricing('claude-sonnet-4-5')).not.toBeNull();
+    expect(findModelPricing('claude-haiku-4-5')).not.toBeNull();
+    expect(findModelPricing('claude-opus-4-1')).not.toBeNull();
+  });
+
   it('uses longest-prefix match for versioned model names', () => {
     const pricing = findModelPricing('gpt-4o-2024-08-06');
     expect(pricing).toEqual(MODEL_PRICING['gpt-4o']);

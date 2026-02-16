@@ -2,12 +2,18 @@ import { StorageEnum } from '../base/enums';
 import { createStorage } from '../base/base';
 import type { BaseStorage } from '../base/types';
 
-// Template data
+const LEGACY_CONTENT_MARKERS = ['nanobrowser', 'x.com/nanobrowser', 'github.com/nanobrowser'];
+
 const defaultFavoritePrompts = [
   {
     title: '📚 Explore AI Papers',
     content:
       '- Go to https://huggingface.co/papers and click through each of the first 3 papers.\n- For each paper:\n  - Record the title, URL and upvotes\n  - Summarise the abstract section\n- Finally, compile together a summary of all 3 papers, ranked by upvotes',
+  },
+  {
+    title: '🏨 Hotel Group Booking Quote',
+    content:
+      'Navigate to https://mail.google.com/mail/u/3/#inbox — the user will already be logged in. Search for group booking inquiries using the query: "group booking OR block reservation OR event inquiry OR RFP OR corporate rate OR wedding block OR room block". Open the matching email and read the full content.\nNext, navigate to the Autumn application at http://localhost:3000 and open the sidebar. Go to the Group Bookings section. Paste the email content into the Quick Import field and generate a quote. Once the quote is generated, scroll down and copy the generated email reply.\nNavigate back to Gmail at https://mail.google.com/mail/u/3/#inbox. Open the original email thread, click reply, and paste the generated reply into the compose window. Save it as a draft only — do NOT send it.',
   },
 ];
 
@@ -139,10 +145,20 @@ export function createFavoritesStorage(): FavoritePromptsStorage {
       const currentState = await favoritesStorage.get();
       let prompts = currentState.prompts;
 
-      // Check if storage is in initial state (empty prompts array and nextId=1)
-      if (currentState.prompts.length === 0 && currentState.nextId === 1) {
-        // Initialize with default prompts
-        for (const prompt of defaultFavoritePrompts) {
+      const hasLegacyPrompts = prompts.some(p =>
+        LEGACY_CONTENT_MARKERS.some(marker => p.content.toLowerCase().includes(marker)),
+      );
+      if (hasLegacyPrompts) {
+        prompts = prompts.filter(p => !LEGACY_CONTENT_MARKERS.some(marker => p.content.toLowerCase().includes(marker)));
+        await favoritesStorage.set(prev => ({
+          ...prev,
+          prompts,
+        }));
+      }
+
+      const missingDefaults = defaultFavoritePrompts.filter(dp => !prompts.some(p => p.content === dp.content));
+      if (missingDefaults.length > 0) {
+        for (const prompt of missingDefaults) {
           await favoritesStorage.set(prev => {
             const id = prev.nextId;
             const newPrompt: FavoritePrompt = { id, title: prompt.title, content: prompt.content };

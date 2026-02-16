@@ -99,11 +99,11 @@ export const ServerSettings = ({ isDarkMode = false }: ServerSettingsProps) => {
     setSettings(await serverSettingsStore.getSettings());
   };
 
-  const cardClass = `rounded-lg border ${isDarkMode ? 'border-slate-700 bg-slate-800' : 'border-blue-100 bg-white'} p-6 text-left shadow-sm`;
+  const cardClass = `rounded-lg border ${isDarkMode ? 'border-slate-700 bg-slate-800' : 'border-gray-200 bg-white'} p-6 text-left shadow-sm`;
   const headingClass = `mb-4 text-left text-xl font-semibold ${isDarkMode ? 'text-gray-200' : 'text-gray-800'}`;
   const labelClass = `text-base font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`;
   const inputClass = `w-full rounded-md border ${isDarkMode ? 'border-slate-600 bg-slate-700 text-gray-200' : 'border-gray-300 bg-white text-gray-700'} px-3 py-2`;
-  const btnPrimary = `rounded-md px-4 py-2 text-sm font-medium text-white ${isDarkMode ? 'bg-blue-600 hover:bg-blue-700' : 'bg-blue-600 hover:bg-blue-700'} disabled:opacity-50`;
+  const btnPrimary = `rounded-md px-4 py-2 text-sm font-medium text-white ${isDarkMode ? 'bg-accent hover:bg-accent-hover' : 'bg-accent hover:bg-accent-hover'} disabled:opacity-50`;
   const btnDanger = `rounded-md px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700`;
 
   return (
