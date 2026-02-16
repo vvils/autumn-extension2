@@ -4,7 +4,6 @@ export interface CostDisplayProps {
   totalInputTokens: number;
   totalOutputTokens: number;
   estimatedCostUsd: number;
-  isDarkMode: boolean;
 }
 
 function formatTokenCount(count: number): string {
@@ -23,7 +22,6 @@ export const CostDisplay = memo(function CostDisplay({
   totalInputTokens,
   totalOutputTokens,
   estimatedCostUsd,
-  isDarkMode,
 }: CostDisplayProps) {
   const totalTokens = totalInputTokens + totalOutputTokens;
   if (totalTokens === 0) return null;
@@ -32,12 +30,9 @@ export const CostDisplay = memo(function CostDisplay({
   const costText = formatCost(estimatedCostUsd, hasTokens);
 
   return (
-    <div
-      className={`flex items-center justify-center gap-2 px-3 py-1 text-xs ${
-        isDarkMode ? 'text-sky-400/70' : 'text-sky-600/70'
-      }`}>
+    <div className="text-accent/70 flex items-center gap-1.5 text-[10px]">
       <span>{formatTokenCount(totalTokens)} tokens</span>
-      <span className={isDarkMode ? 'text-sky-700' : 'text-sky-300'}>|</span>
+      <span className="text-gray-300">|</span>
       <span>{costText}</span>
     </div>
   );

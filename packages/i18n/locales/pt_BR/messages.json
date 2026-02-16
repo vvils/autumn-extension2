@@ -52,6 +52,9 @@
   "welcome_joinCommunity": {
     "message": "Junte-se à Nossa Comunidade"
   },
+  "welcome_subtitle": {
+    "message": "Seu assistente de automação web com IA"
+  },
   "status_checkingConfig": {
     "message": "Verificando configuração..."
   },

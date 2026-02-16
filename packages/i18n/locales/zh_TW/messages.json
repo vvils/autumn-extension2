@@ -52,6 +52,9 @@
   "welcome_joinCommunity": {
     "message": "加入我們的社群"
   },
+  "welcome_subtitle": {
+    "message": "您的 AI 網頁自動化助手"
+  },
   "status_checkingConfig": {
     "message": "正在檢查設定..."
   },
