@@ -560,13 +560,44 @@ export async function getScrollInfo(tabId: number): Promise<[number, number, num
   const results = await chrome.scripting.executeScript({
     target: { tabId: tabId },
     func: () => {
-      const scrollY = window.scrollY;
-      const visualViewportHeight = window.visualViewport?.height || window.innerHeight;
-      const scrollHeight = document.body.scrollHeight;
+      const viewportHeight = window.visualViewport?.height || window.innerHeight;
+
+      // If the document itself scrolls, use window scroll info
+      if (document.documentElement.scrollHeight > viewportHeight + 1) {
+        return {
+          scrollY: window.scrollY,
+          visualViewportHeight: viewportHeight,
+          scrollHeight: document.documentElement.scrollHeight,
+        };
+      }
+
+      // SPA pattern: body/html has overflow:hidden, a nested div is the scroll container.
+      // Find it via elementFromPoint at viewport center and walk up ancestors.
+      const centerX = window.innerWidth / 2;
+      const centerY = viewportHeight / 2;
+      let el = document.elementFromPoint(centerX, centerY);
+
+      while (el && el !== document.documentElement) {
+        if (el instanceof HTMLElement) {
+          const style = window.getComputedStyle(el);
+          const overflowY = style.overflowY;
+          const canScroll = overflowY === 'auto' || overflowY === 'scroll';
+          if (canScroll && el.scrollHeight > el.clientHeight + 1) {
+            return {
+              scrollY: el.scrollTop,
+              visualViewportHeight: el.clientHeight,
+              scrollHeight: el.scrollHeight,
+            };
+          }
+        }
+        el = el.parentElement;
+      }
+
+      // Fallback: no scrollable container found
       return {
-        scrollY: scrollY,
-        visualViewportHeight: visualViewportHeight,
-        scrollHeight: scrollHeight,
+        scrollY: window.scrollY,
+        visualViewportHeight: viewportHeight,
+        scrollHeight: document.documentElement.scrollHeight,
       };
     },
   });

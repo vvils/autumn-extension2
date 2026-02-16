@@ -108,6 +108,7 @@ export default class Page {
       transport: await ExtensionTransport.connectTab(this._tabId),
       defaultViewport: null,
       protocol: 'cdp' as ProtocolType,
+      protocolTimeout: 60_000,
     });
     this._browser = browser;
 
@@ -444,6 +445,13 @@ export default class Page {
     }
 
     try {
+      // Chrome freezes rendering for background tabs, making Page.captureScreenshot hang.
+      // Skip screenshot gracefully — agent continues with text-only DOM state.
+      const tab = await chrome.tabs.get(this._tabId);
+      if (!tab.active) {
+        return null;
+      }
+
       // First disable animations/transitions
       await this._puppeteerPage.evaluate(() => {
         const styleId = 'puppeteer-disable-animations';
@@ -479,7 +487,7 @@ export default class Page {
       return screenshot as string;
     } catch (error) {
       logger.error('Failed to take screenshot:', error);
-      throw error;
+      return null;
     }
   }
 
@@ -599,14 +607,37 @@ export default class Page {
     }
     if (!elementNode) {
       await this._puppeteerPage.evaluate(yPercent => {
-        const scrollHeight = document.documentElement.scrollHeight;
         const viewportHeight = window.visualViewport?.height || window.innerHeight;
-        const scrollTop = (scrollHeight - viewportHeight) * (yPercent / 100);
-        window.scrollTo({
-          top: scrollTop,
-          left: window.scrollX,
-          behavior: 'smooth',
-        });
+
+        // Check if the document itself scrolls
+        if (document.documentElement.scrollHeight > viewportHeight + 1) {
+          const scrollTop = (document.documentElement.scrollHeight - viewportHeight) * (yPercent / 100);
+          window.scrollTo({ top: scrollTop, left: window.scrollX, behavior: 'smooth' });
+          return;
+        }
+
+        // SPA pattern: find the actual scroll container at viewport center
+        const centerX = window.innerWidth / 2;
+        const centerY = viewportHeight / 2;
+        let el: Element | null = document.elementFromPoint(centerX, centerY);
+
+        while (el && el !== document.documentElement) {
+          if (el instanceof HTMLElement) {
+            const style = window.getComputedStyle(el);
+            const overflowY = style.overflowY;
+            const canScroll = overflowY === 'auto' || overflowY === 'scroll';
+            if (canScroll && el.scrollHeight > el.clientHeight + 1) {
+              const scrollTop = (el.scrollHeight - el.clientHeight) * (yPercent / 100);
+              el.scrollTo({ top: scrollTop, left: el.scrollLeft, behavior: 'smooth' });
+              return;
+            }
+          }
+          el = el.parentElement;
+        }
+
+        // Fallback to window scroll
+        const scrollTop = (document.documentElement.scrollHeight - viewportHeight) * (yPercent / 100);
+        window.scrollTo({ top: scrollTop, left: window.scrollX, behavior: 'smooth' });
       }, yPercent);
     } else {
       const element = await this.locateElement(elementNode);
@@ -638,13 +669,9 @@ export default class Page {
       throw new Error('Puppeteer is not connected');
     }
     if (!elementNode) {
-      await this._puppeteerPage.evaluate(y => {
-        window.scrollBy({
-          top: y,
-          left: 0,
-          behavior: 'smooth',
-        });
-      }, y);
+      const { width, height } = await this._getViewportSize();
+      await this._puppeteerPage.mouse.move(width / 2, height / 2);
+      await this._puppeteerPage.mouse.wheel({ deltaY: y });
     } else {
       const element = await this.locateElement(elementNode);
       if (!element) {
@@ -672,8 +699,9 @@ export default class Page {
     }
 
     if (!elementNode) {
-      // Scroll the whole page up by viewport height
-      await this._puppeteerPage.evaluate('window.scrollBy(0, -(window.visualViewport?.height || window.innerHeight));');
+      const { width, height } = await this._getViewportSize();
+      await this._puppeteerPage.mouse.move(width / 2, height / 2);
+      await this._puppeteerPage.mouse.wheel({ deltaY: -height });
     } else {
       // Scroll the specific element up by its client height
       const element = await this.locateElement(elementNode);
@@ -699,8 +727,9 @@ export default class Page {
     }
 
     if (!elementNode) {
-      // Scroll the whole page down by viewport height
-      await this._puppeteerPage.evaluate('window.scrollBy(0, (window.visualViewport?.height || window.innerHeight));');
+      const { width, height } = await this._getViewportSize();
+      await this._puppeteerPage.mouse.move(width / 2, height / 2);
+      await this._puppeteerPage.mouse.wheel({ deltaY: height });
     } else {
       // Scroll the specific element down by its client height
       const element = await this.locateElement(elementNode);
@@ -1229,6 +1258,16 @@ export default class Page {
 
     // If we got here, either the element stabilized or we timed out
     logger.debug('Element stability check completed (timeout or stable)');
+  }
+
+  private async _getViewportSize(): Promise<{ width: number; height: number }> {
+    if (!this._puppeteerPage) {
+      throw new Error('Puppeteer is not connected');
+    }
+    return this._puppeteerPage.evaluate(() => ({
+      width: window.innerWidth,
+      height: window.visualViewport?.height || window.innerHeight,
+    }));
   }
 
   private async _scrollIntoViewIfNeeded(element: ElementHandle, timeout = 1000): Promise<void> {

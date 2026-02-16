@@ -1328,3 +1328,62 @@ Then rebuild: `pnpm -F @extension/i18n build`
 6. **Escalation:** Server returns escalate → executor falls through to browser
 7. **No server:** Server URL empty → only general/browser in prompt
 8. **Server down:** executeDomainQuery() catches → escalates to browser with message
+
+---
+
+## V2 — Full Widget Parity Evolution
+
+V1 (Phase 8) delivers text-only domain query responses. The extension receives streaming text chunks via raw SSE events and uses read-only synthesizer tools (`getBookingCurve`, `getPerformanceSummary`). V2 extends this to achieve feature parity with the web app's chat interface — interactive suggestion widgets, data visualization, and actionable controls — all through the same SSE transport.
+
+### SSE Event Format (Extensible, Non-Breaking)
+
+**V1 events (unchanged in V2):**
+
+| Event | Payload | Purpose |
+|-------|---------|---------|
+| `chunk` | text delta (string) | Streaming synthesizer text |
+| `sources` | JSON array of tool names | Data source attribution |
+| `done` | full synthesized text (string) | Stream completion signal |
+| `escalate` | `{ reason: string, context?: string }` | Browser fallback signal |
+| `error` | error message (string) | Error termination |
+
+**V2 events (added alongside V1):**
+
+| Event | Payload | Purpose |
+|-------|---------|---------|
+| `tool-call` | `{ toolCallId: string, toolName: string, args: object }` | Synthesizer invoked a widget tool |
+| `tool-result` | `{ toolCallId: string, result: object }` | Tool execution result |
+| `widget` | Widget-specific schema (see below) | Rendered widget data for side panel |
+
+V1 extensions ignore unknown event types, so they work unchanged against a V2 backend (graceful degradation).
+
+### Widget Types
+
+Each widget maps to a synthesizer suggestion tool:
+
+| Widget | Tool | Description |
+|--------|------|-------------|
+| Floor/Ceiling | `suggestUpdateFloorCeiling` | Rate boundary adjustment |
+| Seasonal Settings | `suggestUpdateSeasonalSettings` | Seasonal pricing configuration |
+| Room Type Pricing | `suggestRoomTypePriceOverride` | Room type price offset |
+| Support Ticket | `suggestOpenSupportTicket` | Open a support request |
+
+### Backend Changes for V2
+
+1. **`synthesizeForExtension()`** adds the suggestion tools listed above. These tools need a writer adapter that emits `tool-call` / `tool-result` / `widget` SSE events instead of writing to the web app's `UIMessageStreamWriter`
+2. Add `onToolCall` and `onToolResult` callbacks to the streaming pipeline that translate tool invocations into SSE events
+3. No changes to endpoint URLs, pipeline orchestration (`plan → repair → execute → synthesize`), or existing V1 SSE events
+
+### Extension Changes for V2
+
+1. **Side panel** adds React components for each widget type — rendered inline with synthesizer text messages
+2. **SSE parser** in the extension handles the new event types (`tool-call`, `tool-result`, `widget`)
+3. **`SYNTHESIZER` actor** rendering logic extended to display widget components alongside text content
+
+### Why This Is Additive
+
+- Same endpoint URLs (`/ai/extension/chat`, `/ai/extension/query`, `/ai/extension/context`)
+- Same SSE transport — no protocol changes
+- V1 events remain byte-identical — V2 adds new event types alongside them
+- Pipeline logic is identical; only the synthesizer tool set and transport event types expand
+- Backward-compatible: V1 extensions silently ignore V2-only events

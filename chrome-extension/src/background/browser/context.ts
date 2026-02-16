@@ -224,7 +224,7 @@ export default class BrowserContext {
     await chrome.tabs.update(tabId, { active: true });
     await this.waitForTabEvents(tabId, { waitForUpdate: false });
 
-    const page = await this._getOrCreatePage(await chrome.tabs.get(tabId));
+    const page = await this._getOrCreatePage(await chrome.tabs.get(tabId), true);
     await this.attachPage(page);
     this._currentTabId = tabId;
     return page;
