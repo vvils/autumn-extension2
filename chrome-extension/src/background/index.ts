@@ -2,6 +2,7 @@ import 'webextension-polyfill';
 import {
   agentModelStore,
   AgentNameEnum,
+  chatHistoryStore,
   firewallStore,
   generalSettingsStore,
   llmProviderStore,
@@ -273,6 +274,93 @@ chrome.runtime.onConnect.addListener(port => {
             break;
           }
 
+          case 'get_conversations': {
+            try {
+              if (serverClient && (await serverClient.isAuthenticated())) {
+                const conversations = await serverClient.getConversations();
+                port.postMessage({ type: 'conversations_result', conversations });
+              } else {
+                const sessions = await chatHistoryStore.getSessionsMetadata();
+                const mapped = sessions.map(s => ({
+                  id: s.id,
+                  title: s.title,
+                  firstMessagePreview: '',
+                  lastMessageAt: new Date(s.updatedAt).toISOString(),
+                  messageCount: s.messageCount,
+                  createdAt: new Date(s.createdAt).toISOString(),
+                  source: 'browser_automation',
+                }));
+                port.postMessage({ type: 'conversations_result', conversations: mapped });
+              }
+            } catch (error) {
+              logger.error('get_conversations failed, falling back to local:', error);
+              const sessions = await chatHistoryStore.getSessionsMetadata();
+              const mapped = sessions.map(s => ({
+                id: s.id,
+                title: s.title,
+                firstMessagePreview: '',
+                lastMessageAt: new Date(s.updatedAt).toISOString(),
+                messageCount: s.messageCount,
+                createdAt: new Date(s.createdAt).toISOString(),
+                source: 'browser_automation',
+              }));
+              port.postMessage({ type: 'conversations_result', conversations: mapped });
+            }
+            break;
+          }
+
+          case 'get_conversation_messages': {
+            const convId = message.conversationId;
+            try {
+              if (serverClient && (await serverClient.isAuthenticated())) {
+                const messages = await serverClient.getConversationMessages(convId);
+                port.postMessage({ type: 'conversation_messages_result', conversationId: convId, messages });
+              } else {
+                const session = await chatHistoryStore.getSession(convId);
+                const mapped =
+                  session?.messages.map(m => ({
+                    id: m.id,
+                    role: m.actor,
+                    content: m.content,
+                    createdAt: new Date(m.timestamp).toISOString(),
+                  })) || [];
+                port.postMessage({ type: 'conversation_messages_result', conversationId: convId, messages: mapped });
+              }
+            } catch (error) {
+              logger.error('get_conversation_messages failed, falling back to local:', error);
+              const session = await chatHistoryStore.getSession(convId);
+              const mapped =
+                session?.messages.map(m => ({
+                  id: m.id,
+                  role: m.actor,
+                  content: m.content,
+                  createdAt: new Date(m.timestamp).toISOString(),
+                })) || [];
+              port.postMessage({ type: 'conversation_messages_result', conversationId: convId, messages: mapped });
+            }
+            break;
+          }
+
+          case 'delete_conversation': {
+            const deleteId = message.conversationId;
+            try {
+              if (serverClient && (await serverClient.isAuthenticated())) {
+                await serverClient.deleteConversation(deleteId);
+              }
+              await chatHistoryStore.deleteSession(deleteId);
+              port.postMessage({ type: 'conversation_deleted', conversationId: deleteId });
+            } catch (error) {
+              logger.error('delete_conversation failed:', error);
+              try {
+                await chatHistoryStore.deleteSession(deleteId);
+                port.postMessage({ type: 'conversation_deleted', conversationId: deleteId });
+              } catch (localError) {
+                port.postMessage({ type: 'error', error: 'Failed to delete conversation' });
+              }
+            }
+            break;
+          }
+
           default:
             return port.postMessage({ type: 'error', error: t('errors_cmd_unknown', [message.type]) });
         }
@@ -293,6 +381,29 @@ chrome.runtime.onConnect.addListener(port => {
     });
   }
 });
+
+async function syncSessionToServer(sessionId: string): Promise<void> {
+  if (!serverClient) return;
+  try {
+    if (!(await serverClient.isAuthenticated())) return;
+    const session = await chatHistoryStore.getSession(sessionId);
+    if (!session || session.messages.length === 0) return;
+
+    await serverClient.syncConversation({
+      conversationId: session.id,
+      title: session.title,
+      source: 'browser_automation',
+      messages: session.messages.map(msg => ({
+        role: msg.actor,
+        content: msg.content,
+        timestamp: msg.timestamp,
+      })),
+    });
+    logger.info(`Synced session ${sessionId} to server`);
+  } catch (error) {
+    logger.error(`Failed to sync session ${sessionId}:`, error);
+  }
+}
 
 async function setupExecutor(taskId: string, task: string, browserContext: BrowserContext) {
   const providers = await llmProviderStore.getAllProviders();
@@ -385,6 +496,7 @@ async function subscribeToExecutorEvents(executor: Executor) {
       event.state === ExecutionState.TASK_FAIL ||
       event.state === ExecutionState.TASK_CANCEL
     ) {
+      await syncSessionToServer(event.data.taskId);
       await currentExecutor?.cleanup();
     }
   });

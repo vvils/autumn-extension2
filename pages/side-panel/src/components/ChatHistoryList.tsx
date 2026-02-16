@@ -7,6 +7,7 @@ interface ChatSession {
   id: string;
   title: string;
   createdAt: number;
+  source?: string;
 }
 
 interface ChatHistoryListProps {
@@ -60,8 +61,8 @@ const ChatHistoryList: React.FC<ChatHistoryListProps> = ({
                 </p>
               </button>
 
-              {/* Bookmark button - top right */}
-              {onSessionBookmark && (
+              {/* Bookmark button - top right (hidden for server_chat conversations) */}
+              {onSessionBookmark && session.source !== 'server_chat' && (
                 <button
                   onClick={e => {
                     e.stopPropagation();

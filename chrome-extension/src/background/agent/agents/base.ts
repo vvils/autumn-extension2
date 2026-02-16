@@ -216,7 +216,7 @@ export abstract class BaseAgent<T extends z.ZodType, M = unknown> {
     const convertedMessages = convertInputMessages(inputMessages, this.modelName);
     let buffer = '';
     let lastEmitted = '';
-    let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+    let lastEmitTime = 0;
 
     const emitIfNeeded = () => {
       const cleaned = removeThinkTagsForStreaming(buffer);
@@ -241,11 +241,12 @@ export abstract class BaseAgent<T extends z.ZodType, M = unknown> {
         const content = typeof chunk.content === 'string' ? chunk.content : '';
         buffer += content;
 
-        if (debounceTimer) clearTimeout(debounceTimer);
-        debounceTimer = setTimeout(emitIfNeeded, DEBOUNCE_MS);
+        const now = Date.now();
+        if (now - lastEmitTime >= DEBOUNCE_MS) {
+          lastEmitTime = now;
+          emitIfNeeded();
+        }
       }
-
-      if (debounceTimer) clearTimeout(debounceTimer);
 
       // Final emission
       const cleaned = removeThinkTagsForStreaming(buffer);
@@ -263,7 +264,6 @@ export abstract class BaseAgent<T extends z.ZodType, M = unknown> {
 
       throw new ResponseParseError('Could not parse streamed response');
     } catch (error) {
-      if (debounceTimer) clearTimeout(debounceTimer);
       if (isAbortedError(error)) throw error;
 
       logger.warning(`[${this.modelName}] Stream failed, falling back to invoke:`, error);

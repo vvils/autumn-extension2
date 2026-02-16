@@ -28,7 +28,9 @@ const SidePanel = () => {
   const [showStopButton, setShowStopButton] = useState(false);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [showHistory, setShowHistory] = useState(false);
-  const [chatSessions, setChatSessions] = useState<Array<{ id: string; title: string; createdAt: number }>>([]);
+  const [chatSessions, setChatSessions] = useState<
+    Array<{ id: string; title: string; createdAt: number; source?: string }>
+  >([]);
   const [isFollowUpMode, setIsFollowUpMode] = useState(false);
   const [isHistoricalSession, setIsHistoricalSession] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(false);
@@ -213,11 +215,34 @@ const SidePanel = () => {
                 }
               });
               return;
-            case ExecutionState.STEP_OK:
+            case ExecutionState.STEP_OK: {
+              const wasStreaming = plannerStreamingRef.current;
               plannerStreamingRef.current = false;
               setIsStreamingPlanner(false);
-              skip = false;
+              if (wasStreaming) {
+                // Streaming already displayed content — finalize the last message and persist it
+                setMessages(prev => {
+                  if (prev.length > 0) {
+                    const last = prev[prev.length - 1];
+                    const finalContent = content || last.content;
+                    const finalMessage = { ...last, content: finalContent, timestamp };
+                    const effectiveSessionId = sessionIdRef.current;
+                    if (effectiveSessionId) {
+                      chatHistoryStore
+                        .addMessage(effectiveSessionId, finalMessage)
+                        .catch(err => console.error('Failed to save message to history:', err));
+                    }
+                    return [...prev.slice(0, -1), finalMessage];
+                  }
+                  return prev;
+                });
+                // skip stays true — do NOT call appendMessage
+              } else {
+                // Non-streaming path — append normally
+                skip = false;
+              }
               break;
+            }
             case ExecutionState.STEP_FAIL:
               plannerStreamingRef.current = false;
               setIsStreamingPlanner(false);
@@ -355,6 +380,33 @@ const SidePanel = () => {
             timestamp: Date.now(),
           });
           setIsProcessingSpeech(false);
+        } else if (message && message.type === 'conversations_result') {
+          const mapped = (message.conversations || []).map((c: any) => ({
+            id: c.id,
+            title: c.title,
+            createdAt: new Date(c.createdAt).getTime(),
+            source: c.source,
+          }));
+          setChatSessions(mapped.sort((a: any, b: any) => b.createdAt - a.createdAt));
+        } else if (message && message.type === 'conversation_messages_result') {
+          const mapped = (message.messages || []).map((m: any) => ({
+            actor: m.role as Actors,
+            content: m.content,
+            timestamp: new Date(m.createdAt).getTime(),
+          }));
+          if (mapped.length > 0) {
+            setCurrentSessionId(message.conversationId);
+            setMessages(mapped);
+            setIsFollowUpMode(false);
+            setIsHistoricalSession(true);
+          }
+          setShowHistory(false);
+        } else if (message && message.type === 'conversation_deleted') {
+          setChatSessions(prev => prev.filter(s => s.id !== message.conversationId));
+          if (message.conversationId === currentSessionId) {
+            setMessages([]);
+            setCurrentSessionId(null);
+          }
         } else if (message && message.type === 'heartbeat_ack') {
           console.log('Heartbeat acknowledged');
         }
@@ -697,17 +749,15 @@ const SidePanel = () => {
     stopConnection();
   };
 
-  const loadChatSessions = useCallback(async () => {
-    try {
-      const sessions = await chatHistoryStore.getSessionsMetadata();
-      setChatSessions(sessions.sort((a, b) => b.createdAt - a.createdAt));
-    } catch (error) {
-      console.error('Failed to load chat sessions:', error);
+  const loadChatSessions = useCallback(() => {
+    if (!portRef.current) {
+      setupConnection();
     }
-  }, []);
+    portRef.current?.postMessage({ type: 'get_conversations' });
+  }, [setupConnection]);
 
-  const handleLoadHistory = async () => {
-    await loadChatSessions();
+  const handleLoadHistory = () => {
+    loadChatSessions();
     setShowHistory(true);
   };
 
@@ -721,33 +771,18 @@ const SidePanel = () => {
     }
   };
 
-  const handleSessionSelect = async (sessionId: string) => {
-    try {
-      const fullSession = await chatHistoryStore.getSession(sessionId);
-      if (fullSession && fullSession.messages.length > 0) {
-        setCurrentSessionId(fullSession.id);
-        setMessages(fullSession.messages);
-        setIsFollowUpMode(false);
-        setIsHistoricalSession(true); // Mark this as a historical session
-        console.log('history session selected', sessionId);
-      }
-      setShowHistory(false);
-    } catch (error) {
-      console.error('Failed to load session:', error);
+  const handleSessionSelect = (sessionId: string) => {
+    if (!portRef.current) {
+      setupConnection();
     }
+    portRef.current?.postMessage({ type: 'get_conversation_messages', conversationId: sessionId });
   };
 
-  const handleSessionDelete = async (sessionId: string) => {
-    try {
-      await chatHistoryStore.deleteSession(sessionId);
-      await loadChatSessions();
-      if (sessionId === currentSessionId) {
-        setMessages([]);
-        setCurrentSessionId(null);
-      }
-    } catch (error) {
-      console.error('Failed to delete session:', error);
+  const handleSessionDelete = (sessionId: string) => {
+    if (!portRef.current) {
+      setupConnection();
     }
+    portRef.current?.postMessage({ type: 'delete_conversation', conversationId: sessionId });
   };
 
   const handleSessionBookmark = async (sessionId: string) => {

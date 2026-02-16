@@ -29,3 +29,28 @@ export interface SSEEvent {
   id?: string;
   retry?: number;
 }
+
+export interface ServerConversation {
+  id: string;
+  title: string;
+  firstMessagePreview: string;
+  lastMessageAt: string;
+  messageCount: number;
+  createdAt: string;
+  source?: string;
+}
+
+export interface ServerMessage {
+  id: string;
+  role: string;
+  content: string;
+  parts?: Array<{ type: string; data?: unknown; text?: string }>;
+  createdAt: string;
+}
+
+export interface SyncConversationPayload {
+  conversationId: string;
+  title: string;
+  source: string;
+  messages: Array<{ role: string; content: string; timestamp: number }>;
+}
