@@ -10,6 +10,7 @@ import MessageList from './components/MessageList';
 import ChatInput from './components/ChatInput';
 import ChatHistoryList from './components/ChatHistoryList';
 import BookmarkList from './components/BookmarkList';
+import { CostDisplay } from './components/CostDisplay';
 import { EventType, type AgentEvent, ExecutionState } from './types/event';
 import './SidePanel.css';
 
@@ -40,6 +41,12 @@ const SidePanel = () => {
   const [isReplaying, setIsReplaying] = useState(false);
   const [replayEnabled, setReplayEnabled] = useState(false);
   const [isStreamingPlanner, setIsStreamingPlanner] = useState(false);
+  const [costData, setCostData] = useState<{
+    totalInputTokens: number;
+    totalOutputTokens: number;
+    estimatedCostUsd: number;
+  } | null>(null);
+  const [showCostEstimate, setShowCostEstimate] = useState(true);
   const sessionIdRef = useRef<string | null>(null);
   const isReplayingRef = useRef<boolean>(false);
   const plannerStreamingRef = useRef(false);
@@ -83,6 +90,7 @@ const SidePanel = () => {
     try {
       const settings = await generalSettingsStore.getSettings();
       setReplayEnabled(settings.replayHistoricalTasks);
+      setShowCostEstimate(settings.showCostEstimate);
     } catch (error) {
       console.error('Error loading general settings:', error);
       setReplayEnabled(false);
@@ -163,7 +171,15 @@ const SidePanel = () => {
             case ExecutionState.TASK_START:
               // Reset historical session flag when a new task starts
               setIsHistoricalSession(false);
+              setCostData(null);
               break;
+            case ExecutionState.COST_UPDATE:
+              try {
+                setCostData(JSON.parse(content || ''));
+              } catch {
+                /* ignore malformed cost data */
+              }
+              return;
             case ExecutionState.TASK_OK:
               setIsFollowUpMode(true);
               setInputEnabled(true);
@@ -1197,6 +1213,14 @@ const SidePanel = () => {
                 {messages.length > 0 && (
                   <div
                     className={`border-t ${isDarkMode ? 'border-sky-900' : 'border-sky-100'} p-2 shadow-sm backdrop-blur-sm`}>
+                    {costData && showCostEstimate && (
+                      <CostDisplay
+                        totalInputTokens={costData.totalInputTokens}
+                        totalOutputTokens={costData.totalOutputTokens}
+                        estimatedCostUsd={costData.estimatedCostUsd}
+                        isDarkMode={isDarkMode}
+                      />
+                    )}
                     <ChatInput
                       onSendMessage={handleSendMessage}
                       onStopTask={handleStopTask}

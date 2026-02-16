@@ -265,6 +265,12 @@
   "options_general_replayHistoricalTasks_desc": {
     "message": "啟用儲存與重播代理程式的步驟歷史紀錄 (此為實驗性功能，可能存在問題)"
   },
+  "options_general_showCostEstimate": {
+    "message": "顯示費用估算"
+  },
+  "options_general_showCostEstimate_desc": {
+    "message": "在任務執行期間顯示預估的 Token 使用量與費用"
+  },
   "options_models_providers_header": {
     "message": "LLM 提供者"
   },

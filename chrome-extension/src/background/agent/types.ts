@@ -4,8 +4,9 @@ import { DEFAULT_INCLUDE_ATTRIBUTES } from '../browser/dom/views';
 import type { DOMHistoryElement } from '../browser/dom/history/view';
 import type MessageManager from './messages/service';
 import type { EventManager } from './event/manager';
-import { type Actors, type ExecutionState, AgentEvent } from './event/types';
+import { Actors, ExecutionState, AgentEvent } from './event/types';
 import { AgentStepHistory } from './history';
+import { CostTracker } from './cost';
 
 export interface AgentOptions {
   maxSteps: number;
@@ -49,6 +50,7 @@ export class AgentContext {
   stateMessageAdded: boolean;
   history: AgentStepHistory;
   finalAnswer: string | null;
+  costTracker: CostTracker;
 
   constructor(
     taskId: string,
@@ -73,6 +75,7 @@ export class AgentContext {
     this.stateMessageAdded = false;
     this.history = new AgentStepHistory();
     this.finalAnswer = null;
+    this.costTracker = new CostTracker();
   }
 
   async emitEvent(actor: Actors, state: ExecutionState, eventDetails: string) {
@@ -83,6 +86,11 @@ export class AgentContext {
       details: eventDetails,
     });
     await this.eventManager.emit(event);
+  }
+
+  async emitCostUpdate() {
+    const snapshot = this.costTracker.getSnapshot();
+    await this.emitEvent(Actors.SYSTEM, ExecutionState.COST_UPDATE, JSON.stringify(snapshot));
   }
 
   async pause() {

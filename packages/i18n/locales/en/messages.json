@@ -265,6 +265,12 @@
   "options_general_replayHistoricalTasks_desc": {
     "message": "Enable storing and replaying of agent step history (experimental, may have issues)"
   },
+  "options_general_showCostEstimate": {
+    "message": "Show Cost Estimate"
+  },
+  "options_general_showCostEstimate_desc": {
+    "message": "Display estimated token usage and cost during task execution"
+  },
 
   "options_models_providers_header": {
     "message": "LLM Providers"

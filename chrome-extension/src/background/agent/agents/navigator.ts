@@ -6,6 +6,7 @@ import type { Action } from '../actions/builder';
 import { buildDynamicActionSchema } from '../actions/builder';
 import { agentBrainSchema } from '../types';
 import { type BaseMessage, HumanMessage } from '@langchain/core/messages';
+import type { UsageMetadata } from '@langchain/core/messages';
 import { Actors, ExecutionState } from '../event/types';
 import {
   ChatModelAuthError,
@@ -106,6 +107,7 @@ export class NavigatorAgent extends BaseAgent<z.ZodType, NavigatorResult> {
         });
 
         if (response.parsed) {
+          this.lastUsageMetadata = (response.raw as { usage_metadata?: UsageMetadata })?.usage_metadata;
           return response.parsed;
         }
       } catch (error) {
@@ -122,6 +124,7 @@ export class NavigatorAgent extends BaseAgent<z.ZodType, NavigatorResult> {
         ) {
           const parsed = this.manuallyParseResponse(response.raw.content);
           if (parsed) {
+            this.lastUsageMetadata = (response.raw as { usage_metadata?: UsageMetadata })?.usage_metadata;
             return parsed;
           }
         }
@@ -141,6 +144,7 @@ export class NavigatorAgent extends BaseAgent<z.ZodType, NavigatorResult> {
       // sometimes LLM returns an empty content, but with one or more tool calls, so we need to check the tool calls
       if (rawResponse.tool_calls && rawResponse.tool_calls.length > 0) {
         logger.info('Navigator structuredLlm tool call with empty content', rawResponse.tool_calls);
+        this.lastUsageMetadata = (rawResponse as { usage_metadata?: UsageMetadata }).usage_metadata;
         // only use the first tool call
         const toolCall = rawResponse.tool_calls[0];
         return {
@@ -185,6 +189,14 @@ export class NavigatorAgent extends BaseAgent<z.ZodType, NavigatorResult> {
       // logger.info('Navigator input message', inputMessages[inputMessages.length - 1]);
 
       const modelOutput = await this.invoke(inputMessages);
+
+      if (this.lastUsageMetadata) {
+        this.context.costTracker.recordUsage(this.modelName, {
+          inputTokens: this.lastUsageMetadata.input_tokens,
+          outputTokens: this.lastUsageMetadata.output_tokens,
+        });
+        this.context.emitCostUpdate();
+      }
 
       // check if the task is paused or stopped
       if (this.context.paused || this.context.stopped) {

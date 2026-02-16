@@ -2,7 +2,7 @@ import type { z } from 'zod';
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import type { AgentContext, AgentOutput } from '../types';
 import type { BasePrompt } from '../prompts/base';
-import type { BaseMessage } from '@langchain/core/messages';
+import type { BaseMessage, UsageMetadata } from '@langchain/core/messages';
 import { createLogger } from '@src/background/log';
 import type { Action } from '../actions/builder';
 import {
@@ -52,6 +52,7 @@ export abstract class BaseAgent<T extends z.ZodType, M = unknown> {
   protected withStructuredOutput: boolean;
   protected callOptions?: CallOptions;
   protected modelOutputToolName: string;
+  protected lastUsageMetadata: UsageMetadata | undefined;
   declare ModelOutput: z.infer<T>;
 
   constructor(modelOutputSchema: T, options: BaseAgentOptions, extraOptions?: Partial<ExtraAgentOptions>) {
@@ -154,6 +155,7 @@ export abstract class BaseAgent<T extends z.ZodType, M = unknown> {
 
         if (response.parsed) {
           logger.debug(`[${this.modelName}] Successfully parsed structured output`);
+          this.lastUsageMetadata = (response.raw as { usage_metadata?: UsageMetadata })?.usage_metadata;
           return response.parsed;
         }
         logger.error('Failed to parse response', response);
@@ -172,6 +174,7 @@ export abstract class BaseAgent<T extends z.ZodType, M = unknown> {
         ) {
           const parsed = this.manuallyParseResponse(response.raw.content);
           if (parsed) {
+            this.lastUsageMetadata = (response.raw as { usage_metadata?: UsageMetadata })?.usage_metadata;
             return parsed;
           }
         }
@@ -193,6 +196,7 @@ export abstract class BaseAgent<T extends z.ZodType, M = unknown> {
       if (typeof response.content === 'string') {
         const parsed = this.manuallyParseResponse(response.content);
         if (parsed) {
+          this.lastUsageMetadata = (response as { usage_metadata?: UsageMetadata }).usage_metadata;
           return parsed;
         }
       }
@@ -237,9 +241,11 @@ export abstract class BaseAgent<T extends z.ZodType, M = unknown> {
         ...this.callOptions,
       });
 
+      let lastChunkUsage: UsageMetadata | undefined;
       for await (const chunk of stream) {
         const content = typeof chunk.content === 'string' ? chunk.content : '';
         buffer += content;
+        if (chunk.usage_metadata) lastChunkUsage = chunk.usage_metadata;
 
         const now = Date.now();
         if (now - lastEmitTime >= DEBOUNCE_MS) {
@@ -247,6 +253,7 @@ export abstract class BaseAgent<T extends z.ZodType, M = unknown> {
           emitIfNeeded();
         }
       }
+      this.lastUsageMetadata = lastChunkUsage;
 
       // Final emission
       const cleaned = removeThinkTagsForStreaming(buffer);

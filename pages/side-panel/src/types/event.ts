@@ -41,6 +41,9 @@ export enum ExecutionState {
   ACT_START = 'act.start',
   ACT_OK = 'act.ok',
   ACT_FAIL = 'act.fail',
+
+  // Cost tracking
+  COST_UPDATE = 'cost.update',
 }
 
 export interface EventData {

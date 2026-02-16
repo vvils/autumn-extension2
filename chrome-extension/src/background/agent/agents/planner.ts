@@ -84,6 +84,14 @@ export class PlannerAgent extends BaseAgent<typeof plannerOutputSchema, PlannerO
         throw new Error('Failed to validate planner output');
       }
 
+      if (this.lastUsageMetadata) {
+        this.context.costTracker.recordUsage(this.modelName, {
+          inputTokens: this.lastUsageMetadata.input_tokens,
+          outputTokens: this.lastUsageMetadata.output_tokens,
+        });
+        this.context.emitCostUpdate();
+      }
+
       // clean the model output
       const observation = filterExternalContent(modelOutput.observation);
       const final_answer = filterExternalContent(modelOutput.final_answer);

@@ -265,6 +265,12 @@
   "options_general_replayHistoricalTasks_desc": {
     "message": "Ativar o armazenamento e a reprodução do histórico de passos do agente (experimental, pode ter problemas)"
   },
+  "options_general_showCostEstimate": {
+    "message": "Mostrar Estimativa de Custo"
+  },
+  "options_general_showCostEstimate_desc": {
+    "message": "Exibir estimativa de uso de tokens e custo durante a execução da tarefa"
+  },
   "options_models_providers_header": {
     "message": "Provedores de LLM"
   },
