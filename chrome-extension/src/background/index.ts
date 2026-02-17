@@ -9,6 +9,7 @@ import {
   Actors,
   analyticsSettingsStore,
   serverSettingsStore,
+  serverProvidedKeysStore,
 } from '@extension/storage';
 import { t } from '@extension/i18n';
 import BrowserContext from './browser/context';
@@ -125,10 +126,12 @@ async function initServerClient() {
         try {
           const serverKeys = await serverClient.pullKeys();
           if (serverKeys && Object.keys(serverKeys).length > 0) {
+            const serverKeyIds = Object.keys(serverKeys);
             for (const [id, config] of Object.entries(serverKeys)) {
               await llmProviderStore.setProvider(id, config);
             }
-            logger.info(`Pulled ${Object.keys(serverKeys).length} provider keys from server`);
+            await serverProvidedKeysStore.setProviderIds(serverKeyIds);
+            logger.info(`Pulled ${serverKeyIds.length} provider keys from server`);
           }
         } catch (error) {
           logger.warning('Failed to pull keys from server:', error);

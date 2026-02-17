@@ -411,6 +411,12 @@
   "options_models_providers_ollama_learnMore": {
     "message": "Learn more"
   },
+  "options_models_providers_serverSynced": {
+    "message": "Server"
+  },
+  "options_models_providers_serverSynced_tooltip": {
+    "message": "This API key was synced from the server"
+  },
   "options_models_providers_errors_spacesNotAllowed": {
     "message": "Spaces are not allowed in provider names. Please use underscores or other characters instead."
   },

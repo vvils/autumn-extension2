@@ -406,6 +406,12 @@
   "options_models_providers_ollama_learnMore": {
     "message": "深入瞭解"
   },
+  "options_models_providers_serverSynced": {
+    "message": "伺服器"
+  },
+  "options_models_providers_serverSynced_tooltip": {
+    "message": "此 API 金鑰已從伺服器同步"
+  },
   "options_models_providers_errors_spacesNotAllowed": {
     "message": "提供者名稱不允許使用空格。請改用底線或其他字元。"
   },

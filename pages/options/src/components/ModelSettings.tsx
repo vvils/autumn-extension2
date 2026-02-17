@@ -13,6 +13,7 @@ import {
   llmProviderStore,
   agentModelStore,
   speechToTextModelStore,
+  serverProvidedKeysStore,
   AgentNameEnum,
   llmProviderModelNames,
   ProviderTypeEnum,
@@ -83,6 +84,7 @@ export const ModelSettings = ({ isDarkMode = false }: ModelSettingsProps) => {
   const [nameErrors, setNameErrors] = useState<Record<string, string>>({});
   // Add state for tracking API key visibility
   const [visibleApiKeys, setVisibleApiKeys] = useState<Record<string, boolean>>({});
+  const [serverProvidedIds, setServerProvidedIds] = useState<Set<string>>(new Set());
   // Create a non-async wrapper for use in render functions
   const [availableModels, setAvailableModels] = useState<
     Array<{ provider: string; providerName: string; model: string }>
@@ -103,6 +105,9 @@ export const ModelSettings = ({ isDarkMode = false }: ModelSettingsProps) => {
 
         // Only use providers from storage, don't add default ones
         setProviders(allProviders);
+
+        const serverIds = await serverProvidedKeysStore.getProviderIds();
+        setServerProvidedIds(new Set(serverIds));
       } catch (error) {
         console.error('Error loading providers:', error);
         // Set empty providers on error
@@ -511,6 +516,15 @@ export const ModelSettings = ({ isDarkMode = false }: ModelSettingsProps) => {
     try {
       // Delete the provider from storage regardless of its API key value
       await llmProviderStore.removeProvider(provider);
+
+      if (serverProvidedIds.has(provider)) {
+        await serverProvidedKeysStore.removeProviderId(provider);
+        setServerProvidedIds(prev => {
+          const next = new Set(prev);
+          next.delete(provider);
+          return next;
+        });
+      }
 
       // Remove from providersFromStorage
       setProvidersFromStorage(prev => {
@@ -1151,9 +1165,18 @@ export const ModelSettings = ({ isDarkMode = false }: ModelSettingsProps) => {
                   id={`provider-${providerId}`}
                   className={`space-y-4 ${modifiedProviders.has(providerId) && !providersFromStorage.has(providerId) ? `rounded-lg border p-4 ${isDarkMode ? 'border-accent-hover bg-slate-700' : 'border-accent-muted/40 bg-accent-soft/30'}` : ''}`}>
                   <div className="flex items-center justify-between">
-                    <h3 className={`text-lg font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
-                      {providerConfig.name || providerId}
-                    </h3>
+                    <div className="flex items-center gap-2">
+                      <h3 className={`text-lg font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+                        {providerConfig.name || providerId}
+                      </h3>
+                      {serverProvidedIds.has(providerId) && (
+                        <span
+                          title={t('options_models_providers_serverSynced_tooltip')}
+                          className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${isDarkMode ? 'bg-accent-foreground/30 text-accent-light' : 'bg-accent-soft text-accent-foreground'}`}>
+                          {t('options_models_providers_serverSynced')}
+                        </span>
+                      )}
+                    </div>
                     <div className="flex space-x-2">
                       {/* Show Cancel button for newly added providers */}
                       {modifiedProviders.has(providerId) && !providersFromStorage.has(providerId) && (

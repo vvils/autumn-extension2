@@ -410,6 +410,12 @@
   "options_models_providers_ollama_learnMore": {
     "message": "Saiba mais"
   },
+  "options_models_providers_serverSynced": {
+    "message": "Servidor"
+  },
+  "options_models_providers_serverSynced_tooltip": {
+    "message": "Esta chave de API foi sincronizada do servidor"
+  },
   "options_models_providers_errors_spacesNotAllowed": {
     "message": "Espaços não são permitidos em nomes de provedores. Por favor, use sublinhados ou outros caracteres."
   },
