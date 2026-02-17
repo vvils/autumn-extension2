@@ -13,6 +13,7 @@ import { ActiveGroupOverlay } from './components/ActiveGroupOverlay';
 import { SlidePanel } from './components/SlidePanel';
 import { EventType, type AgentEvent, ExecutionState } from './types/event';
 import { useThinkingState } from './hooks/useThinkingState';
+import { useTaskTimer } from './hooks/useTaskTimer';
 import './SidePanel.css';
 
 declare global {
@@ -24,6 +25,7 @@ declare global {
 const SidePanel = () => {
   const [messages, setMessages] = useState<Message[]>([]);
   const { state: thinkingWidgetState, handleEvent: handleThinkingEvent, reset: resetThinking } = useThinkingState();
+  const { formattedTime: elapsedTime, start: startTimer, stop: stopTimer, reset: resetTimer } = useTaskTimer();
   const [inputEnabled, setInputEnabled] = useState(true);
   const [showStopButton, setShowStopButton] = useState(false);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
@@ -169,6 +171,8 @@ const SidePanel = () => {
             case ExecutionState.TASK_START:
               setIsHistoricalSession(false);
               setCostData(null);
+              resetTimer();
+              startTimer();
               break;
             case ExecutionState.COST_UPDATE:
               try {
@@ -183,6 +187,7 @@ const SidePanel = () => {
               setShowStopButton(false);
               setIsReplaying(false);
               setActiveGroupOverlay(null);
+              stopTimer();
               break;
             case ExecutionState.TASK_FAIL:
               setIsFollowUpMode(true);
@@ -190,6 +195,7 @@ const SidePanel = () => {
               setShowStopButton(false);
               setIsReplaying(false);
               setActiveGroupOverlay(null);
+              stopTimer();
               skip = false;
               break;
             case ExecutionState.TASK_CANCEL:
@@ -198,6 +204,7 @@ const SidePanel = () => {
               setShowStopButton(false);
               setIsReplaying(false);
               setActiveGroupOverlay(null);
+              stopTimer();
               skip = false;
               break;
             case ExecutionState.TASK_PAUSE:
@@ -235,19 +242,12 @@ const SidePanel = () => {
                   if (prev.length > 0) {
                     const last = prev[prev.length - 1];
                     const finalContent = content || last.content;
-                    const finalMessage = { ...last, content: finalContent, timestamp };
-                    const effectiveSessionId = sessionIdRef.current;
-                    if (effectiveSessionId) {
-                      chatHistoryStore
-                        .addMessage(effectiveSessionId, finalMessage)
-                        .catch(err => console.error('Failed to save message to history:', err));
-                    }
-                    return [...prev.slice(0, -1), finalMessage];
+                    return [...prev.slice(0, -1), { ...last, content: finalContent, timestamp }];
                   }
                   return prev;
                 });
               } else {
-                skip = false;
+                setMessages(prev => [...prev, { actor, content: content || '', timestamp }]);
               }
               break;
             }
@@ -320,7 +320,7 @@ const SidePanel = () => {
         });
       }
     },
-    [appendMessage, handleThinkingEvent],
+    [appendMessage, handleThinkingEvent, startTimer, stopTimer, resetTimer],
   );
 
   const stopConnection = useCallback(() => {
@@ -716,6 +716,8 @@ const SidePanel = () => {
     setIsFollowUpMode(false);
     setIsHistoricalSession(false);
     resetThinking();
+    resetTimer();
+    setCostData(null);
     stopConnection();
   };
 
@@ -1001,13 +1003,14 @@ const SidePanel = () => {
       historicalSessionId={isHistoricalSession && replayEnabled ? currentSessionId : null}
       onReplay={handleReplay}
       costData={showCostEstimate ? costData : null}
+      elapsedTime={showCostEstimate ? elapsedTime : null}
     />
   );
 
   return (
     <div className="relative flex h-screen flex-col overflow-hidden bg-white">
       <header className="flex shrink-0 items-center justify-between bg-white px-4 py-2.5">
-        <img src="/autumn-logo.svg" alt="Autumn" className="h-4" />
+        <img src="/logo.svg" alt="Autumn" className="h-4" />
         <div className="flex items-center gap-1">
           <button
             type="button"

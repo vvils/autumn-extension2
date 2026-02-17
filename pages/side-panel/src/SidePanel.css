@@ -4,13 +4,6 @@ html {
   -moz-osx-font-smoothing: grayscale;
 }
 
-code {
-  background: rgba(61, 130, 143, 0.08);
-  border-radius: 0.25rem;
-  padding: 0.2rem 0.5rem;
-  color: #2a5f69;
-}
-
 ::-webkit-scrollbar {
   width: 4px;
 }

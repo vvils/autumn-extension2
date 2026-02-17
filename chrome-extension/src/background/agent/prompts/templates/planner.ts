@@ -49,10 +49,9 @@ When determining if a task is "done":
 5. Focus on the current state and last action results to determine completion
 
 # FINAL ANSWER FORMATTING (when done=true):
-- Use markdown formatting only if required by the task description
-- Use plain text by default
-- Use bullet points for multiple items if needed
-- Use line breaks for better readability  
+- Use markdown formatting for readability (bold, bullet points, inline code, code blocks)
+- Use bullet points for multiple items
+- Use line breaks for better readability
 - Include relevant numerical data when available (do NOT make up numbers)
 - Include exact URLs when available (do NOT make up URLs)
 - Compile the answer from provided context - do NOT make up information

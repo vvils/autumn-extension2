@@ -692,9 +692,9 @@ export default class Page {
         const scrollTop = scrollableHeight * (pct / 100);
 
         if (isDocEl) {
-          window.scrollTo({ top: scrollTop, left: window.scrollX, behavior: 'smooth' });
+          window.scrollTo({ top: scrollTop, left: window.scrollX, behavior: 'instant' });
         } else {
-          container.scrollTo({ top: scrollTop, left: (container as HTMLElement).scrollLeft, behavior: 'smooth' });
+          container.scrollTo({ top: scrollTop, left: (container as HTMLElement).scrollLeft, behavior: 'instant' });
         }
       }, yPercent);
     } else {
@@ -716,7 +716,7 @@ export default class Page {
         el.scrollTo({
           top: scrollTop,
           left: el.scrollLeft,
-          behavior: 'smooth',
+          behavior: 'instant',
         });
       }, yPercent);
     }
@@ -745,7 +745,7 @@ export default class Page {
         el.scrollBy({
           top: scrollAmount,
           left: 0,
-          behavior: 'smooth',
+          behavior: 'instant',
         });
       }, y);
     }

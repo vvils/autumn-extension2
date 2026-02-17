@@ -6,6 +6,7 @@ import {
   firewallStore,
   generalSettingsStore,
   llmProviderStore,
+  Actors,
   analyticsSettingsStore,
   serverSettingsStore,
 } from '@extension/storage';
@@ -541,6 +542,18 @@ async function subscribeToExecutorEvents(executor: Executor) {
       }
     } catch (error) {
       logger.error('Failed to send message to side panel:', error);
+    }
+
+    if (event.actor === 'planner' && event.state === ExecutionState.STEP_OK && event.data.details) {
+      try {
+        await chatHistoryStore.addMessage(event.data.taskId, {
+          actor: Actors.PLANNER,
+          content: event.data.details,
+          timestamp: event.timestamp,
+        });
+      } catch (err) {
+        logger.error('Failed to persist planner message:', err);
+      }
     }
 
     if (

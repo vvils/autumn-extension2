@@ -1,9 +1,11 @@
 import { memo } from 'react';
+import { ArrowUpToLine, ArrowDownFromLine } from 'lucide-react';
 
 export interface CostDisplayProps {
   totalInputTokens: number;
   totalOutputTokens: number;
   estimatedCostUsd: number;
+  elapsedTime?: string | null;
 }
 
 function formatTokenCount(count: number): string {
@@ -22,18 +24,37 @@ export const CostDisplay = memo(function CostDisplay({
   totalInputTokens,
   totalOutputTokens,
   estimatedCostUsd,
+  elapsedTime,
 }: CostDisplayProps) {
   const totalTokens = totalInputTokens + totalOutputTokens;
-  if (totalTokens === 0) return null;
+  if (totalTokens === 0 && !elapsedTime) return null;
 
   const hasTokens = totalTokens > 0;
   const costText = formatCost(estimatedCostUsd, hasTokens);
 
   return (
     <div className="text-accent/70 flex items-center gap-1.5 text-[10px]">
-      <span>{formatTokenCount(totalTokens)} tokens</span>
-      <span className="text-gray-300">|</span>
-      <span>{costText}</span>
+      {hasTokens && (
+        <>
+          <span className="flex items-center gap-0.5">
+            <ArrowUpToLine size={9} />
+            {formatTokenCount(totalInputTokens)}
+          </span>
+          <span className="text-gray-300">|</span>
+          <span className="flex items-center gap-0.5">
+            <ArrowDownFromLine size={9} />
+            {formatTokenCount(totalOutputTokens)}
+          </span>
+          <span className="text-gray-300">|</span>
+          <span>{costText}</span>
+        </>
+      )}
+      {elapsedTime && (
+        <>
+          {hasTokens && <span className="text-gray-300">|</span>}
+          <span className="tabular-nums">{elapsedTime}</span>
+        </>
+      )}
     </div>
   );
 });

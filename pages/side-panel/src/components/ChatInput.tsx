@@ -15,6 +15,7 @@ interface ChatInputProps {
   historicalSessionId?: string | null;
   onReplay?: (sessionId: string) => void;
   costData?: CostDisplayProps | null;
+  elapsedTime?: string | null;
 }
 
 interface AttachedFile {
@@ -35,6 +36,7 @@ export default function ChatInput({
   historicalSessionId,
   onReplay,
   costData,
+  elapsedTime,
 }: ChatInputProps) {
   const [text, setText] = useState('');
   const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([]);
@@ -259,7 +261,14 @@ export default function ChatInput({
             />
           </div>
 
-          {costData && <CostDisplay {...costData} />}
+          {(costData || elapsedTime) && (
+            <CostDisplay
+              totalInputTokens={costData?.totalInputTokens ?? 0}
+              totalOutputTokens={costData?.totalOutputTokens ?? 0}
+              estimatedCostUsd={costData?.estimatedCostUsd ?? 0}
+              elapsedTime={elapsedTime}
+            />
+          )}
 
           <div className="flex items-center gap-1.5">
             {onMicClick && (

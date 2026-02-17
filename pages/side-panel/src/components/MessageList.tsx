@@ -2,6 +2,7 @@ import type { Message } from '@extension/storage';
 import { Actors } from '@extension/storage';
 import { ACTOR_PROFILES } from '../types/message';
 import { memo } from 'react';
+import MarkdownContent from './MarkdownContent';
 
 interface MessageListProps {
   messages: Message[];
@@ -52,8 +53,8 @@ function MessageBlock({ message, isSameActor, isStreaming = false }: MessageBloc
       {!isSameActor && (
         <div className="mb-1 text-[11px] font-medium uppercase tracking-wide text-gray-400">{actor.name}</div>
       )}
-      <div className="whitespace-pre-wrap break-words text-[13px] leading-relaxed text-gray-900">
-        {message.content}
+      <div className="break-words text-[13px] leading-relaxed text-gray-900">
+        <MarkdownContent content={message.content} />
         {isStreaming && <span className="text-accent ml-0.5 inline-block animate-pulse">|</span>}
       </div>
       {!isStreaming && (
