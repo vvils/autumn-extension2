@@ -55,7 +55,7 @@ function MessageBlock({ message, isSameActor, isStreaming = false, onWidgetApply
 
   return (
     <div className="animate-fade-in">
-      {!isSameActor && (
+      {!isSameActor && actor && (
         <div className="mb-1 text-[11px] font-medium uppercase tracking-wide text-gray-400">{actor.name}</div>
       )}
       <div className="break-words text-[13px] leading-relaxed text-gray-900">

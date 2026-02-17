@@ -260,8 +260,6 @@ export function createChatModel(providerConfig: ProviderConfig, modelConfig: Mod
       return createOpenAIChatModel(providerConfig, modelConfig, undefined);
     }
     case ProviderTypeEnum.Anthropic: {
-      // For Opus models, only support temperature, not topP
-      // For 4.5 models, only support either temperature or topP, not both, so we only use temperature to align with Opus
       const args = {
         model: modelConfig.modelName,
         apiKey: providerConfig.apiKey,
@@ -269,7 +267,11 @@ export function createChatModel(providerConfig: ProviderConfig, modelConfig: Mod
         temperature,
         clientOptions: {},
       };
-      return new ChatAnthropic(args);
+      const model = new ChatAnthropic(args);
+      // Anthropic API rejects top_p alongside temperature; langchain defaults topP to -1
+      // for models not in its allowlist. Override to undefined so it's omitted from requests.
+      model.topP = undefined as unknown as number;
+      return model;
     }
     case ProviderTypeEnum.DeepSeek: {
       const args = {

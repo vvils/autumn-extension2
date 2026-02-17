@@ -2,7 +2,7 @@
 import { Trash2, Bookmark } from 'lucide-react';
 import { t } from '@extension/i18n';
 
-interface ChatSession {
+interface ChatHistoryItem {
   id: string;
   title: string;
   createdAt: number;
@@ -10,7 +10,7 @@ interface ChatSession {
 }
 
 interface ChatHistoryListProps {
-  sessions: ChatSession[];
+  sessions: ChatHistoryItem[];
   onSessionSelect: (sessionId: string) => void;
   onSessionDelete: (sessionId: string) => void;
   onSessionBookmark: (sessionId: string) => void;

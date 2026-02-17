@@ -12,6 +12,9 @@ export const MODEL_PRICING: Record<string, ModelPricing> = {
   'claude-sonnet-4-5-20250929': { inputPricePerMillion: 3.0, outputPricePerMillion: 15.0 },
   'claude-haiku-4-5': { inputPricePerMillion: 1.0, outputPricePerMillion: 5.0 },
   'claude-haiku-4-5-20251001': { inputPricePerMillion: 1.0, outputPricePerMillion: 5.0 },
+  // Anthropic — Claude 4.6
+  'claude-opus-4-6': { inputPricePerMillion: 5.0, outputPricePerMillion: 25.0 },
+  'claude-sonnet-4-6': { inputPricePerMillion: 3.0, outputPricePerMillion: 15.0 },
   // Anthropic — Claude 4.1
   'claude-opus-4-1': { inputPricePerMillion: 15.0, outputPricePerMillion: 75.0 },
   'claude-opus-4-1-20250805': { inputPricePerMillion: 15.0, outputPricePerMillion: 75.0 },

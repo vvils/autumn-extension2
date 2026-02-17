@@ -9,6 +9,32 @@ import {
   generalSettingsStore,
   mergeWidgetIntoMessages,
 } from '@extension/storage';
+
+function portRpc(
+  port: chrome.runtime.Port,
+  type: string,
+  payload: Record<string, unknown>,
+  responseType: string,
+  timeoutMs = 10_000,
+): Promise<any> {
+  return new Promise((resolve, reject) => {
+    const requestId = crypto.randomUUID();
+    const timeout = setTimeout(() => {
+      reject(new Error('Request timed out'));
+    }, timeoutMs);
+
+    const listener = (msg: any) => {
+      if (msg.type === responseType && msg.requestId === requestId) {
+        clearTimeout(timeout);
+        port.onMessage.removeListener(listener);
+        if (msg.error) reject(new Error(msg.error));
+        else resolve(msg);
+      }
+    };
+    port.onMessage.addListener(listener);
+    port.postMessage({ type, requestId, ...payload });
+  });
+}
 import favoritesStorage, { type FavoritePrompt } from '@extension/storage/lib/prompt/favorites';
 import { t } from '@extension/i18n';
 import MessageList from './components/MessageList';
@@ -27,6 +53,12 @@ declare global {
   interface Window {
     chrome: typeof chrome;
   }
+}
+
+function serverRoleToActor(role: string): Actors {
+  if (Object.values(Actors).includes(role as Actors)) return role as Actors;
+  if (role === 'assistant') return Actors.SYNTHESIZER;
+  return Actors.SYSTEM;
 }
 
 const SidePanel = () => {
@@ -198,13 +230,23 @@ const SidePanel = () => {
 
   const appendMessage = useCallback((newMessage: Message, sessionId?: string | null) => {
     setMessages(prev => [...prev, newMessage]);
-
     const effectiveSessionId = sessionId !== undefined ? sessionId : sessionIdRef.current;
-
     if (effectiveSessionId) {
-      chatHistoryStore
-        .addMessage(effectiveSessionId, newMessage)
-        .catch(err => console.error('Failed to save message to history:', err));
+      portRef.current?.postMessage({
+        type: 'add_message',
+        sessionId: effectiveSessionId,
+        message: { actor: newMessage.actor, content: newMessage.content, timestamp: newMessage.timestamp },
+      });
+    }
+  }, []);
+
+  const persistMessage = useCallback((msg: { actor: string; content: string; timestamp: number }) => {
+    if (sessionIdRef.current) {
+      portRef.current?.postMessage({
+        type: 'add_message',
+        sessionId: sessionIdRef.current,
+        message: msg,
+      });
     }
   }, []);
 
@@ -362,16 +404,19 @@ const SidePanel = () => {
               synthesizerStreamingRef.current = false;
               setIsStreamingSynthesizer(false);
               if (wasStreaming) {
+                let finalContent = content || '';
                 setMessages(prev => {
                   if (prev.length > 0) {
                     const last = prev[prev.length - 1];
-                    const finalContent = content || last.content;
+                    finalContent = content || last.content;
                     return [...prev.slice(0, -1), { ...last, content: finalContent, timestamp }];
                   }
                   return prev;
                 });
+                persistMessage({ actor, content: finalContent, timestamp });
               } else {
                 setMessages(prev => [...prev, { actor, content: content || '', timestamp }]);
+                persistMessage({ actor, content: content || '', timestamp });
               }
               break;
             }
@@ -385,6 +430,7 @@ const SidePanel = () => {
                 const widgetData = JSON.parse(content || '{}');
                 if (!widgetData.widgetId || !widgetData.type) return;
                 setMessages(prev => mergeWidgetIntoMessages(prev, widgetData, timestamp));
+                persistMessage({ actor: 'widget', content: content || '', timestamp });
               } catch (err) {
                 console.error('Failed to parse widget event:', err);
               }
@@ -422,7 +468,7 @@ const SidePanel = () => {
         });
       }
     },
-    [appendMessage, handleThinkingEvent, startTimer, stopTimer, resetTimer],
+    [appendMessage, persistMessage, handleThinkingEvent, startTimer, stopTimer, resetTimer],
   );
 
   const stopConnection = useCallback(() => {
@@ -469,19 +515,54 @@ const SidePanel = () => {
           });
           setIsProcessingSpeech(false);
         } else if (message && message.type === 'conversations_result') {
-          const mapped = (message.conversations || []).map((c: any) => ({
-            id: c.id,
-            title: c.title,
-            createdAt: new Date(c.createdAt).getTime(),
-            source: c.source,
-          }));
-          setChatSessions(mapped.sort((a: any, b: any) => b.createdAt - a.createdAt));
+          const mapped = (message.conversations || []).map(
+            (c: { id: string; title: string; createdAt: string; source?: string }) => ({
+              id: c.id,
+              title: c.title,
+              createdAt: new Date(c.createdAt).getTime(),
+              source: c.source,
+            }),
+          );
+          setChatSessions(
+            mapped.sort((a: { createdAt: number }, b: { createdAt: number }) => b.createdAt - a.createdAt),
+          );
         } else if (message && message.type === 'conversation_messages_result') {
-          const mapped = (message.messages || []).map((m: any) => ({
-            actor: m.role as Actors,
-            content: m.content,
-            timestamp: new Date(m.createdAt).getTime(),
-          }));
+          const rawMessages: Array<{ role: string; content: string; createdAt: string }> = message.messages || [];
+          const mapped: Message[] = [];
+          for (const m of rawMessages) {
+            if (m.role === 'widget') {
+              try {
+                const widgetData = JSON.parse(m.content);
+                let merged = false;
+                for (let i = mapped.length - 1; i >= 0; i--) {
+                  if (mapped[i].actor === Actors.SYNTHESIZER) {
+                    mapped[i] = {
+                      ...mapped[i],
+                      widgets: [...(mapped[i].widgets || []), widgetData],
+                    };
+                    merged = true;
+                    break;
+                  }
+                }
+                if (!merged) {
+                  mapped.push({
+                    actor: Actors.SYNTHESIZER,
+                    content: '',
+                    timestamp: new Date(m.createdAt).getTime(),
+                    widgets: [widgetData],
+                  });
+                }
+              } catch {
+                /* ignore malformed widget data */
+              }
+            } else {
+              mapped.push({
+                actor: serverRoleToActor(m.role),
+                content: m.content,
+                timestamp: new Date(m.createdAt).getTime(),
+              });
+            }
+          }
           if (mapped.length > 0) {
             setCurrentSessionId(message.conversationId);
             setMessages(mapped);
@@ -615,7 +696,19 @@ const SidePanel = () => {
         setMessages([]);
       }
 
-      const newSession = await chatHistoryStore.createSession(`Replay of ${historySessionId.substring(0, 20)}...`);
+      if (!portRef.current) {
+        setupConnection();
+      }
+      if (!portRef.current) {
+        throw new Error('No connection available');
+      }
+      const replayResponse = await portRpc(
+        portRef.current,
+        'create_session',
+        { title: `Replay of ${historySessionId.substring(0, 20)}...` },
+        'session_created',
+      );
+      const newSession = replayResponse.session;
       console.log('newSession for replay', newSession);
 
       const newTaskId = newSession.id;
@@ -745,10 +838,20 @@ const SidePanel = () => {
       setShowStopButton(true);
 
       if (!isFollowUpMode) {
+        if (!portRef.current) {
+          setupConnection();
+        }
+        if (!portRef.current) {
+          throw new Error('No connection available');
+        }
         const titleText = displayText || text;
-        const newSession = await chatHistoryStore.createSession(
-          titleText.substring(0, 50) + (titleText.length > 50 ? '...' : ''),
+        const response = await portRpc(
+          portRef.current,
+          'create_session',
+          { title: titleText.substring(0, 50) + (titleText.length > 50 ? '...' : '') },
+          'session_created',
         );
+        const newSession = response.session;
         console.log('newSession', newSession);
 
         const sessionId = newSession.id;
@@ -869,18 +972,12 @@ const SidePanel = () => {
 
   const handleSessionBookmark = async (sessionId: string) => {
     try {
-      const fullSession = await chatHistoryStore.getSession(sessionId);
-
-      if (fullSession && fullSession.messages.length > 0) {
-        const sessionTitle = fullSession.title;
-        const title = sessionTitle.split(' ').slice(0, 8).join(' ');
-        const taskContent = fullSession.messages[0]?.content || '';
-
-        await favoritesStorage.addPrompt(title, taskContent);
-
+      const session = chatSessions.find(s => s.id === sessionId);
+      if (session) {
+        const title = session.title.split(' ').slice(0, 8).join(' ');
+        await favoritesStorage.addPrompt(title, session.title);
         const prompts = await favoritesStorage.getAllPrompts();
         setFavoritePrompts(prompts);
-
         handleBackToChat(true);
       }
     } catch (error) {

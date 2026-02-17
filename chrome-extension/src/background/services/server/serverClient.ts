@@ -1,4 +1,4 @@
-import type { ServerSettingsStorage, ProviderConfig } from '@extension/storage';
+import type { ServerSettingsStorage } from '@extension/storage';
 import type {
   ServerConversation,
   ServerMessage,
@@ -6,6 +6,9 @@ import type {
   SSEEvent,
   HotelContextManifest,
   ExtensionQueryResponse,
+  PullKeysResponse,
+  CreateConversationPayload,
+  AddMessagePayload,
 } from './types';
 import { ServerApiClient } from './apiClient';
 
@@ -80,6 +83,21 @@ export class ServerClient {
     await this.apiClient.delete(`/ai/conversations/${encodeURIComponent(conversationId)}`);
   }
 
+  async createConversation(title: string, source: string, id?: string): Promise<ServerConversation> {
+    const body: CreateConversationPayload = { title, source };
+    if (id) body.id = id;
+    const { data } = await this.apiClient.post<ServerConversation>('/ai/conversations', body);
+    return data;
+  }
+
+  async addMessage(conversationId: string, message: AddMessagePayload): Promise<ServerMessage> {
+    const { data } = await this.apiClient.post<ServerMessage>(
+      `/ai/conversations/${encodeURIComponent(conversationId)}/messages`,
+      message,
+    );
+    return data;
+  }
+
   async syncConversation(payload: SyncConversationPayload): Promise<{ created: boolean; messageCount: number }> {
     const { data } = await this.apiClient.post<{ created: boolean; messageCount: number }>(
       '/ai/conversations/sync',
@@ -110,8 +128,8 @@ export class ServerClient {
     }
   }
 
-  async pullKeys(): Promise<Record<string, ProviderConfig> | null> {
-    const { data } = await this.apiClient.get<{ keys: Record<string, ProviderConfig> | null }>('/ai/extension/keys');
-    return data.keys;
+  async pullKeys(): Promise<PullKeysResponse> {
+    const { data } = await this.apiClient.get<PullKeysResponse>('/ai/extension/keys');
+    return { keys: data.keys, agentModels: data.agentModels };
   }
 }

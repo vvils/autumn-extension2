@@ -2,11 +2,9 @@ import 'webextension-polyfill';
 import {
   agentModelStore,
   AgentNameEnum,
-  chatHistoryStore,
   firewallStore,
   generalSettingsStore,
   llmProviderStore,
-  Actors,
   analyticsSettingsStore,
   serverSettingsStore,
   serverProvidedKeysStore,
@@ -23,6 +21,7 @@ import { SpeechToTextService } from './services/speechToText';
 import { injectBuildDomTreeScripts } from './browser/dom/service';
 import { analytics } from './services/analytics';
 import { ServerClient } from './services/server';
+import type { AddMessagePayload } from './services/server/types';
 import { validateWidgetApplyRequest, executeWidgetApply } from './services/widgetApply';
 import { seedWorkflowPrompts } from './services/workflowPrompts';
 
@@ -34,6 +33,43 @@ let serverClient: ServerClient | null = null;
 let cachedHotelCapabilities: string | undefined;
 let currentPort: chrome.runtime.Port | null = null;
 const SIDE_PANEL_URL = chrome.runtime.getURL('side-panel/index.html');
+
+class MessageRetryQueue {
+  private queue: Array<{ conversationId: string; payload: AddMessagePayload; retries: number }> = [];
+  private processing = false;
+
+  enqueue(conversationId: string, payload: AddMessagePayload) {
+    this.queue.push({ conversationId, payload, retries: 0 });
+    this.processQueue();
+  }
+
+  private async processQueue() {
+    if (this.processing || this.queue.length === 0) return;
+    this.processing = true;
+    while (this.queue.length > 0) {
+      const item = this.queue[0];
+      try {
+        if (serverClient && (await serverClient.isAuthenticated())) {
+          await serverClient.addMessage(item.conversationId, item.payload);
+          this.queue.shift();
+        } else {
+          break;
+        }
+      } catch {
+        item.retries++;
+        if (item.retries >= 3) {
+          logger.error(`Dropping message after 3 retries for conversation ${item.conversationId}`);
+          this.queue.shift();
+        } else {
+          await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, item.retries)));
+        }
+      }
+    }
+    this.processing = false;
+  }
+}
+
+const messageRetryQueue = new MessageRetryQueue();
 
 async function openSidePanel(tabId: number): Promise<void> {
   chrome.sidePanel.setOptions({ tabId, path: 'side-panel/index.html', enabled: true });
@@ -124,7 +160,9 @@ async function initServerClient() {
         }
 
         try {
-          const serverKeys = await serverClient.pullKeys();
+          const pullResult = await serverClient.pullKeys();
+          const serverKeys = pullResult.keys;
+
           if (serverKeys && Object.keys(serverKeys).length > 0) {
             const serverKeyIds = Object.keys(serverKeys);
             for (const [id, config] of Object.entries(serverKeys)) {
@@ -132,6 +170,26 @@ async function initServerClient() {
             }
             await serverProvidedKeysStore.setProviderIds(serverKeyIds);
             logger.info(`Pulled ${serverKeyIds.length} provider keys from server`);
+          }
+
+          if (pullResult.agentModels) {
+            for (const [agentKey, assignment] of Object.entries(pullResult.agentModels)) {
+              if (!Object.values(AgentNameEnum).includes(agentKey as AgentNameEnum)) {
+                logger.warning(`Unknown agent name from server: ${agentKey}, skipping`);
+                continue;
+              }
+              if (!assignment.provider || !assignment.modelName) {
+                logger.warning(`Incomplete agent model assignment for ${agentKey}, skipping`);
+                continue;
+              }
+              await agentModelStore.setAgentModel(agentKey as AgentNameEnum, {
+                provider: assignment.provider,
+                modelName: assignment.modelName,
+                parameters: assignment.parameters,
+                reasoningEffort: assignment.reasoningEffort,
+              });
+            }
+            logger.info(`Applied ${Object.keys(pullResult.agentModels).length} agent model assignments from server`);
           }
         } catch (error) {
           logger.warning('Failed to pull keys from server:', error);
@@ -340,31 +398,11 @@ chrome.runtime.onConnect.addListener(port => {
                 const conversations = await serverClient.getConversations();
                 port.postMessage({ type: 'conversations_result', conversations });
               } else {
-                const sessions = await chatHistoryStore.getSessionsMetadata();
-                const mapped = sessions.map(s => ({
-                  id: s.id,
-                  title: s.title,
-                  firstMessagePreview: '',
-                  lastMessageAt: new Date(s.updatedAt).toISOString(),
-                  messageCount: s.messageCount,
-                  createdAt: new Date(s.createdAt).toISOString(),
-                  source: 'browser_automation',
-                }));
-                port.postMessage({ type: 'conversations_result', conversations: mapped });
+                port.postMessage({ type: 'conversations_result', conversations: [] });
               }
             } catch (error) {
-              logger.error('get_conversations failed, falling back to local:', error);
-              const sessions = await chatHistoryStore.getSessionsMetadata();
-              const mapped = sessions.map(s => ({
-                id: s.id,
-                title: s.title,
-                firstMessagePreview: '',
-                lastMessageAt: new Date(s.updatedAt).toISOString(),
-                messageCount: s.messageCount,
-                createdAt: new Date(s.createdAt).toISOString(),
-                source: 'browser_automation',
-              }));
-              port.postMessage({ type: 'conversations_result', conversations: mapped });
+              logger.error('get_conversations failed:', error);
+              port.postMessage({ type: 'conversations_result', conversations: [] });
             }
             break;
           }
@@ -376,27 +414,11 @@ chrome.runtime.onConnect.addListener(port => {
                 const messages = await serverClient.getConversationMessages(convId);
                 port.postMessage({ type: 'conversation_messages_result', conversationId: convId, messages });
               } else {
-                const session = await chatHistoryStore.getSession(convId);
-                const mapped =
-                  session?.messages.map(m => ({
-                    id: m.id,
-                    role: m.actor,
-                    content: m.content,
-                    createdAt: new Date(m.timestamp).toISOString(),
-                  })) || [];
-                port.postMessage({ type: 'conversation_messages_result', conversationId: convId, messages: mapped });
+                port.postMessage({ type: 'conversation_messages_result', conversationId: convId, messages: [] });
               }
             } catch (error) {
-              logger.error('get_conversation_messages failed, falling back to local:', error);
-              const session = await chatHistoryStore.getSession(convId);
-              const mapped =
-                session?.messages.map(m => ({
-                  id: m.id,
-                  role: m.actor,
-                  content: m.content,
-                  createdAt: new Date(m.timestamp).toISOString(),
-                })) || [];
-              port.postMessage({ type: 'conversation_messages_result', conversationId: convId, messages: mapped });
+              logger.error('get_conversation_messages failed:', error);
+              port.postMessage({ type: 'conversation_messages_result', conversationId: convId, messages: [] });
             }
             break;
           }
@@ -407,16 +429,10 @@ chrome.runtime.onConnect.addListener(port => {
               if (serverClient && (await serverClient.isAuthenticated())) {
                 await serverClient.deleteConversation(deleteId);
               }
-              await chatHistoryStore.deleteSession(deleteId);
               port.postMessage({ type: 'conversation_deleted', conversationId: deleteId });
             } catch (error) {
               logger.error('delete_conversation failed:', error);
-              try {
-                await chatHistoryStore.deleteSession(deleteId);
-                port.postMessage({ type: 'conversation_deleted', conversationId: deleteId });
-              } catch (localError) {
-                port.postMessage({ type: 'error', error: 'Failed to delete conversation' });
-              }
+              port.postMessage({ type: 'error', error: 'Failed to delete conversation' });
             }
             break;
           }
@@ -470,6 +486,50 @@ chrome.runtime.onConnect.addListener(port => {
             break;
           }
 
+          case 'create_session': {
+            const { requestId, title } = message;
+            try {
+              if (!serverClient || !(await serverClient.isAuthenticated())) {
+                return port.postMessage({ type: 'session_created', requestId, error: 'Not authenticated' });
+              }
+              const conv = await serverClient.createConversation(title, 'browser_automation');
+              port.postMessage({
+                type: 'session_created',
+                requestId,
+                session: { id: conv.id, title: conv.title, createdAt: new Date(conv.createdAt).getTime() },
+              });
+            } catch (error) {
+              logger.error('create_session failed:', error);
+              port.postMessage({
+                type: 'session_created',
+                requestId,
+                error: error instanceof Error ? error.message : 'Failed to create session',
+              });
+            }
+            break;
+          }
+
+          case 'add_message': {
+            const { sessionId, message: msgPayload } = message;
+            try {
+              if (serverClient && (await serverClient.isAuthenticated())) {
+                await serverClient.addMessage(sessionId, {
+                  role: msgPayload.actor,
+                  content: msgPayload.content,
+                  timestamp: msgPayload.timestamp,
+                });
+              }
+            } catch (error) {
+              logger.error('add_message failed:', error);
+              messageRetryQueue.enqueue(sessionId, {
+                role: msgPayload.actor,
+                content: msgPayload.content,
+                timestamp: msgPayload.timestamp,
+              });
+            }
+            break;
+          }
+
           default:
             return port.postMessage({ type: 'error', error: t('errors_cmd_unknown', [message.type]) });
         }
@@ -489,29 +549,6 @@ chrome.runtime.onConnect.addListener(port => {
     });
   }
 });
-
-async function syncSessionToServer(sessionId: string): Promise<void> {
-  if (!serverClient) return;
-  try {
-    if (!(await serverClient.isAuthenticated())) return;
-    const session = await chatHistoryStore.getSession(sessionId);
-    if (!session || session.messages.length === 0) return;
-
-    await serverClient.syncConversation({
-      conversationId: session.id,
-      title: session.title,
-      source: 'browser_automation',
-      messages: session.messages.map(msg => ({
-        role: msg.actor,
-        content: msg.content,
-        timestamp: msg.timestamp,
-      })),
-    });
-    logger.info(`Synced session ${sessionId} to server`);
-  } catch (error) {
-    logger.error(`Failed to sync session ${sessionId}:`, error);
-  }
-}
 
 async function setupExecutor(taskId: string, task: string, browserContext: BrowserContext) {
   const providers = await llmProviderStore.getAllProviders();
@@ -600,27 +637,21 @@ async function subscribeToExecutorEvents(executor: Executor) {
       logger.error('Failed to send message to side panel:', error);
     }
 
-    if (event.actor === 'planner' && event.state === ExecutionState.STEP_OK && event.data.details) {
+    if (
+      (event.actor === 'planner' || event.actor === 'synthesizer') &&
+      event.state === ExecutionState.STEP_OK &&
+      event.data.details
+    ) {
       try {
-        await chatHistoryStore.addMessage(event.data.taskId, {
-          actor: Actors.PLANNER,
-          content: event.data.details,
-          timestamp: event.timestamp,
-        });
+        if (serverClient && (await serverClient.isAuthenticated())) {
+          await serverClient.addMessage(event.data.taskId, {
+            role: event.actor,
+            content: event.data.details,
+            timestamp: event.timestamp,
+          });
+        }
       } catch (err) {
-        logger.error('Failed to persist planner message:', err);
-      }
-    }
-
-    if (event.actor === 'synthesizer' && event.state === ExecutionState.STEP_OK && event.data.details) {
-      try {
-        await chatHistoryStore.addMessage(event.data.taskId, {
-          actor: Actors.SYNTHESIZER,
-          content: event.data.details,
-          timestamp: event.timestamp,
-        });
-      } catch (err) {
-        logger.error('Failed to persist synthesizer message:', err);
+        logger.error(`Failed to persist ${event.actor} message:`, err);
       }
     }
 
@@ -629,7 +660,6 @@ async function subscribeToExecutorEvents(executor: Executor) {
       event.state === ExecutionState.TASK_FAIL ||
       event.state === ExecutionState.TASK_CANCEL
     ) {
-      await syncSessionToServer(event.data.taskId);
       await currentExecutor?.cleanup();
     }
   });

@@ -1,3 +1,5 @@
+import type { ProviderConfig } from '@extension/storage';
+
 export interface ServerApiClientConfig {
   baseUrl: string;
   defaultTimeout?: number;
@@ -80,4 +82,28 @@ export interface ExtensionQueryResponse {
   sources: string[];
   latency: number;
   escalation: { reason: string } | null;
+}
+
+export interface ServerAgentModelAssignment {
+  provider: string;
+  modelName: string;
+  reasoningEffort?: 'minimal' | 'low' | 'medium' | 'high';
+  parameters?: Record<string, unknown>;
+}
+
+export interface PullKeysResponse {
+  keys: Record<string, ProviderConfig> | null;
+  agentModels?: Record<string, ServerAgentModelAssignment>;
+}
+
+export interface CreateConversationPayload {
+  title: string;
+  source: string;
+  id?: string;
+}
+
+export interface AddMessagePayload {
+  role: string;
+  content: string;
+  timestamp?: number;
 }
