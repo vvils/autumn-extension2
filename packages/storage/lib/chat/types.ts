@@ -11,6 +11,7 @@ export interface Message {
   actor: Actors;
   content: string;
   timestamp: number; // Unix timestamp in milliseconds
+  widgets?: Array<{ widgetId: string; type: string; data: Record<string, unknown> }>;
 }
 
 export interface ChatMessage extends Message {

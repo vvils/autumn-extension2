@@ -7,6 +7,7 @@ export interface ServerSettingsConfig {
   accessToken: string;
   userId: string;
   tokenExpiresAt: number;
+  keySyncEnabled: boolean;
 }
 
 export type ServerSettingsStorage = BaseStorage<ServerSettingsConfig> & {
@@ -24,6 +25,7 @@ export const DEFAULT_SERVER_SETTINGS: ServerSettingsConfig = {
   accessToken: '',
   userId: '',
   tokenExpiresAt: 0,
+  keySyncEnabled: false,
 };
 
 const storage = createStorage<ServerSettingsConfig>('server-settings', DEFAULT_SERVER_SETTINGS, {

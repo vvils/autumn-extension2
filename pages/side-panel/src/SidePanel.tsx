@@ -1,7 +1,14 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { History, SquarePen, Settings } from 'lucide-react';
-import { type Message, Actors, chatHistoryStore, agentModelStore, generalSettingsStore } from '@extension/storage';
+import {
+  type Message,
+  Actors,
+  chatHistoryStore,
+  agentModelStore,
+  generalSettingsStore,
+  mergeWidgetIntoMessages,
+} from '@extension/storage';
 import favoritesStorage, { type FavoritePrompt } from '@extension/storage/lib/prompt/favorites';
 import { t } from '@extension/i18n';
 import MessageList from './components/MessageList';
@@ -61,6 +68,48 @@ const SidePanel = () => {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const recordingTimerRef = useRef<number | null>(null);
+  const widgetApplyCallbacksRef = useRef<Map<string, { resolve: (r: { success: boolean; error?: string }) => void }>>(
+    new Map(),
+  );
+
+  const handleWidgetApply = useCallback(
+    (
+      endpoint: string,
+      method: string,
+      payload: Record<string, unknown>,
+    ): Promise<{ success: boolean; error?: string }> => {
+      return new Promise(resolve => {
+        const requestId = crypto.randomUUID();
+        const timeout = setTimeout(() => {
+          widgetApplyCallbacksRef.current.delete(requestId);
+          resolve({ success: false, error: 'Request timed out' });
+        }, 30_000);
+
+        widgetApplyCallbacksRef.current.set(requestId, {
+          resolve: result => {
+            clearTimeout(timeout);
+            resolve(result);
+          },
+        });
+
+        if (!portRef.current) {
+          clearTimeout(timeout);
+          widgetApplyCallbacksRef.current.delete(requestId);
+          resolve({ success: false, error: 'No connection' });
+          return;
+        }
+
+        try {
+          portRef.current.postMessage({ type: 'widget_apply', requestId, endpoint, method, payload });
+        } catch {
+          clearTimeout(timeout);
+          widgetApplyCallbacksRef.current.delete(requestId);
+          resolve({ success: false, error: 'Failed to send request' });
+        }
+      });
+    },
+    [],
+  );
 
   const checkModelConfiguration = useCallback(async () => {
     try {
@@ -299,7 +348,8 @@ const SidePanel = () => {
             case ExecutionState.STEP_STREAMING:
               setMessages(prev => {
                 if (synthesizerStreamingRef.current) {
-                  return [...prev.slice(0, -1), { actor, content: content || '', timestamp }];
+                  const last = prev[prev.length - 1];
+                  return [...prev.slice(0, -1), { actor, content: content || '', timestamp, widgets: last?.widgets }];
                 } else {
                   synthesizerStreamingRef.current = true;
                   setIsStreamingSynthesizer(true);
@@ -330,9 +380,16 @@ const SidePanel = () => {
               setIsStreamingSynthesizer(false);
               skip = false;
               break;
-            case ExecutionState.WIDGET_EVENT:
-              console.log('Widget event:', content);
+            case ExecutionState.WIDGET_EVENT: {
+              try {
+                const widgetData = JSON.parse(content || '{}');
+                if (!widgetData.widgetId || !widgetData.type) return;
+                setMessages(prev => mergeWidgetIntoMessages(prev, widgetData, timestamp));
+              } catch (err) {
+                console.error('Failed to parse widget event:', err);
+              }
               return;
+            }
             default:
               return;
           }
@@ -444,6 +501,12 @@ const SidePanel = () => {
           } else {
             setActiveGroupOverlay(null);
           }
+        } else if (message && message.type === 'widget_apply_result') {
+          const pending = widgetApplyCallbacksRef.current.get(message.requestId);
+          if (pending) {
+            widgetApplyCallbacksRef.current.delete(message.requestId);
+            pending.resolve({ success: message.success, error: message.error });
+          }
         } else if (message && message.type === 'heartbeat_ack') {
           console.log('Heartbeat acknowledged');
         }
@@ -457,6 +520,8 @@ const SidePanel = () => {
           clearInterval(heartbeatIntervalRef.current);
           heartbeatIntervalRef.current = null;
         }
+        widgetApplyCallbacksRef.current.forEach(({ resolve }) => resolve({ success: false, error: 'Connection lost' }));
+        widgetApplyCallbacksRef.current.clear();
         setInputEnabled(true);
         setShowStopButton(false);
       });
@@ -1142,7 +1207,11 @@ const SidePanel = () => {
           ) : (
             <>
               <div className="scrollbar-thin flex-1 space-y-4 overflow-y-auto p-4">
-                <MessageList messages={messages} isStreaming={isStreamingPlanner || isStreamingSynthesizer} />
+                <MessageList
+                  messages={messages}
+                  isStreaming={isStreamingPlanner || isStreamingSynthesizer}
+                  onWidgetApply={handleWidgetApply}
+                />
                 <div ref={messagesEndRef} />
               </div>
               <ThinkingWidget state={thinkingWidgetState} />

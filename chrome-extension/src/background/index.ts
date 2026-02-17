@@ -22,6 +22,8 @@ import { SpeechToTextService } from './services/speechToText';
 import { injectBuildDomTreeScripts } from './browser/dom/service';
 import { analytics } from './services/analytics';
 import { ServerClient } from './services/server';
+import { validateWidgetApplyRequest, executeWidgetApply } from './services/widgetApply';
+import { seedWorkflowPrompts } from './services/workflowPrompts';
 
 const logger = createLogger('background');
 
@@ -425,6 +427,32 @@ chrome.runtime.onConnect.addListener(port => {
             } catch {
               port.postMessage({ type: 'tab_group_status', inActiveGroup: false, primaryTabId: null });
             }
+            break;
+          }
+
+          case 'widget_apply': {
+            const { requestId, endpoint, method, payload } = message;
+            const validation = validateWidgetApplyRequest(endpoint, method);
+            if (!validation.valid) {
+              return port.postMessage({
+                type: 'widget_apply_result',
+                requestId,
+                success: false,
+                error: validation.error,
+              });
+            }
+
+            if (!serverClient || !(await serverClient.isAuthenticated())) {
+              return port.postMessage({
+                type: 'widget_apply_result',
+                requestId,
+                success: false,
+                error: 'Not authenticated',
+              });
+            }
+
+            const result = await executeWidgetApply(serverClient.apiClient, { endpoint, method, payload });
+            port.postMessage({ type: 'widget_apply_result', requestId, ...result });
             break;
           }
 

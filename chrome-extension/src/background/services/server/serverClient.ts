@@ -1,4 +1,4 @@
-import type { ServerSettingsStorage } from '@extension/storage';
+import type { ServerSettingsStorage, ProviderConfig } from '@extension/storage';
 import type {
   ServerConversation,
   ServerMessage,

@@ -270,6 +270,7 @@ export class Executor {
     try {
       const history = [...this.conversationMessages, { role: 'user', content: task }];
       let fullText = '';
+      logger.info('Starting domain query');
 
       for await (const event of this.serverClient!.streamChat(history, undefined, abortController.signal)) {
         if (this.context.stopped) {
@@ -280,10 +281,12 @@ export class Executor {
         switch (event.event) {
           case 'chunk':
             fullText += event.data;
+            logger.info('Domain query chunk', `+${event.data.length} chars (total: ${fullText.length})`);
             this.context.emitEvent(Actors.SYNTHESIZER, ExecutionState.STEP_STREAMING, fullText);
             break;
 
           case 'widget':
+            logger.info('Domain query widget', event.data);
             this.context.emitEvent(Actors.SYNTHESIZER, ExecutionState.WIDGET_EVENT, event.data);
             break;
 
@@ -298,6 +301,7 @@ export class Executor {
             throw new Error(event.data);
 
           case 'done':
+            logger.info('Domain query completed', `${fullText.length} chars`);
             this.context.finalAnswer = fullText;
             this.context.emitEvent(Actors.SYNTHESIZER, ExecutionState.STEP_OK, fullText);
             this.context.emitEvent(Actors.SYSTEM, ExecutionState.TASK_OK, fullText);
