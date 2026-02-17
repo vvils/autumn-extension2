@@ -30,8 +30,31 @@ let serverClient: ServerClient | null = null;
 let currentPort: chrome.runtime.Port | null = null;
 const SIDE_PANEL_URL = chrome.runtime.getURL('side-panel/index.html');
 
-// Setup side panel behavior
-chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(error => console.error(error));
+async function openSidePanel(tabId: number): Promise<void> {
+  chrome.sidePanel.setOptions({ tabId, path: 'side-panel/index.html', enabled: true });
+  chrome.sidePanel.open({ tabId });
+
+  const mgr = browserContext.tabGroupManager;
+  const tab = await chrome.tabs.get(tabId);
+  const isInChromeGroup = tab.groupId !== chrome.tabGroups.TAB_GROUP_ID_NONE;
+
+  if (isInChromeGroup && mgr.primaryTabForGroup(tab.groupId) != null) {
+    // Already tracked — nothing to do
+  } else if (isInChromeGroup) {
+    mgr.adoptGroup(tab.groupId, tabId);
+  } else {
+    await mgr.createGroup(tabId);
+  }
+}
+
+chrome.action.onClicked.addListener(async tab => {
+  if (!tab.id) return;
+  try {
+    await openSidePanel(tab.id);
+  } catch (error) {
+    logger.error('Failed to open side panel:', error);
+  }
+});
 
 chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
   if (tabId && changeInfo.status === 'complete' && tab.url?.startsWith('http')) {
@@ -52,8 +75,13 @@ chrome.debugger.onDetach.addListener(async (source, reason) => {
 });
 
 // Cleanup when tab is closed
-chrome.tabs.onRemoved.addListener(tabId => {
+chrome.tabs.onRemoved.addListener(async tabId => {
   browserContext.removeAttachedPage(tabId);
+  const mgr = browserContext.tabGroupManager;
+  const newPrimaryId = await mgr.removeTab(tabId);
+  if (newPrimaryId !== null) {
+    chrome.sidePanel.setOptions({ tabId: newPrimaryId, path: 'side-panel/index.html', enabled: true });
+  }
 });
 
 logger.info('background loaded');
@@ -130,6 +158,8 @@ chrome.runtime.onConnect.addListener(port => {
             if (!message.tabId) return port.postMessage({ type: 'error', error: t('bg_errors_noTabId') });
 
             logger.info('new_task', message.tabId, message.task);
+            browserContext.updateCurrentTabId(message.tabId);
+            browserContext.tabGroupManager.updatePrimaryTab(message.tabId);
             currentExecutor = await setupExecutor(message.taskId, message.task, browserContext);
             subscribeToExecutorEvents(currentExecutor);
 
@@ -361,6 +391,29 @@ chrome.runtime.onConnect.addListener(port => {
             break;
           }
 
+          case 'check_tab_group_status': {
+            const tabId = message.tabId;
+            if (!tabId) {
+              port.postMessage({ type: 'tab_group_status', inActiveGroup: false, primaryTabId: null });
+              break;
+            }
+            try {
+              const tab = await chrome.tabs.get(tabId);
+              const mgr = browserContext.tabGroupManager;
+              const primaryTabId =
+                tab.groupId !== chrome.tabGroups.TAB_GROUP_ID_NONE ? mgr.primaryTabForGroup(tab.groupId) : null;
+
+              port.postMessage({
+                type: 'tab_group_status',
+                inActiveGroup: primaryTabId != null && primaryTabId !== tabId,
+                primaryTabId,
+              });
+            } catch {
+              port.postMessage({ type: 'tab_group_status', inActiveGroup: false, primaryTabId: null });
+            }
+            break;
+          }
+
           default:
             return port.postMessage({ type: 'error', error: t('errors_cmd_unknown', [message.type]) });
         }
@@ -374,7 +427,6 @@ chrome.runtime.onConnect.addListener(port => {
     });
 
     port.onDisconnect.addListener(() => {
-      // this event is also triggered when the side panel is closed, so we need to cancel the task
       console.log('Side panel disconnected');
       currentPort = null;
       currentExecutor?.cancel();

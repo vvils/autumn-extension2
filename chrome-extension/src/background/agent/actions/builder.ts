@@ -259,6 +259,7 @@ export class ActionBuilder {
             const newTabId = Array.from(currentTabIds).find(id => !initialTabIds.has(id));
             if (newTabId) {
               await this.context.browserContext.switchTab(newTabId);
+              await this.context.browserContext.tabGroupManager.addTab(newTabId);
             }
           }
           this.context.emitEvent(Actors.NAVIGATOR, ExecutionState.ACT_OK, msg);

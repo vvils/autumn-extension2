@@ -10,15 +10,21 @@ import Page, { build_initial_state } from './page';
 import { createLogger } from '@src/background/log';
 import { isUrlAllowed } from './util';
 import { analytics } from '../services/analytics';
+import { TabGroupManager } from './tab-group';
 
 const logger = createLogger('BrowserContext');
 export default class BrowserContext {
   private _config: BrowserContextConfig;
   private _currentTabId: number | null = null;
   private _attachedPages: Map<number, Page> = new Map();
+  private _tabGroupManager = new TabGroupManager();
 
   constructor(config: Partial<BrowserContextConfig>) {
     this._config = { ...DEFAULT_BROWSER_CONTEXT_CONFIG, ...config };
+  }
+
+  get tabGroupManager(): TabGroupManager {
+    return this._tabGroupManager;
   }
 
   public getConfig(): BrowserContextConfig {
@@ -279,6 +285,8 @@ export default class BrowserContext {
     const page = await this._getOrCreatePage(updatedTab);
     await this.attachPage(page);
     this._currentTabId = tab.id;
+
+    await this._tabGroupManager.addTab(tab.id);
 
     return page;
   }

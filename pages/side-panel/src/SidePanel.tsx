@@ -9,6 +9,7 @@ import ChatInput from './components/ChatInput';
 import ChatHistoryList from './components/ChatHistoryList';
 import BookmarkList from './components/BookmarkList';
 import ThinkingWidget from './components/ThinkingWidget';
+import { ActiveGroupOverlay } from './components/ActiveGroupOverlay';
 import { SlidePanel } from './components/SlidePanel';
 import { EventType, type AgentEvent, ExecutionState } from './types/event';
 import { useThinkingState } from './hooks/useThinkingState';
@@ -39,6 +40,7 @@ const SidePanel = () => {
   const [isReplaying, setIsReplaying] = useState(false);
   const [replayEnabled, setReplayEnabled] = useState(false);
   const [isStreamingPlanner, setIsStreamingPlanner] = useState(false);
+  const [activeGroupOverlay, setActiveGroupOverlay] = useState<{ primaryTabId: number } | null>(null);
   const [costData, setCostData] = useState<{
     totalInputTokens: number;
     totalOutputTokens: number;
@@ -106,6 +108,34 @@ const SidePanel = () => {
   }, [checkModelConfiguration, loadGeneralSettings]);
 
   useEffect(() => {
+    const listener = (activeInfo: chrome.tabs.TabActiveInfo) => {
+      if (!portRef.current) return;
+      portRef.current.postMessage({
+        type: 'check_tab_group_status',
+        tabId: activeInfo.tabId,
+      });
+    };
+    chrome.tabs.onActivated.addListener(listener);
+    return () => chrome.tabs.onActivated.removeListener(listener);
+  }, []);
+
+  useEffect(() => {
+    const listener = () => {
+      if (!portRef.current) return;
+      chrome.tabs.query({ active: true, currentWindow: true }).then(([tab]) => {
+        if (tab?.id) {
+          portRef.current?.postMessage({
+            type: 'check_tab_group_status',
+            tabId: tab.id,
+          });
+        }
+      });
+    };
+    chrome.tabs.onRemoved.addListener(listener);
+    return () => chrome.tabs.onRemoved.removeListener(listener);
+  }, []);
+
+  useEffect(() => {
     sessionIdRef.current = currentSessionId;
   }, [currentSessionId]);
 
@@ -152,12 +182,14 @@ const SidePanel = () => {
               setInputEnabled(true);
               setShowStopButton(false);
               setIsReplaying(false);
+              setActiveGroupOverlay(null);
               break;
             case ExecutionState.TASK_FAIL:
               setIsFollowUpMode(true);
               setInputEnabled(true);
               setShowStopButton(false);
               setIsReplaying(false);
+              setActiveGroupOverlay(null);
               skip = false;
               break;
             case ExecutionState.TASK_CANCEL:
@@ -165,6 +197,7 @@ const SidePanel = () => {
               setInputEnabled(true);
               setShowStopButton(false);
               setIsReplaying(false);
+              setActiveGroupOverlay(null);
               skip = false;
               break;
             case ExecutionState.TASK_PAUSE:
@@ -360,6 +393,12 @@ const SidePanel = () => {
             setMessages([]);
             setCurrentSessionId(null);
           }
+        } else if (message && message.type === 'tab_group_status') {
+          if (message.inActiveGroup) {
+            setActiveGroupOverlay({ primaryTabId: message.primaryTabId });
+          } else {
+            setActiveGroupOverlay(null);
+          }
         } else if (message && message.type === 'heartbeat_ack') {
           console.log('Heartbeat acknowledged');
         }
@@ -403,6 +442,20 @@ const SidePanel = () => {
       portRef.current = null;
     }
   }, [handleTaskState, appendMessage, stopConnection]);
+
+  useEffect(() => {
+    setupConnection();
+
+    (async () => {
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (tab?.id && portRef.current) {
+        portRef.current.postMessage({
+          type: 'check_tab_group_status',
+          tabId: tab.id,
+        });
+      }
+    })();
+  }, [setupConnection]);
 
   const sendMessage = useCallback(
     // biome-ignore lint/suspicious/noExplicitAny: <explanation>
@@ -952,7 +1005,7 @@ const SidePanel = () => {
   );
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden bg-white">
+    <div className="relative flex h-screen flex-col overflow-hidden bg-white">
       <header className="flex shrink-0 items-center justify-between bg-white px-4 py-2.5">
         <img src="/autumn-logo.svg" alt="Autumn" className="h-4" />
         <div className="flex items-center gap-1">
@@ -1049,6 +1102,27 @@ const SidePanel = () => {
             </>
           )}
         </>
+      )}
+
+      {activeGroupOverlay && (
+        <ActiveGroupOverlay
+          onGoBack={() => {
+            const primaryTabId = activeGroupOverlay.primaryTabId;
+            chrome.sidePanel.setOptions({ tabId: primaryTabId, path: 'side-panel/index.html', enabled: true });
+            chrome.tabs
+              .update(primaryTabId, { active: true })
+              .then(() => chrome.tabs.get(primaryTabId))
+              .then(tab => {
+                if (tab.windowId) {
+                  chrome.windows.update(tab.windowId, { focused: true });
+                  chrome.sidePanel.open({ tabId: primaryTabId });
+                }
+              })
+              .catch(() => {
+                setActiveGroupOverlay(null);
+              });
+          }}
+        />
       )}
     </div>
   );

@@ -118,6 +118,9 @@ export default class Page {
     // Add anti-detection scripts
     await this._addAntiDetectionScripts();
 
+    // Inject scroll container utility into the page
+    await this._injectScrollUtilities();
+
     return true;
   }
 
@@ -163,6 +166,54 @@ export default class Page {
     `);
   }
 
+  /**
+   * Inject a shared scroll container detection function into the page context.
+   * This avoids duplicating the SPA scroll container detection logic across
+   * getScrollInfo, scrollToPercent, and other scroll methods.
+   */
+  private async _injectScrollUtilities(): Promise<void> {
+    if (!this._puppeteerPage) return;
+
+    const defineUtility = () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (window as any).__findPageScrollContainer = function (): Element {
+        const viewportHeight = window.visualViewport?.height || window.innerHeight;
+
+        if (document.documentElement.scrollHeight > viewportHeight + 1) {
+          return document.documentElement;
+        }
+
+        // SPA pattern: body/html has overflow:hidden, a nested div is the real scroll container.
+        const centerX = window.innerWidth / 2;
+        const centerY = viewportHeight / 2;
+        let el: Element | null = document.elementFromPoint(centerX, centerY);
+
+        while (el && el !== document.documentElement) {
+          if (el instanceof HTMLElement) {
+            const style = window.getComputedStyle(el);
+            const overflowY = style.overflowY;
+            if ((overflowY === 'auto' || overflowY === 'scroll') && el.scrollHeight > el.clientHeight + 1) {
+              return el;
+            }
+          }
+          el = el.parentElement;
+        }
+
+        return document.documentElement;
+      };
+    };
+
+    // Inject for future navigations
+    await this._puppeteerPage.evaluateOnNewDocument(defineUtility);
+
+    // Inject for the current page
+    try {
+      await this._puppeteerPage.evaluate(defineUtility);
+    } catch {
+      logger.debug('Could not inject scroll utilities on current page');
+    }
+  }
+
   async detachPuppeteer(): Promise<void> {
     if (this._browser) {
       await this._browser.disconnect();
@@ -197,6 +248,31 @@ export default class Page {
     if (!this._validWebPage) {
       return [0, 0, 0];
     }
+
+    if (this._puppeteerPage) {
+      try {
+        const info = await this._puppeteerPage.evaluate(() => {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const container = (window as any).__findPageScrollContainer() as Element;
+          if (container === document.documentElement) {
+            return {
+              scrollY: window.scrollY,
+              visualViewportHeight: window.visualViewport?.height || window.innerHeight,
+              scrollHeight: document.documentElement.scrollHeight,
+            };
+          }
+          return {
+            scrollY: container.scrollTop,
+            visualViewportHeight: container.clientHeight,
+            scrollHeight: container.scrollHeight,
+          };
+        });
+        return [info.scrollY, info.visualViewportHeight, info.scrollHeight];
+      } catch {
+        // Fall through to chrome.scripting fallback
+      }
+    }
+
     return _getScrollInfo(this._tabId);
   }
 
@@ -606,38 +682,20 @@ export default class Page {
       throw new Error('Puppeteer is not connected');
     }
     if (!elementNode) {
-      await this._puppeteerPage.evaluate(yPercent => {
-        const viewportHeight = window.visualViewport?.height || window.innerHeight;
+      await this._puppeteerPage.evaluate(pct => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const container = (window as any).__findPageScrollContainer() as Element;
+        const isDocEl = container === document.documentElement;
+        const scrollableHeight = isDocEl
+          ? container.scrollHeight - (window.visualViewport?.height || window.innerHeight)
+          : container.scrollHeight - container.clientHeight;
+        const scrollTop = scrollableHeight * (pct / 100);
 
-        // Check if the document itself scrolls
-        if (document.documentElement.scrollHeight > viewportHeight + 1) {
-          const scrollTop = (document.documentElement.scrollHeight - viewportHeight) * (yPercent / 100);
+        if (isDocEl) {
           window.scrollTo({ top: scrollTop, left: window.scrollX, behavior: 'smooth' });
-          return;
+        } else {
+          container.scrollTo({ top: scrollTop, left: (container as HTMLElement).scrollLeft, behavior: 'smooth' });
         }
-
-        // SPA pattern: find the actual scroll container at viewport center
-        const centerX = window.innerWidth / 2;
-        const centerY = viewportHeight / 2;
-        let el: Element | null = document.elementFromPoint(centerX, centerY);
-
-        while (el && el !== document.documentElement) {
-          if (el instanceof HTMLElement) {
-            const style = window.getComputedStyle(el);
-            const overflowY = style.overflowY;
-            const canScroll = overflowY === 'auto' || overflowY === 'scroll';
-            if (canScroll && el.scrollHeight > el.clientHeight + 1) {
-              const scrollTop = (el.scrollHeight - el.clientHeight) * (yPercent / 100);
-              el.scrollTo({ top: scrollTop, left: el.scrollLeft, behavior: 'smooth' });
-              return;
-            }
-          }
-          el = el.parentElement;
-        }
-
-        // Fallback to window scroll
-        const scrollTop = (document.documentElement.scrollHeight - viewportHeight) * (yPercent / 100);
-        window.scrollTo({ top: scrollTop, left: window.scrollX, behavior: 'smooth' });
       }, yPercent);
     } else {
       const element = await this.locateElement(elementNode);
@@ -683,13 +741,13 @@ export default class Page {
       if (!scrollableElement) {
         throw new Error(`No scrollable ancestor found for element: ${elementNode}`);
       }
-      await scrollableElement.evaluate(el => {
+      await scrollableElement.evaluate((el, scrollAmount) => {
         el.scrollBy({
-          top: y,
+          top: scrollAmount,
           left: 0,
           behavior: 'smooth',
         });
-      });
+      }, y);
     }
   }
 

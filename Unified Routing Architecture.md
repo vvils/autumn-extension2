@@ -2,9 +2,9 @@
 
 ## Context
 
-The Autumn platform has two disconnected AI systems: (1) the extension's browser agent for web automation and (2) the backend's synthesizer pipeline for hotel domain Q&A (Planner → ArgRepair → Executor → Synthesizer). Phase 8 unifies them through 3-path routing in the extension's planner, so users can ask hotel data questions, browse the web, or do both through a single chat UI.
+The Autumn platform has two AI systems: (1) the extension's browser agent for web automation and (2) the backend's synthesizer pipeline for hotel domain Q&A (Planner → ArgRepair → Executor → Synthesizer). This document defines the unified routing architecture — the extension owns all browser automation locally, while the backend becomes a pure data pipeline (domain Q&A with full widget support including interactive charts, suggestion actions, and reasoning display). Backend browser-agent execution code and workflow infrastructure are removed; predefined workflow prompts are hardcoded in the extension as curated bookmarks.
 
-**Scope:** Both extension and backend repos in a single pass. All workflows and browser agent services remain untouched.
+**Scope:** Both extension and backend repos in a single pass.
 
 **Repos:**
 - Extension: `/home/wilson/Projects/autumn-w/autumn-extension2/`
@@ -299,6 +299,17 @@ export enum Actors {
 }
 ```
 
+### File: `chrome-extension/src/background/agent/event/types.ts`
+
+Add WIDGET_EVENT to ExecutionState enum:
+
+```typescript
+export enum ExecutionState {
+  // ... existing states ...
+  WIDGET_EVENT = 'widget.event',
+}
+```
+
 ### File: `pages/side-panel/src/types/message.ts`
 
 Add synthesizer profile (after `evaluator`):
@@ -357,8 +368,11 @@ export interface ExtensionQueryResponse {
 Add three methods to the `ServerClient` class (after `syncConversation`):
 
 ```typescript
-async *streamChat(query: string, conversationId?: string): AsyncGenerator<SSEEvent> {
-  yield* this.apiClient.stream('/ai/extension/chat', { query, conversationId });
+async *streamChat(
+  messages: Array<{ role: string; content: string }>,
+  conversationId?: string,
+): AsyncGenerator<SSEEvent> {
+  yield* this.apiClient.stream('/ai/extension/chat', { messages, conversationId });
 }
 
 async queryData(query: string): Promise<ExtensionQueryResponse> {
@@ -491,6 +505,26 @@ export interface ExecutorExtraArgs {
 }
 ```
 
+Add a `conversationMessages` field to the Executor class for multi-turn domain query context:
+
+```typescript
+// In the Executor class body:
+private conversationMessages: Array<{ role: string; content: string }> = [];
+```
+
+Append to `conversationMessages` when:
+- General answer completes → `{ role: 'assistant', content: finalAnswer }`
+- Domain query completes → `{ role: 'assistant', content: fullText }`
+- User sends a follow-up → `{ role: 'user', content: task }` (handled in `executeDomainQuery()`)
+
+```typescript
+// After general answer completion (in checkTaskCompletion or equivalent):
+this.conversationMessages.push({ role: 'assistant', content: this.context.finalAnswer });
+
+// After domain query completion (in executeDomainQuery, after TASK_OK emit):
+this.conversationMessages.push({ role: 'assistant', content: fullText });
+```
+
 **6c. Update constructor** — pass serverClient to ActionBuilder and configure PlannerPrompt:
 
 Line 73 — change PlannerPrompt instantiation:
@@ -530,22 +564,28 @@ async execute(): Promise<void> {
     // Step 0: Initial planner classification
     latestPlanOutput = await this.runPlanner();
 
+    // Domain query path: check BEFORE general completion check
+    // (planner sets done=true for domain_query, so checkTaskCompletion
+    // would exit early and the domain query path would never execute)
+    if (
+      latestPlanOutput?.result?.task_type === TaskType.DOMAIN_QUERY &&
+      this.serverClient
+    ) {
+      const result = await this.executeDomainQuery();
+      if (result === 'completed') return;
+      if (result === 'error') {
+        // Show error in side panel but don't fall through to browser
+        return;
+      }
+      // 'escalated' — fall through to browser loop
+    }
+
     // General path: planner answered directly
     if (this.checkTaskCompletion(latestPlanOutput)) {
       const finalMessage = this.context.finalAnswer || this.context.taskId;
       this.context.emitEvent(Actors.SYSTEM, ExecutionState.TASK_OK, finalMessage);
       void analytics.trackTaskComplete(this.context.taskId);
       return;
-    }
-
-    // Domain query path: short-circuit before navigator loop
-    if (
-      latestPlanOutput?.result?.task_type === TaskType.DOMAIN_QUERY &&
-      this.serverClient
-    ) {
-      const escalated = await this.executeDomainQuery();
-      if (!escalated) return;
-      // Server escalated to browser — fall through to navigator loop
     }
 
     // Browser path: existing step loop
@@ -626,13 +666,25 @@ async execute(): Promise<void> {
 }
 ```
 
+> **⚠️ ORDERING HAZARD:** The domain_query check MUST remain BEFORE `checkTaskCompletion()`. The planner sets `done=true` for domain queries, so if `checkTaskCompletion()` runs first, it intercepts the task as a "general" completion and domain queries silently break. If this code is refactored, preserve the check order or extract into a named method like `handleDomainQueryIfApplicable()`.
+
 **6e. Add executeDomainQuery() method** (new private method):
 
 ```typescript
-private async executeDomainQuery(): Promise<boolean> {
+type DomainQueryResult = 'completed' | 'escalated' | 'error';
+
+private async executeDomainQuery(): Promise<DomainQueryResult> {
   const task = this.tasks[this.tasks.length - 1];
   try {
-    const stream = this.serverClient!.streamChat(task);
+    // Conversation context built from executor's tracked messages.
+    // The executor appends to this.conversationMessages on each
+    // completed general answer or domain query response.
+    const conversationHistory = [
+      ...this.conversationMessages,
+      { role: 'user' as const, content: task },
+    ];
+
+    const stream = this.serverClient!.streamChat(conversationHistory);
     let fullText = '';
 
     for await (const event of stream) {
@@ -640,6 +692,9 @@ private async executeDomainQuery(): Promise<boolean> {
         case 'chunk':
           fullText += event.data;
           this.context.emitEvent(Actors.SYNTHESIZER, ExecutionState.STEP_STREAMING, fullText);
+          break;
+        case 'widget':
+          this.context.emitEvent(Actors.SYNTHESIZER, ExecutionState.WIDGET_EVENT, event.data);
           break;
         case 'sources':
           break;
@@ -651,13 +706,13 @@ private async executeDomainQuery(): Promise<boolean> {
               fullText,
             );
           }
-          return true;
+          return 'escalated';
         case 'done':
           this.context.finalAnswer = event.data;
           this.context.emitEvent(Actors.SYNTHESIZER, ExecutionState.STEP_OK, event.data);
           this.context.emitEvent(Actors.SYSTEM, ExecutionState.TASK_OK, event.data);
           void analytics.trackTaskComplete(this.context.taskId);
-          return false;
+          return 'completed';
         case 'error':
           throw new Error(event.data);
       }
@@ -669,7 +724,7 @@ private async executeDomainQuery(): Promise<boolean> {
       this.context.emitEvent(Actors.SYSTEM, ExecutionState.TASK_OK, fullText);
       void analytics.trackTaskComplete(this.context.taskId);
     }
-    return false;
+    return 'completed';
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     logger.error(`Domain query failed: ${errorMessage}`);
@@ -678,10 +733,12 @@ private async executeDomainQuery(): Promise<boolean> {
       ExecutionState.STEP_FAIL,
       t('exec_domainQuery_fail', [errorMessage]),
     );
-    return true;
+    return 'error';
   }
 }
 ```
+
+**Cancellation:** The `streamChat()` call should accept an `AbortSignal` from `this.context`. When the user cancels mid-stream, the signal aborts the fetch, the async generator terminates, and partial `fullText` is emitted as `STEP_OK` before the method returns `'error'`. The executor's existing `shouldStop()` check handles the rest.
 
 ---
 
@@ -747,7 +804,9 @@ const executor = new Executor(task, taskId, browserContext, navigatorLLM, {
 const synthesizerStreamingRef = useRef(false);
 ```
 
-**8b.** In `handleTaskState`, add a `case 'synthesizer':` block. Insert it after the `case Actors.NAVIGATOR:` block (after line 273), before the `case Actors.VALIDATOR:` block:
+**8b.** In `handleTaskState`, add a `case 'synthesizer':` block. Insert it after the `case Actors.NAVIGATOR:` block (after line 273), before the `case Actors.VALIDATOR:` block.
+
+The handler processes both text streaming and widget events. Widget data is stored in a `widgets` array alongside the message content, enabling inline rendering of charts, suggestion actions, and reasoning displays:
 
 ```typescript
 case 'synthesizer':
@@ -768,6 +827,28 @@ case 'synthesizer':
         }
       });
       return;
+    case ExecutionState.WIDGET_EVENT: {
+      // Widget data arrives as JSON with widgetId for identity:
+      // { widgetId: string, type: "data-suggestion-action" | "data-hotel-metrics-data" | "data-custom-reasoning", data: {...} }
+      // If a widget with the same widgetId exists, UPDATE in place (for streaming state
+      // changes like isStreaming: true → false). Otherwise, APPEND as a new widget.
+      // This enables CustomReasoningWidget to transition from streaming to complete state.
+      const widgetData = typeof content === 'string' ? JSON.parse(content) : content;
+      setMessages(prev => {
+        if (prev.length === 0) return prev;
+        const last = prev[prev.length - 1];
+        const existingWidgets = last.widgets || [];
+        const existingIdx = existingWidgets.findIndex(
+          (w: any) => w.widgetId && w.widgetId === widgetData.widgetId,
+        );
+        const widgets =
+          existingIdx >= 0
+            ? existingWidgets.map((w: any, i: number) => (i === existingIdx ? widgetData : w))
+            : [...existingWidgets, widgetData];
+        return [...prev.slice(0, -1), { ...last, widgets }];
+      });
+      return;
+    }
     case ExecutionState.STEP_OK: {
       const wasStreaming = synthesizerStreamingRef.current;
       synthesizerStreamingRef.current = false;
@@ -804,6 +885,21 @@ case 'synthesizer':
 
 Note: The `Actors` type imported from `@extension/storage` must include `SYNTHESIZER` (done in Step 3). The `handleTaskState` switch compares string values, so `'synthesizer'` matches the enum value.
 
+### File: `packages/storage/lib/chat/types.ts`
+
+Add widgets field to the message interface:
+
+```typescript
+export interface ChatMessage {
+  // ... existing fields ...
+  widgets?: Array<{
+    widgetId: string;
+    type: 'data-hotel-metrics-data' | 'data-suggestion-action' | 'data-custom-reasoning';
+    data: Record<string, unknown>;
+  }>;
+}
+```
+
 ---
 
 ## Step 9: Backend — ExtensionController
@@ -839,12 +935,13 @@ export class ExtensionController {
 
   @Post('chat')
   async chat(
-    @Body() body: { query: string; conversationId?: string },
+    @Body() body: { messages: Array<{ role: string; content: string }>; conversationId?: string },
     @Req() req: Request,
     @Res() res: Response,
   ) {
     const userId = (req as any).user.id;
-    this.logger.log(`Extension chat request from user ${userId}: "${body.query.slice(0, 80)}"`);
+    const lastMessage = body.messages[body.messages.length - 1]?.content || '';
+    this.logger.log(`Extension chat request from user ${userId}: "${lastMessage.slice(0, 80)}"`);
 
     res.set({
       'Content-Type': 'text/event-stream',
@@ -855,7 +952,7 @@ export class ExtensionController {
 
     try {
       await this.chatOrchestrator.handleExtensionChat(
-        body.query,
+        body.messages,
         userId,
         res,
         body.conversationId,
@@ -907,11 +1004,22 @@ private writeSSE(res: Response, event: string, data: string): void {
 }
 ```
 
-**10b. `handleExtensionChat()`** — Streaming SSE for domain queries:
+**10b. `handleExtensionChat()`** — Streaming SSE for domain queries with widget support:
+
+SSE event types:
+
+| Event | Payload | Purpose |
+|-------|---------|---------|
+| `chunk` | text delta (string) | Streaming synthesizer text |
+| `widget` | `{ type: string, data: object }` | Widget data (charts, suggestions, reasoning) |
+| `sources` | JSON array of tool names | Data source attribution |
+| `done` | full synthesized text (string) | Stream completion signal |
+| `escalate` | `{ reason: string, context?: string }` | Browser fallback signal |
+| `error` | error message (string) | Error termination |
 
 ```typescript
 async handleExtensionChat(
-  query: string,
+  messages: Array<{ role: string; content: string }>,
   userId: string,
   res: Response,
   conversationId?: string,
@@ -936,7 +1044,6 @@ async handleExtensionChat(
     conversationId,
   };
 
-  const messages = [{ role: 'user', content: query }];
   const noOpWriter = { write: () => {}, merge: () => {} };
 
   try {
@@ -962,11 +1069,21 @@ async handleExtensionChat(
       queryResults = await this.executor.execute(repairedQueryCalls, context);
     }
 
-    // Phase 3: Stream synthesizer response
+    // Phase 3: Stream synthesizer response with widget callbacks
     const synthResult = await this.synthesizer.synthesizeForExtension(
       messages, queryResults, context,
-      (chunk: string) => this.writeSSE(res, 'chunk', chunk),
+      {
+        onChunk: (chunk: string) => this.writeSSE(res, 'chunk', chunk),
+        onWidget: (type: string, data: unknown) =>
+          this.writeSSE(res, 'widget', JSON.stringify({
+            widgetId: (data as any)?.id ?? crypto.randomUUID(),
+            type,
+            data,
+          })),
+      },
     );
+
+> **Note:** Tools that emit streaming updates (e.g., `CustomReasoningWidget`) MUST use a stable `id` field in their data object across all emissions for the same widget instance. The `widgetId` in the SSE envelope reads `data.id` first and only falls back to `crypto.randomUUID()` for stateless widgets. Without a stable `id`, the side panel cannot match-and-update widgets in place (see hazard H6).
 
     // Send sources and done
     const sources = queryResults
@@ -978,7 +1095,8 @@ async handleExtensionChat(
     // Save to chat history
     if (conversationId) {
       try {
-        await this.chatHistoryService.saveMessages(userId, conversationId, query, synthResult);
+        const lastUserMessage = messages[messages.length - 1]?.content || '';
+        await this.chatHistoryService.saveMessages(userId, conversationId, lastUserMessage, synthResult);
       } catch (saveErr) {
         this.logger.warn(`[${requestId}] Failed to save extension chat: ${saveErr.message}`);
       }
@@ -1058,7 +1176,7 @@ async handleExtensionQuery(
     );
 
     const result = await generateText({
-      model: openai('gpt-4o'),
+      model: anthropic(this.SYNTHESIZER_MODEL),
       system: systemPrompt,
       messages: messages.map(m => ({ role: m.role as 'user' | 'assistant', content: m.content })),
     });
@@ -1133,7 +1251,7 @@ async getHotelContextManifest(userId: string): Promise<any> {
 
   return {
     hotel: {
-      name: hotelContext.hotelName || 'Unknown',
+      name: hotelContext.propertyName || 'Unknown',
       timezone: hotelContext.timezone,
       currentDate: hotelContext.currentDate,
       currency: hotelContext.currency || { code: 'USD' },
@@ -1157,14 +1275,30 @@ Note: `generateText` and `openai` are already imported at top of file.
 
 ### File: `src/lib/ai/services/synthesizer.service.ts`
 
-Add `synthesizeForExtension()` method:
+Add `synthesizeForExtension()` method. This uses all 6 synthesizer tools (same set as the web app) and streams both text and widget events via an SSE adapter:
+
+**Tools included:**
+
+| Tool | Type | Widget Event |
+|------|------|-------------|
+| `getBookingCurve` | read-only | `data-hotel-metrics-data` |
+| `getPerformanceSummary` | read-only | `data-hotel-metrics-data` |
+| `suggestUpdateFloorCeiling` | suggestion | `data-suggestion-action` |
+| `suggestUpdateSeasonalSettings` | suggestion | `data-suggestion-action` |
+| `suggestRoomTypePriceOverride` | suggestion | `data-suggestion-action` |
+| `suggestOpenSupportTicket` | suggestion | `data-suggestion-action` |
+
+The suggestion tools normally write widgets via `dataStream.write({ type: "data-suggestion-action", data: widget })`. For the extension, a thin adapter intercepts these writes and emits them as `widget` SSE events via the `onWidget` callback.
 
 ```typescript
 async synthesizeForExtension(
   messages: Array<{ role: string; content: string }>,
   queryResults: ExecutedQuery[],
   context: RequestContext,
-  onChunk: (text: string) => void,
+  callbacks: {
+    onChunk: (text: string) => void;
+    onWidget: (type: string, data: unknown) => void;
+  },
 ): Promise<string> {
   const startTime = Date.now();
 
@@ -1192,17 +1326,48 @@ async synthesizeForExtension(
       context.customInstructions,
     );
 
-    // Use read-only tools only (no suggestion tools that need UIMessageStreamWriter)
+    // SSE adapter: intercepts dataStream.write() calls from suggestion tools
+    // and emits them as widget events instead of writing to UIMessageStreamWriter
+    const sseDataStreamAdapter: UIMessageStreamWriter = {
+      write: (event: { type: string; data: unknown }) => {
+        if (
+          event.type === 'data-suggestion-action' ||
+          event.type === 'data-hotel-metrics-data' ||
+          event.type === 'data-custom-reasoning'
+        ) {
+          callbacks.onWidget(event.type, event.data);
+        }
+      },
+      merge: () => {},
+    };
+
+    // All 6 tools — same set as the web app synthesizer
+    const toolDeps = {
+      userId: context.userId,
+      usersService: this.usersService,
+      requestId: context.requestId,
+    };
+
     const tools = {
-      getBookingCurve: getBookingCurveTool({
-        userId: context.userId,
-        usersService: this.usersService,
-        requestId: context.requestId,
+      // Read-only tools (query hotel data, emit data-hotel-metrics-data widgets)
+      getBookingCurve: getBookingCurveTool(toolDeps),
+      getPerformanceSummary: getPerformanceSummaryTool(toolDeps),
+      // Suggestion tools (emit data-suggestion-action widgets via adapter)
+      suggestUpdateFloorCeiling: suggestUpdateFloorCeilingTool({
+        ...toolDeps,
+        dataStream: sseDataStreamAdapter,
       }),
-      getPerformanceSummary: getPerformanceSummaryTool({
-        userId: context.userId,
-        usersService: this.usersService,
-        requestId: context.requestId,
+      suggestUpdateSeasonalSettings: suggestUpdateSeasonalSettingsTool({
+        ...toolDeps,
+        dataStream: sseDataStreamAdapter,
+      }),
+      suggestRoomTypePriceOverride: suggestRoomTypePriceOverrideTool({
+        ...toolDeps,
+        dataStream: sseDataStreamAdapter,
+      }),
+      suggestOpenSupportTicket: suggestOpenSupportTicketTool({
+        ...toolDeps,
+        dataStream: sseDataStreamAdapter,
       }),
     };
 
@@ -1217,7 +1382,7 @@ async synthesizeForExtension(
     let fullText = '';
     for await (const part of result.textStream) {
       fullText += part;
-      onChunk(part);
+      callbacks.onChunk(part);
     }
 
     const latency = Date.now() - startTime;
@@ -1237,10 +1402,18 @@ async synthesizeForExtension(
 }
 ```
 
-Add `streamText` and `stepCountIs` to imports at top (they may already be imported via `ai` package):
+Add imports at top (some may already be imported):
 
 ```typescript
 import { streamText, stepCountIs, type UIMessageStreamWriter } from 'ai';
+import {
+  getBookingCurveTool,
+  getPerformanceSummaryTool,
+  suggestUpdateFloorCeilingTool,
+  suggestUpdateSeasonalSettingsTool,
+  suggestRoomTypePriceOverrideTool,
+  suggestOpenSupportTicketTool,
+} from '../tools';
 ```
 
 ---
@@ -1249,16 +1422,17 @@ import { streamText, stepCountIs, type UIMessageStreamWriter } from 'ai';
 
 ### File: `src/modules/ai/ai.module.ts`
 
-Add import and register controller:
+Add import and register controller. Remove workflow providers and controller since workflows are now hardcoded prompts in the extension:
 
 ```typescript
 import { ExtensionController } from './controllers/extension.controller';
 
 // In @Module:
-controllers: [AiController, WorkflowController, ExtensionController],
+controllers: [AiController, ExtensionController],
+// Remove: WorkflowController
 ```
 
-No other changes — all existing services, workflows, and entities remain.
+No other changes — synthesizer and query pipeline services remain.
 
 ---
 
@@ -1291,16 +1465,453 @@ Then rebuild: `pnpm -F @extension/i18n build`
 
 ---
 
-## Files NOT Modified (Explicitly Kept)
+## Step 14: Extension — Widget React Components
 
-| File/Directory | Reason |
-|---|---|
-| `src/lib/ai/workflows/*` | Workflows stay intact per user request |
-| `src/lib/ai/services/browser-agent.service.ts` | Browser agent not removed in Phase 8 |
-| `src/lib/ai/services/browser-session-*.ts` | Browser sessions not removed in Phase 8 |
-| All existing API endpoints (`/ai/chat`, etc.) | No changes to existing functionality |
-| `WorkflowService`, `WorkflowRegistryService` | Remain in module providers |
-| `WorkflowController` | Remains in module controllers |
+The extension side panel renders three widget types inline with synthesizer text messages. Widget data arrives via `WIDGET_EVENT` execution state events and is stored in a `widgets` array on the message object.
+
+### 14a. HotelMetricsWidget
+
+**File:** `pages/side-panel/src/components/widgets/HotelMetricsWidget.tsx`
+
+Interactive Recharts bar/line chart with STLY (Same Time Last Year) comparison.
+
+**Features:**
+- Metric selector dropdown: occupancy, revenue, ADR, RevPAR, bookings
+- STLY toggle switch for year-over-year comparison
+- Summary row: current value, STLY value, ± delta with color coding (green positive, red negative)
+- Expand modal for detailed view
+- Responsive sizing within side panel width
+
+**Data shape:** `HotelMetricsDataWidgetSpecV1` schema (from backend `widgets/schemas/widget.schema.ts`)
+
+```typescript
+interface HotelMetricsDataWidget {
+  type: 'data-hotel-metrics-data';
+  data: {
+    metrics: Array<{
+      date: string;
+      occupancy?: number;
+      revenue?: number;
+      adr?: number;
+      revpar?: number;
+      bookings?: number;
+    }>;
+    stlyMetrics?: Array<{/* same shape */}>;
+    summary: {
+      metric: string;
+      current: number;
+      stly?: number;
+      delta?: number;
+      deltaPercent?: number;
+    };
+    dateRange: { start: string; end: string };
+  };
+}
+```
+
+**Dependencies:** Add `recharts` to `pages/side-panel/package.json`
+
+### 14b. SuggestionActionWidget
+
+**File:** `pages/side-panel/src/components/widgets/SuggestionActionWidget.tsx`
+
+Actionable suggestion card with Apply/Dismiss buttons.
+
+**Features:**
+- Current vs suggested values display (table or side-by-side)
+- Apply/Dismiss action buttons
+- 5-state machine: `idle` → `applying` → `success` / `error` → `dismissed`
+- On Apply: extension calls backend API using `apiCall.endpoint` + `apiCall.payload` from widget data, authenticated via ServerClient
+- Error handling: validation errors (show parsed message), auth failures (prompt re-login), network errors (show retry)
+- Auto-dismiss after success (3s delay)
+
+**Data shape:** `SuggestionActionWidgetSpecV1` schema (from backend `widgets/schemas/suggestion-widget.schema.ts`)
+
+```typescript
+interface SuggestionActionWidget {
+  type: 'data-suggestion-action';
+  data: {
+    id: string;
+    title: string;
+    description: string;
+    currentValues: Record<string, unknown>;
+    suggestedValues: Record<string, unknown>;
+    apiCall: {
+      endpoint: string;
+      method: 'POST' | 'PATCH';
+      payload: Record<string, unknown>;
+    };
+    metadata?: Record<string, unknown>;
+  };
+}
+```
+
+**Apply flow:**
+1. User clicks Apply → state transitions to `applying` (spinner on button)
+2. Side panel sends message to background → background calls `serverClient.apiClient.request(endpoint, method, payload)`
+3. Success → state transitions to `success` (checkmark) → auto-dismiss after 3s
+4. Failure → state transitions to `error` (error message shown inline) → user can retry or dismiss
+
+**Apply message protocol** (side panel → background → server):
+
+1. Side panel sends `{ type: 'widget_apply', apiCall: { endpoint, method, payload } }` via `portRef.current.postMessage(...)`
+2. Background handler in `index.ts` receives on the port, proxies directly: `serverClient.apiClient[method](endpoint, payload)`
+3. Background replies via port with `{ type: 'widget_apply_result', success: true }` or `{ success: false, error }`
+4. Side panel updates widget state accordingly (success → checkmark, failure → inline error)
+
+**Background handler:** Add `case 'widget_apply'` to the port message switch in `index.ts`:
+
+```typescript
+case 'widget_apply': {
+  const { endpoint, method, payload } = message.apiCall;
+  try {
+    await serverClient.apiClient[method](endpoint, payload);
+    port.postMessage({ type: 'widget_apply_result', success: true });
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    port.postMessage({ type: 'widget_apply_result', success: false, error: errorMsg });
+  }
+  break;
+}
+```
+
+**Dismiss:** Side panel removes widget from local message state. No server call needed.
+
+### 14c. CustomReasoningWidget
+
+**File:** `pages/side-panel/src/components/widgets/CustomReasoningWidget.tsx`
+
+Collapsible thinking/progress display for the synthesizer's reasoning process.
+
+**Features:**
+- Collapsible section with brain icon
+- Streaming text with animated cursor during active reasoning
+- Brain icon pulse animation during streaming
+- Duration display after completion
+- Auto-collapsed by default, user can expand
+
+**Data shape:** `CustomReasoningWidgetSpecV1` schema (from backend `widgets/schemas/custom-reasoning-widget.schema.ts`)
+
+```typescript
+interface CustomReasoningWidget {
+  type: 'data-custom-reasoning';
+  data: {
+    text: string;
+    isStreaming: boolean;
+    startTime?: number;
+    endTime?: number;
+  };
+}
+```
+
+### 14d. Widget Types (Shared)
+
+**File:** `chrome-extension/src/background/services/server/widget-types.ts`
+
+Copy Zod schemas from backend and convert to TypeScript interfaces. These types are shared between the background service worker (for widget event routing) and the side panel (for rendering).
+
+```typescript
+export type WidgetEvent =
+  | HotelMetricsDataWidget
+  | SuggestionActionWidget
+  | CustomReasoningWidget;
+
+export type WidgetType =
+  | 'data-hotel-metrics-data'
+  | 'data-suggestion-action'
+  | 'data-custom-reasoning';
+```
+
+### 14e. Widget Rendering in MessageBubble
+
+The existing message bubble component is extended to render widgets after the text content:
+
+```tsx
+// In MessageBubble or equivalent component
+{message.widgets?.map((widget, i) => {
+  switch (widget.type) {
+    case 'data-hotel-metrics-data':
+      return <HotelMetricsWidget key={i} data={widget.data} />;
+    case 'data-suggestion-action':
+      return <SuggestionActionWidget key={i} data={widget.data} onApply={(apiCall) => {
+        portRef.current?.postMessage({ type: 'widget_apply', apiCall });
+      }} />;
+    case 'data-custom-reasoning':
+      return <CustomReasoningWidget key={i} data={widget.data} />;
+    default:
+      return null;
+  }
+})}
+```
+
+---
+
+## Step 15: Extension — Workflow Prompts (Hardcoded)
+
+Predefined workflow prompts ship with the extension as pre-populated bookmark entries. These are regular prompts — the extension's browser agent executes them like any other task. No backend dependency — no workflow APIs, matching, or tracking.
+
+### 15a. Workflow Prompt Definitions
+
+**File:** `chrome-extension/src/background/services/workflow-prompts.ts`
+
+```typescript
+export interface WorkflowPrompt {
+  id: string;
+  name: string;
+  description: string;
+  prompt: string;
+  category: 'pricing' | 'bookings' | 'content';
+  icon: string;
+}
+
+export const WORKFLOW_PROMPTS: WorkflowPrompt[] = [
+  {
+    id: 'ota-price-parity',
+    name: 'OTA Price Parity Check',
+    description: 'Compare OTA rates with your current pricing',
+    prompt: 'Go to Booking.com, Expedia, and Hotels.com and compare their rates for our hotel with our current pricing for the next 7 days. Present a comparison table showing any rate disparities.',
+    category: 'pricing',
+    icon: 'scale',
+  },
+  {
+    id: 'group-bookings',
+    name: 'Group Booking Inquiries',
+    description: 'Search for pending group booking requests',
+    prompt: 'Search for group booking inquiries on our booking platform and compile a summary of pending requests including dates, group size, and requested rates.',
+    category: 'bookings',
+    icon: 'users',
+  },
+  {
+    id: 'content-research',
+    name: 'Competitor Content Research',
+    description: 'Research competitor property descriptions',
+    prompt: 'Research what our top 3 competitors are highlighting on their websites and compare with our current property description. Note any unique selling points we should consider adding.',
+    category: 'content',
+    icon: 'search',
+  },
+];
+```
+
+### 15b. Integration with Favorites/Bookmarks
+
+These prompts integrate with the extension's existing favorites/bookmarks system (`packages/storage/lib/prompt/favorites.ts`). They appear as pre-populated entries that ship with the extension (not user-created). Since the existing `FavoritePrompt` interface only has `{ id, title, content }`, workflow prompts are distinguished by a title prefix convention (e.g., `"[Workflow] OTA Price Parity Check"`) rather than a dedicated flag — no interface change needed.
+
+Implementation:
+- On first extension install, seed the favorites store with workflow prompts
+- Workflow prompts appear in a separate "Workflows" section in the bookmarks dropdown
+- User can edit or delete workflow prompts (they're just bookmarks)
+- Selecting a workflow prompt fills the chat input and the user submits it like any other task
+
+---
+
+## Step 16: Server-Side API Key Storage
+
+### Concept
+
+When the server is configured and authenticated, the server becomes the **primary store** for LLM provider API keys. The extension caches keys locally for offline use and performance. When no server is configured, the extension falls back to the current local-only behavior (zero breaking changes).
+
+### Flow
+
+```
+Server configured + authenticated:
+  Save key → push to server → update local cache
+  Extension startup → pull from server → populate local cache
+  Server unreachable → use local cache (stale but functional)
+
+No server configured:
+  Save key → store locally only (current behavior, unchanged)
+```
+
+### Backend Changes
+
+#### New file: `extension-keys.controller.ts`
+
+```typescript
+@Controller('ai/extension')
+@UseGuards(JwtAuthGuard)
+@ApiBearerAuth()
+export class ExtensionKeysController {
+  constructor(private readonly extensionKeysService: ExtensionKeysService) {}
+
+  @Post('keys')
+  async saveKeys(@Req() req, @Body() body: { providers: Record<string, ProviderConfig> }) {
+    await this.extensionKeysService.saveKeys(req.user.id, body.providers);
+    return { success: true };
+  }
+
+  @Get('keys')
+  async getKeys(@Req() req) {
+    const providers = await this.extensionKeysService.getKeys(req.user.id);
+    return { providers };
+  }
+}
+```
+
+#### New file: `extension-keys.service.ts`
+
+- `saveKeys(userId, providers)` — encrypts API key values at rest (AES-256 with server-managed key), stores in DB keyed by userId
+- `getKeys(userId)` — decrypts and returns provider configs
+- Schema: `extension_keys` table with columns `(id, user_id, provider_data_encrypted, updated_at)`
+- Provider data stored as encrypted JSON blob (the full `Record<string, ProviderConfig>`)
+
+#### Register in `ai.module.ts`
+
+Add `ExtensionKeysController` and `ExtensionKeysService` to the module.
+
+### Extension Changes
+
+#### File: `packages/storage/lib/settings/serverSettings.ts`
+
+Add `keySyncEnabled` flag:
+
+```typescript
+export interface ServerSettingsConfig {
+  serverUrl: string;
+  accessToken: string;
+  userId: string;
+  tokenExpiresAt: number;
+  keySyncEnabled: boolean;  // NEW
+}
+
+export const DEFAULT_SERVER_SETTINGS: ServerSettingsConfig = {
+  // ... existing defaults ...
+  keySyncEnabled: false,
+};
+```
+
+#### File: `chrome-extension/src/background/services/server/serverClient.ts`
+
+Add two methods:
+
+```typescript
+async pushKeys(providers: Record<string, ProviderConfig>): Promise<void> {
+  await this.apiClient.post('/ai/extension/keys', { providers });
+}
+
+async pullKeys(): Promise<Record<string, ProviderConfig>> {
+  const { data } = await this.apiClient.get<{ providers: Record<string, ProviderConfig> }>(
+    '/ai/extension/keys',
+  );
+  return data.providers;
+}
+```
+
+#### File: `chrome-extension/src/background/index.ts`
+
+On successful login (or server client init with valid token), if `keySyncEnabled`:
+
+```typescript
+// After login or on init with valid token:
+if (keySyncEnabled && serverClient) {
+  try {
+    const serverKeys = await serverClient.pullKeys();
+    if (Object.keys(serverKeys).length > 0) {
+      // Server is source of truth — overwrite local
+      for (const [id, config] of Object.entries(serverKeys)) {
+        await llmProviderStore.setProvider(id, config);
+      }
+    }
+  } catch (error) {
+    logger.warn('Failed to pull keys from server, using local cache');
+  }
+}
+```
+
+On local key save (when `keySyncEnabled`), push to server:
+
+```typescript
+// In the save-key message handler, after llmProviderStore.setProvider():
+if (keySyncEnabled && serverClient && await serverClient.isAuthenticated()) {
+  const allProviders = await llmProviderStore.getAllProviders();
+  serverClient.pushKeys(allProviders).catch(error => {
+    logger.warn('Failed to sync keys to server:', error);
+  });
+}
+```
+
+#### File: `pages/options/src/components/ServerSettings.tsx`
+
+When server is connected + authenticated, show a "Sync API keys to server" toggle. This sets `keySyncEnabled` in `serverSettingsStore`.
+
+Add an "Import keys from server" button that triggers a one-time pull (useful for setting up a new device).
+
+### Security
+
+- Keys encrypted at rest on server (AES-256, server-managed encryption key)
+- Transport security via HTTPS + JWT Bearer auth (existing)
+- Keys only sent when user explicitly enables sync
+- Local cache persists on logout for offline use (existing behavior)
+- Server deletion: handled via V2 enhancement (see V2 table below)
+
+---
+
+## Backend Cleanup
+
+### Files to DELETE (~4,200 lines)
+
+All paths relative to `src/lib/ai/`.
+
+**Browser-agent execution (~3,500 lines):**
+
+| File | Lines | Why |
+|------|-------|-----|
+| `services/browser-agent.service.ts` | 566 | Extension Navigator replaces this |
+| `services/browser-agent.prompt.ts` | 444 | Prompts for deleted service |
+| `services/browser-session-store.service.ts` | 302 | Extension manages sessions locally |
+| `services/browser-session-handler.service.ts` | 937 | Extension manages sessions locally |
+| `utils/browser-tools.ts` | ~400 | 19 tool definitions for deleted service |
+| `utils/browser-message-pipeline.ts` | ~600 | Message preprocessing for deleted service |
+| `utils/browser-message-pipeline.spec.ts` | ~200 | Tests for deleted utility |
+| `utils/browser-loop-guard.ts` | ~30 | Loop detection for deleted service |
+| `utils/create-tool-validating-stream.ts` | ~100 | Tool validation for deleted service |
+| `utils/action-sensitivity-classifier.ts` | ~80 | Risk classification for deleted service |
+
+**Workflow infrastructure (~700 lines):**
+
+| File | Lines | Why |
+|------|-------|-----|
+| `workflows/workflow.service.ts` | ~200 | Extension uses hardcoded prompts, no tracking API needed |
+| `workflows/workflow-registry.service.ts` | ~150 | Extension uses hardcoded prompts, no matching needed |
+| `workflows/ota-price-parity.workflow.ts` | ~100 | Replaced by hardcoded extension prompt (see Step 15) |
+| `workflows/group-bookings.workflow.ts` | ~100 | Replaced by hardcoded extension prompt (see Step 15) |
+| `workflows/content-research.workflow.ts` | ~100 | Replaced by hardcoded extension prompt (see Step 15) |
+| `entities/workflow-execution.entity.ts` | ~50 | No execution tracking on backend |
+
+### Orchestrator surgery (`chat-orchestrator.service.ts`)
+
+**Remove these methods:**
+- `shouldResumeBrowserAgent()` — browser phase detection
+- `detectBrowserPhase()` — browser phase detection
+- `startBrowserPlanningSession()` — creates browser sessions, calls BrowserAgentService
+- `startUserWorkflowSession()` — initiates user workflows via BrowserAgentService
+- `startPredefinedWorkflow()` — initiates system workflows via BrowserAgentService
+- `saveCompletionInCallback()` — browser task result persistence
+- `extractPlanFromMessages()` — extracts approved browser plan
+
+**Remove from `executeOrchestratorPipeline()`:**
+- Browser session resume routing
+- Browser phase detection branching
+- Workflow matching → browser execution routing
+- When planner returns `requiresBrowser=true`, return "not supported — use the extension" message instead of routing to BrowserAgentService
+
+**Remove constructor injections:**
+- `BrowserAgentService`
+- `BrowserSessionStoreService`
+- `BrowserSessionHandlerService`
+- `WorkflowRegistryService`
+- `WorkflowService`
+
+### Module wiring (`ai.module.ts`)
+
+**Remove 5 providers:**
+- `BrowserAgentService`
+- `BrowserSessionStoreService`
+- `BrowserSessionHandlerService`
+- `WorkflowService`
+- `WorkflowRegistryService`
+
+**Remove controller:**
+- `WorkflowController`
 
 ---
 
@@ -1308,13 +1919,24 @@ Then rebuild: `pnpm -F @extension/i18n build`
 
 | Scenario | Handling |
 |---|---|
-| Server escalates mid-stream | `executeDomainQuery()` emits partial text as STEP_OK, returns `true` to fall through to browser |
-| Server down during domain_query | `executeDomainQuery()` catches error, emits STEP_FAIL, escalates to browser |
+| Server escalates mid-stream | `executeDomainQuery()` emits partial text as STEP_OK, returns `'escalated'` to fall through to browser |
+| Server down during domain_query | `executeDomainQuery()` catches error, emits STEP_FAIL, returns `'error'` — does NOT fall through to browser |
 | Server down during query_hotel_data | ActionBuilder handler catches error, returns ActionResult with error text |
 | No server configured | PlannerPrompt uses 2-way template (general/browser), ActionBuilder skips query_hotel_data, executeDomainQuery never called |
 | LLM outputs `web_task` instead of `task_type` | Schema accepts both fields, `resolveTaskType()` falls back to web_task boolean |
 | Follow-up after domain query | Existing `addFollowUpTask()` triggers new planner classification with SYNTHESIZER messages in context |
-| Hotel context cache stale | Re-fetched on serverClient re-init (settings change subscription) |
+| Hotel context cache stale | Acceptable for now — refreshed on serverClient re-init (settings change subscription); add TTL-based refresh later |
+| Widget Apply fails (auth expired) | SuggestionActionWidget shows error state, user can retry or dismiss |
+| Widget Apply fails (validation) | Show parsed validation error message in widget error state |
+| Multi-turn domain query | `executeDomainQuery()` passes conversation history (not just single message) to backend for context continuity |
+| Sources from domain query | Extension surfaces data source attribution in the synthesizer message UI |
+| User cancels mid-domain-query | `AbortSignal` terminates SSE stream, partial text emitted as STEP_OK, task marked cancelled |
+| Concurrent domain queries | New query aborts previous SSE stream via shared AbortController before starting |
+| Token expires mid-SSE-stream | Server closes connection with 401, `executeDomainQuery()` catches as error, emits STEP_FAIL with auth-expired message |
+| Widget update during streaming | Side panel matches incoming widget by `widgetId` — updates in place if exists, appends if new |
+| Rapid widget Apply clicks | Apply button disabled immediately on first click (optimistic UI), re-enabled on error |
+| Domain→browser follow-up | Planner messages with TASK_OK state included in conversation history for server context |
+| TypeORM entity removal | Backend cleanup must include a database migration dropping the `workflow_execution` table, not just deleting the entity file |
 
 ---
 
@@ -1328,62 +1950,42 @@ Then rebuild: `pnpm -F @extension/i18n build`
 6. **Escalation:** Server returns escalate → executor falls through to browser
 7. **No server:** Server URL empty → only general/browser in prompt
 8. **Server down:** executeDomainQuery() catches → escalates to browser with message
+9. **Domain query with chart:** "What's our ADR for next week?" → SYNTHESIZER streams text + `data-hotel-metrics-data` widget → Recharts renders in side panel
+10. **Suggestion widget:** "Should we raise prices for the weekend?" → SYNTHESIZER streams text + `data-suggestion-action` widget → user clicks Apply → backend API called → prices updated
+11. **Suggestion dismiss:** User clicks Dismiss → widget removed from message
+12. **Workflow prompt:** User selects OTA parity prompt from bookmarks → browser agent navigates sites and compares pricing
+13. **Reasoning display:** Domain query shows `data-custom-reasoning` events as collapsible thinking progress
+14. **Multi-turn domain query:** Follow-up "And for next month?" after domain query → conversation history passed to backend → contextual answer
 
 ---
 
-## V2 — Full Widget Parity Evolution
+## Implementation Hazards
 
-V1 (Phase 8) delivers text-only domain query responses. The extension receives streaming text chunks via raw SSE events and uses read-only synthesizer tools (`getBookingCurve`, `getPerformanceSummary`). V2 extends this to achieve feature parity with the web app's chat interface — interactive suggestion widgets, data visualization, and actionable controls — all through the same SSE transport.
+Tricky spots that could cause silent bugs if not handled carefully:
 
-### SSE Event Format (Extensible, Non-Breaking)
+| # | Hazard | Where | Risk | Mitigation |
+|---|--------|-------|------|------------|
+| H1 | Domain query check ordering | Step 6d, `execute()` | Planner sets `done=true` for domain_query. If `checkTaskCompletion()` runs first, domain queries silently treated as general answers. | Keep domain_query check BEFORE completion check. Add code comment. Consider extracting to `handleDomainQueryIfApplicable()`. |
+| H2 | WIDGET_EVENT not in enum | Step 3 vs Step 6e | TypeScript compile error when emitting `ExecutionState.WIDGET_EVENT` | Define in Step 3 alongside SYNTHESIZER actor |
+| H3 | SSE multi-line data | Step 10a write / Step 6e parse | `writeSSE()` splits JSON by newlines per SSE spec. Parser must rejoin `data:` lines. | Existing `apiClient.stream()` handles this correctly — do NOT write a custom SSE parser |
+| H4 | Conversation history gap | Step 6e filter | Planner-answered general queries excluded from history → server loses context on domain follow-ups | Include PLANNER TASK_OK messages in history filter |
+| H5 | Escalation vs error | Step 6e return | Both return `true` — browser loop starts on server crash (bad UX) | Return discriminated result: `'completed' \| 'escalated' \| 'error'` |
+| H6 | Widget streaming updates | Step 14c | `isStreaming` must transition false → needs in-place update, but widgets array is append-only | Add `widgetId` field, match-and-update logic in side panel |
+| H7 | Browser tool when server down | Step 5 | `query_hotel_data` action registered (server configured) but server unreachable → action fails repeatedly | ActionBuilder handler must catch errors gracefully and return informative ActionResult |
+| H8 | TypeORM entity orphan | Backend cleanup | Deleting `workflow-execution.entity.ts` without migration → possible startup error | Add migration to drop table |
+| H9 | No concurrent query guard | Step 6 | User sends new query while SSE active → two streams writing to same context | Share AbortController, cancel previous before starting new |
 
-**V1 events (unchanged in V2):**
+---
 
-| Event | Payload | Purpose |
-|-------|---------|---------|
-| `chunk` | text delta (string) | Streaming synthesizer text |
-| `sources` | JSON array of tool names | Data source attribution |
-| `done` | full synthesized text (string) | Stream completion signal |
-| `escalate` | `{ reason: string, context?: string }` | Browser fallback signal |
-| `error` | error message (string) | Error termination |
+## V2 — Future Enhancements
 
-**V2 events (added alongside V1):**
+Widgets, workflow prompts, and multi-turn domain queries are all in the main implementation scope above. The following are potential future enhancements beyond this architecture:
 
-| Event | Payload | Purpose |
-|-------|---------|---------|
-| `tool-call` | `{ toolCallId: string, toolName: string, args: object }` | Synthesizer invoked a widget tool |
-| `tool-result` | `{ toolCallId: string, result: object }` | Tool execution result |
-| `widget` | Widget-specific schema (see below) | Rendered widget data for side panel |
-
-V1 extensions ignore unknown event types, so they work unchanged against a V2 backend (graceful degradation).
-
-### Widget Types
-
-Each widget maps to a synthesizer suggestion tool:
-
-| Widget | Tool | Description |
-|--------|------|-------------|
-| Floor/Ceiling | `suggestUpdateFloorCeiling` | Rate boundary adjustment |
-| Seasonal Settings | `suggestUpdateSeasonalSettings` | Seasonal pricing configuration |
-| Room Type Pricing | `suggestRoomTypePriceOverride` | Room type price offset |
-| Support Ticket | `suggestOpenSupportTicket` | Open a support request |
-
-### Backend Changes for V2
-
-1. **`synthesizeForExtension()`** adds the suggestion tools listed above. These tools need a writer adapter that emits `tool-call` / `tool-result` / `widget` SSE events instead of writing to the web app's `UIMessageStreamWriter`
-2. Add `onToolCall` and `onToolResult` callbacks to the streaming pipeline that translate tool invocations into SSE events
-3. No changes to endpoint URLs, pipeline orchestration (`plan → repair → execute → synthesize`), or existing V1 SSE events
-
-### Extension Changes for V2
-
-1. **Side panel** adds React components for each widget type — rendered inline with synthesizer text messages
-2. **SSE parser** in the extension handles the new event types (`tool-call`, `tool-result`, `widget`)
-3. **`SYNTHESIZER` actor** rendering logic extended to display widget components alongside text content
-
-### Why This Is Additive
-
-- Same endpoint URLs (`/ai/extension/chat`, `/ai/extension/query`, `/ai/extension/context`)
-- Same SSE transport — no protocol changes
-- V1 events remain byte-identical — V2 adds new event types alongside them
-- Pipeline logic is identical; only the synthesizer tool set and transport event types expand
-- Backward-compatible: V1 extensions silently ignore V2-only events
+| Enhancement | Description |
+|---|---|
+| Tool approval gates | Sequential user approval before executing suggestion Apply actions (currently auto-executes on user click) |
+| Scheduled workflow execution | Recurring execution of workflow prompts on a schedule (e.g., daily OTA parity check) |
+| Widget interaction history | Undo/redo for suggestion actions, audit trail of applied changes |
+| Offline domain query cache | Cache recent domain query results for offline access or faster repeat queries |
+| Delete keys from server | Add a "Delete my keys from server" option in settings with a `DELETE /ai/extension/keys` backend endpoint |
+| Widget composition | Multiple widgets in a single synthesizer response rendered as a dashboard layout |
