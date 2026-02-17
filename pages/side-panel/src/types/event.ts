@@ -44,6 +44,9 @@ export enum ExecutionState {
 
   // Cost tracking
   COST_UPDATE = 'cost.update',
+
+  // Widget events (domain query)
+  WIDGET_EVENT = 'widget.event',
 }
 
 export interface EventData {

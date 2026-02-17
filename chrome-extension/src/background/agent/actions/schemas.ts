@@ -213,3 +213,12 @@ export const waitActionSchema: ActionSchema = {
     seconds: z.number().int().default(3).describe('amount of seconds'),
   }),
 };
+
+export const queryHotelDataActionSchema: ActionSchema = {
+  name: 'query_hotel_data',
+  description:
+    "Query the hotel's internal data system for performance metrics, pricing, bookings, competitors, seasonal settings, and documentation.",
+  schema: z.object({
+    query: z.string().describe('Natural language query about hotel data'),
+  }),
+};

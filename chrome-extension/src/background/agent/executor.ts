@@ -2,7 +2,7 @@ import type { BaseChatModel } from '@langchain/core/language_models/chat_models'
 import { type ActionResult, AgentContext, type AgentOptions, type AgentOutput } from './types';
 import { t } from '@extension/i18n';
 import { NavigatorAgent, NavigatorActionRegistry } from './agents/navigator';
-import { PlannerAgent, type PlannerOutput } from './agents/planner';
+import { PlannerAgent, type PlannerOutput, TaskType } from './agents/planner';
 import { NavigatorPrompt } from './prompts/navigator';
 import { PlannerPrompt } from './prompts/planner';
 import { createLogger } from '@src/background/log';
@@ -35,6 +35,7 @@ export interface ExecutorExtraArgs {
   agentOptions?: Partial<AgentOptions>;
   generalSettings?: GeneralSettingsConfig;
   serverClient?: ServerClient | null;
+  hotelCapabilities?: string;
 }
 
 export class Executor {
@@ -46,6 +47,8 @@ export class Executor {
   private readonly serverClient: ServerClient | null;
   private readonly generalSettings: GeneralSettingsConfig | undefined;
   private tasks: string[] = [];
+  private conversationMessages: Array<{ role: string; content: string }> = [];
+  private domainQueryAbortController?: AbortController;
   constructor(
     task: string,
     taskId: string,
@@ -70,9 +73,9 @@ export class Executor {
     this.generalSettings = extraArgs?.generalSettings;
     this.tasks.push(task);
     this.navigatorPrompt = new NavigatorPrompt(context.options.maxActionsPerStep);
-    this.plannerPrompt = new PlannerPrompt();
+    this.plannerPrompt = new PlannerPrompt(!!this.serverClient, extraArgs?.hotelCapabilities);
 
-    const actionBuilder = new ActionBuilder(context, extractorLLM);
+    const actionBuilder = new ActionBuilder(context, extractorLLM, this.serverClient);
     const navigatorActionRegistry = new NavigatorActionRegistry(actionBuilder.buildDefaultActions());
 
     // Initialize agents with their respective prompts
@@ -131,19 +134,58 @@ export class Executor {
    */
   async execute(): Promise<void> {
     logger.info(`🚀 Executing task: ${this.tasks[this.tasks.length - 1]}`);
-    // reset the step counter
     const context = this.context;
     context.nSteps = 0;
     const allowedMaxSteps = this.context.options.maxSteps;
+    const task = this.tasks[this.tasks.length - 1];
 
     try {
       this.context.emitEvent(Actors.SYSTEM, ExecutionState.TASK_START, this.context.taskId);
-
-      // Track task start
       void analytics.trackTaskStart(this.context.taskId);
 
+      // Phase 1: Run initial planner to classify the task
+      let latestPlanOutput = await this.runPlanner();
+
+      // Phase 2: Domain query check — MUST run BEFORE checkTaskCompletion (Hazard H1)
+      // The planner sets done=true for domain_query tasks so the system routes to
+      // the synthesizer. If checkTaskCompletion ran first, domain queries would be
+      // silently treated as general answers.
+      if (
+        this.serverClient &&
+        latestPlanOutput?.result?.task_type === TaskType.DOMAIN_QUERY &&
+        latestPlanOutput.result.done
+      ) {
+        const domainResult = await this.executeDomainQuery(task);
+        if (domainResult === 'completed') {
+          this.appendConversationHistory(task, this.context.finalAnswer ?? '');
+          void analytics.trackTaskComplete(this.context.taskId);
+          return;
+        }
+        if (domainResult === 'error') {
+          this.context.emitEvent(
+            Actors.SYSTEM,
+            ExecutionState.TASK_FAIL,
+            t('exec_domainQuery_fail', ['Stream failed']),
+          );
+          void analytics.trackTaskFailed(this.context.taskId, analytics.categorizeError('domain_query_error'));
+          return;
+        }
+        // domainResult === 'escalated': fall through to browser loop
+        // Re-run planner for browser planning since escalation invalidated done=true (Hazard H2)
+        latestPlanOutput = await this.runPlanner();
+      }
+
+      // Phase 3: General completion check
+      if (this.checkTaskCompletion(latestPlanOutput)) {
+        const finalMessage = this.context.finalAnswer || this.context.taskId;
+        this.context.emitEvent(Actors.SYSTEM, ExecutionState.TASK_OK, finalMessage);
+        this.appendConversationHistory(task, this.context.finalAnswer ?? '');
+        void analytics.trackTaskComplete(this.context.taskId);
+        return;
+      }
+
+      // Phase 4: Browser step loop
       let step = 0;
-      let latestPlanOutput: AgentOutput<PlannerOutput> | null = null;
       let navigatorDone = false;
 
       for (step = 0; step < allowedMaxSteps; step++) {
@@ -157,64 +199,50 @@ export class Executor {
           break;
         }
 
-        // Run planner periodically for guidance
-        if (this.planner && (context.nSteps % context.options.planningInterval === 0 || navigatorDone)) {
+        // Run planner periodically (skip step 0 — already ran above)
+        if (step > 0 && this.planner && (context.nSteps % context.options.planningInterval === 0 || navigatorDone)) {
           navigatorDone = false;
           latestPlanOutput = await this.runPlanner();
 
-          // Check if task is complete after planner run
           if (this.checkTaskCompletion(latestPlanOutput)) {
             break;
           }
         }
 
-        // Execute navigator
         navigatorDone = await this.navigate();
 
-        // If navigator indicates completion, the next periodic planner run will validate it
         if (navigatorDone) {
           logger.info('🔄 Navigator indicates completion - will be validated by next planner run');
         }
       }
 
-      // Determine task completion status
+      // Phase 5: Post-loop status
       const isCompleted = latestPlanOutput?.result?.done === true;
 
       if (isCompleted) {
-        // Emit final answer if available, otherwise use task ID
         const finalMessage = this.context.finalAnswer || this.context.taskId;
         this.context.emitEvent(Actors.SYSTEM, ExecutionState.TASK_OK, finalMessage);
-
-        // Track task completion
+        this.appendConversationHistory(task, this.context.finalAnswer ?? '');
         void analytics.trackTaskComplete(this.context.taskId);
       } else if (step >= allowedMaxSteps) {
         logger.error('❌ Task failed: Max steps reached');
         this.context.emitEvent(Actors.SYSTEM, ExecutionState.TASK_FAIL, t('exec_errors_maxStepsReached'));
-
-        // Track task failure with specific error category
         const maxStepsError = new MaxStepsReachedError(t('exec_errors_maxStepsReached'));
         const errorCategory = analytics.categorizeError(maxStepsError);
         void analytics.trackTaskFailed(this.context.taskId, errorCategory);
       } else if (this.context.stopped) {
         this.context.emitEvent(Actors.SYSTEM, ExecutionState.TASK_CANCEL, t('exec_task_cancel'));
-
-        // Track task cancellation
         void analytics.trackTaskCancelled(this.context.taskId);
       } else {
         this.context.emitEvent(Actors.SYSTEM, ExecutionState.TASK_PAUSE, t('exec_task_pause'));
-        // Note: We don't track pause as it's not a final state
       }
     } catch (error) {
       if (error instanceof RequestCancelledError) {
         this.context.emitEvent(Actors.SYSTEM, ExecutionState.TASK_CANCEL, t('exec_task_cancel'));
-
-        // Track task cancellation
         void analytics.trackTaskCancelled(this.context.taskId);
       } else {
         const errorMessage = error instanceof Error ? error.message : String(error);
         this.context.emitEvent(Actors.SYSTEM, ExecutionState.TASK_FAIL, t('exec_task_fail', [errorMessage]));
-
-        // Track task failure with detailed error categorization
         const errorCategory = analytics.categorizeError(error instanceof Error ? error : errorMessage);
         void analytics.trackTaskFailed(this.context.taskId, errorCategory);
       }
@@ -222,7 +250,6 @@ export class Executor {
       if (import.meta.env.DEV) {
         logger.debug('Executor history', JSON.stringify(this.context.history, null, 2));
       }
-      // store the history only if replay is enabled
       if (this.generalSettings?.replayHistoricalTasks) {
         const historyString = JSON.stringify(this.context.history);
         logger.info(`Executor history size: ${historyString.length}`);
@@ -230,6 +257,78 @@ export class Executor {
       } else {
         logger.info('Replay historical tasks is disabled, skipping history storage');
       }
+    }
+  }
+
+  private async executeDomainQuery(task: string): Promise<'completed' | 'escalated' | 'error'> {
+    const abortController = new AbortController();
+    this.domainQueryAbortController = abortController;
+
+    const onContextAbort = () => abortController.abort();
+    this.context.controller.signal.addEventListener('abort', onContextAbort);
+
+    try {
+      const history = [...this.conversationMessages, { role: 'user', content: task }];
+      let fullText = '';
+
+      for await (const event of this.serverClient!.streamChat(history, undefined, abortController.signal)) {
+        if (this.context.stopped) {
+          abortController.abort();
+          break;
+        }
+
+        switch (event.event) {
+          case 'chunk':
+            fullText += event.data;
+            this.context.emitEvent(Actors.SYNTHESIZER, ExecutionState.STEP_STREAMING, fullText);
+            break;
+
+          case 'widget':
+            this.context.emitEvent(Actors.SYNTHESIZER, ExecutionState.WIDGET_EVENT, event.data);
+            break;
+
+          case 'escalate':
+            if (fullText) {
+              this.context.emitEvent(Actors.SYNTHESIZER, ExecutionState.STEP_OK, fullText);
+            }
+            logger.info('Domain query escalated to browser');
+            return 'escalated';
+
+          case 'error':
+            throw new Error(event.data);
+
+          case 'done':
+            this.context.finalAnswer = fullText;
+            this.context.emitEvent(Actors.SYNTHESIZER, ExecutionState.STEP_OK, fullText);
+            this.context.emitEvent(Actors.SYSTEM, ExecutionState.TASK_OK, fullText);
+            return 'completed';
+        }
+      }
+
+      // Stream ended without explicit done — treat accumulated text as completed
+      if (fullText) {
+        this.context.finalAnswer = fullText;
+        this.context.emitEvent(Actors.SYNTHESIZER, ExecutionState.STEP_OK, fullText);
+        this.context.emitEvent(Actors.SYSTEM, ExecutionState.TASK_OK, fullText);
+        return 'completed';
+      }
+
+      return 'error';
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      logger.error(`Domain query failed: ${errorMsg}`);
+      this.context.emitEvent(Actors.SYNTHESIZER, ExecutionState.STEP_FAIL, errorMsg);
+      return 'error';
+    } finally {
+      this.context.controller.signal.removeEventListener('abort', onContextAbort);
+      this.domainQueryAbortController = undefined;
+    }
+  }
+
+  private appendConversationHistory(userMessage: string, assistantMessage: string): void {
+    this.conversationMessages.push({ role: 'user', content: userMessage });
+    if (assistantMessage) {
+      this.conversationMessages.push({ role: 'assistant', content: assistantMessage });
     }
   }
 

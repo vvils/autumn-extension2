@@ -2,11 +2,23 @@
 import { BasePrompt } from './base';
 import { HumanMessage, SystemMessage } from '@langchain/core/messages';
 import type { AgentContext } from '@src/background/agent/types';
-import { plannerSystemPromptTemplate } from './templates/planner';
+import { buildPlannerSystemPrompt } from './templates/planner';
 
 export class PlannerPrompt extends BasePrompt {
+  constructor(
+    private readonly serverAvailable = false,
+    private readonly hotelCapabilities?: string,
+  ) {
+    super();
+  }
+
   getSystemMessage(): SystemMessage {
-    return new SystemMessage(plannerSystemPromptTemplate);
+    return new SystemMessage(
+      buildPlannerSystemPrompt({
+        serverAvailable: this.serverAvailable,
+        hotelCapabilities: this.hotelCapabilities,
+      }),
+    );
   }
 
   async getUserMessage(context: AgentContext): Promise<HumanMessage> {

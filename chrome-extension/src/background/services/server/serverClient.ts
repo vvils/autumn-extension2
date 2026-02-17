@@ -1,5 +1,12 @@
 import type { ServerSettingsStorage } from '@extension/storage';
-import type { ServerConversation, ServerMessage, SyncConversationPayload } from './types';
+import type {
+  ServerConversation,
+  ServerMessage,
+  SyncConversationPayload,
+  SSEEvent,
+  HotelContextManifest,
+  ExtensionQueryResponse,
+} from './types';
 import { ServerApiClient } from './apiClient';
 
 interface LoginResponse {
@@ -79,5 +86,27 @@ export class ServerClient {
       payload,
     );
     return data;
+  }
+
+  async *streamChat(
+    messages: Array<{ role: string; content: string }>,
+    conversationId?: string,
+    signal?: AbortSignal,
+  ): AsyncGenerator<SSEEvent> {
+    yield* this.apiClient.stream('/ai/extension/chat', { messages, conversationId }, { signal, timeout: 120_000 });
+  }
+
+  async queryData(query: string): Promise<ExtensionQueryResponse> {
+    const { data } = await this.apiClient.post<ExtensionQueryResponse>('/ai/extension/query', { query });
+    return data;
+  }
+
+  async fetchHotelContext(): Promise<HotelContextManifest | null> {
+    try {
+      const { data } = await this.apiClient.get<HotelContextManifest>('/ai/extension/context');
+      return data;
+    } catch {
+      return null;
+    }
   }
 }

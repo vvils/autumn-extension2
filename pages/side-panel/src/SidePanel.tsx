@@ -42,6 +42,7 @@ const SidePanel = () => {
   const [isReplaying, setIsReplaying] = useState(false);
   const [replayEnabled, setReplayEnabled] = useState(false);
   const [isStreamingPlanner, setIsStreamingPlanner] = useState(false);
+  const [isStreamingSynthesizer, setIsStreamingSynthesizer] = useState(false);
   const [activeGroupOverlay, setActiveGroupOverlay] = useState<{ primaryTabId: number } | null>(null);
   const [costData, setCostData] = useState<{
     totalInputTokens: number;
@@ -52,6 +53,7 @@ const SidePanel = () => {
   const sessionIdRef = useRef<string | null>(null);
   const isReplayingRef = useRef<boolean>(false);
   const plannerStreamingRef = useRef(false);
+  const synthesizerStreamingRef = useRef(false);
   const portRef = useRef<chrome.runtime.Port | null>(null);
   const heartbeatIntervalRef = useRef<number | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -289,6 +291,49 @@ const SidePanel = () => {
               break;
             default:
               console.error('Invalid action', state);
+              return;
+          }
+          break;
+        case Actors.SYNTHESIZER:
+          switch (state) {
+            case ExecutionState.STEP_STREAMING:
+              setMessages(prev => {
+                if (synthesizerStreamingRef.current) {
+                  return [...prev.slice(0, -1), { actor, content: content || '', timestamp }];
+                } else {
+                  synthesizerStreamingRef.current = true;
+                  setIsStreamingSynthesizer(true);
+                  return [...prev, { actor, content: content || '', timestamp }];
+                }
+              });
+              return;
+            case ExecutionState.STEP_OK: {
+              const wasStreaming = synthesizerStreamingRef.current;
+              synthesizerStreamingRef.current = false;
+              setIsStreamingSynthesizer(false);
+              if (wasStreaming) {
+                setMessages(prev => {
+                  if (prev.length > 0) {
+                    const last = prev[prev.length - 1];
+                    const finalContent = content || last.content;
+                    return [...prev.slice(0, -1), { ...last, content: finalContent, timestamp }];
+                  }
+                  return prev;
+                });
+              } else {
+                setMessages(prev => [...prev, { actor, content: content || '', timestamp }]);
+              }
+              break;
+            }
+            case ExecutionState.STEP_FAIL:
+              synthesizerStreamingRef.current = false;
+              setIsStreamingSynthesizer(false);
+              skip = false;
+              break;
+            case ExecutionState.WIDGET_EVENT:
+              console.log('Widget event:', content);
+              return;
+            default:
               return;
           }
           break;
@@ -1097,7 +1142,7 @@ const SidePanel = () => {
           ) : (
             <>
               <div className="scrollbar-thin flex-1 space-y-4 overflow-y-auto p-4">
-                <MessageList messages={messages} isStreaming={isStreamingPlanner} />
+                <MessageList messages={messages} isStreaming={isStreamingPlanner || isStreamingSynthesizer} />
                 <div ref={messagesEndRef} />
               </div>
               <ThinkingWidget state={thinkingWidgetState} />

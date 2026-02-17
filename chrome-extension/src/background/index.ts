@@ -28,6 +28,7 @@ const logger = createLogger('background');
 const browserContext = new BrowserContext({});
 let currentExecutor: Executor | null = null;
 let serverClient: ServerClient | null = null;
+let cachedHotelCapabilities: string | undefined;
 let currentPort: chrome.runtime.Port | null = null;
 const SIDE_PANEL_URL = chrome.runtime.getURL('side-panel/index.html');
 
@@ -102,8 +103,20 @@ analyticsSettingsStore.subscribe(() => {
 // Initialize server client
 async function initServerClient() {
   serverClient = await ServerClient.create(serverSettingsStore);
+  cachedHotelCapabilities = undefined;
   if (serverClient) {
     logger.info('Server client initialized');
+    try {
+      if (await serverClient.isAuthenticated()) {
+        const manifest = await serverClient.fetchHotelContext();
+        if (manifest) {
+          cachedHotelCapabilities = manifest.capabilities.map(c => `   - ${c.name}: ${c.description}`).join('\n');
+          logger.info(`Hotel context loaded: ${manifest.capabilities.length} capabilities`);
+        }
+      }
+    } catch (error) {
+      logger.warning('Failed to fetch hotel context:', error);
+    }
   } else {
     logger.info('Server not configured, standalone mode');
   }
@@ -524,6 +537,7 @@ async function setupExecutor(taskId: string, task: string, browserContext: Brows
     },
     generalSettings: generalSettings,
     serverClient,
+    hotelCapabilities: cachedHotelCapabilities,
   });
 
   return executor;
@@ -553,6 +567,18 @@ async function subscribeToExecutorEvents(executor: Executor) {
         });
       } catch (err) {
         logger.error('Failed to persist planner message:', err);
+      }
+    }
+
+    if (event.actor === 'synthesizer' && event.state === ExecutionState.STEP_OK && event.data.details) {
+      try {
+        await chatHistoryStore.addMessage(event.data.taskId, {
+          actor: Actors.SYNTHESIZER,
+          content: event.data.details,
+          timestamp: event.timestamp,
+        });
+      } catch (err) {
+        logger.error('Failed to persist synthesizer message:', err);
       }
     }
 

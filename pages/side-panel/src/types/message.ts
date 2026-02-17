@@ -34,4 +34,9 @@ export const ACTOR_PROFILES = {
     icon: 'icons/evaluator.svg',
     iconBackground: '#795548',
   },
+  synthesizer: {
+    name: 'Synthesizer',
+    icon: 'icons/synthesizer.svg',
+    iconBackground: '#7C3AED',
+  },
 } as const;

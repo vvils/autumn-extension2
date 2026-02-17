@@ -1,13 +1,20 @@
 import { describe, it, expect, vi } from 'vitest';
 import { ServerClient } from '../serverClient';
 import { ServerApiClient } from '../apiClient';
-import type { ServerConversation, ServerMessage } from '../types';
+import type {
+  ServerConversation,
+  ServerMessage,
+  SSEEvent,
+  ExtensionQueryResponse,
+  HotelContextManifest,
+} from '../types';
 
 function createMockApiClient() {
   return {
     get: vi.fn(),
     post: vi.fn(),
     delete: vi.fn(),
+    stream: vi.fn(),
   } as unknown as ServerApiClient;
 }
 
@@ -171,5 +178,155 @@ describe('ServerClient conversations', () => {
 
       expect(result.created).toBe(false);
     });
+  });
+});
+
+describe('queryData', () => {
+  it('posts to /ai/extension/query with query payload', async () => {
+    const apiClient = createMockApiClient();
+    const stubResponse: ExtensionQueryResponse = { text: 'answer', sources: ['s1'], latency: 42, escalation: null };
+    vi.mocked(apiClient.post).mockResolvedValue({ data: stubResponse, status: 200, headers: new Headers() });
+    const client = createServerClient(apiClient);
+
+    await client.queryData('what is the ADR?');
+
+    expect(apiClient.post).toHaveBeenCalledWith('/ai/extension/query', { query: 'what is the ADR?' });
+  });
+
+  it('returns ExtensionQueryResponse data', async () => {
+    const apiClient = createMockApiClient();
+    const stubResponse: ExtensionQueryResponse = { text: 'result', sources: [], latency: 10, escalation: null };
+    vi.mocked(apiClient.post).mockResolvedValue({ data: stubResponse, status: 200, headers: new Headers() });
+    const client = createServerClient(apiClient);
+
+    const result = await client.queryData('test');
+
+    expect(result).toEqual(stubResponse);
+  });
+});
+
+describe('fetchHotelContext', () => {
+  it('gets from /ai/extension/context', async () => {
+    const apiClient = createMockApiClient();
+    const stubManifest: HotelContextManifest = {
+      hotel: {
+        name: 'Test Hotel',
+        timezone: 'UTC',
+        currentDate: '2026-01-01',
+        currency: { code: 'USD' },
+        roomTypes: ['Standard'],
+      },
+      capabilities: [{ name: 'rates', description: 'Rate query', examples: ['ADR'] }],
+      flags: { hasCompetitorData: false, hasMarketingIntegration: false, isMarketingOnly: false },
+    };
+    vi.mocked(apiClient.get).mockResolvedValue({ data: stubManifest, status: 200, headers: new Headers() });
+    const client = createServerClient(apiClient);
+
+    await client.fetchHotelContext();
+
+    expect(apiClient.get).toHaveBeenCalledWith('/ai/extension/context');
+  });
+
+  it('returns HotelContextManifest on success', async () => {
+    const apiClient = createMockApiClient();
+    const stubManifest: HotelContextManifest = {
+      hotel: { name: 'Test', timezone: 'UTC', currentDate: '2026-01-01', currency: { code: 'EUR' }, roomTypes: [] },
+      capabilities: [],
+      flags: { hasCompetitorData: true, hasMarketingIntegration: false, isMarketingOnly: false },
+    };
+    vi.mocked(apiClient.get).mockResolvedValue({ data: stubManifest, status: 200, headers: new Headers() });
+    const client = createServerClient(apiClient);
+
+    const result = await client.fetchHotelContext();
+
+    expect(result).toEqual(stubManifest);
+  });
+
+  it('returns null on error (swallows exception)', async () => {
+    const apiClient = createMockApiClient();
+    vi.mocked(apiClient.get).mockRejectedValue(new Error('network error'));
+    const client = createServerClient(apiClient);
+
+    const result = await client.fetchHotelContext();
+
+    expect(result).toBeNull();
+  });
+});
+
+describe('streamChat', () => {
+  async function* fakeStream(...events: SSEEvent[]): AsyncGenerator<SSEEvent> {
+    for (const e of events) yield e;
+  }
+
+  it('yields from apiClient.stream with correct path and body', async () => {
+    const apiClient = createMockApiClient();
+    const stubEvent: SSEEvent = { event: 'message', data: '{"text":"hi"}' };
+    vi.mocked(apiClient.stream).mockReturnValue(fakeStream(stubEvent));
+    const client = createServerClient(apiClient);
+
+    const messages = [{ role: 'user', content: 'hello' }];
+    const collected: SSEEvent[] = [];
+    for await (const event of client.streamChat(messages)) {
+      collected.push(event);
+    }
+
+    expect(collected).toEqual([stubEvent]);
+    expect(apiClient.stream).toHaveBeenCalledWith(
+      '/ai/extension/chat',
+      { messages, conversationId: undefined },
+      expect.objectContaining({ timeout: 120_000 }),
+    );
+  });
+
+  it('passes signal and 120s timeout to apiClient.stream', async () => {
+    const apiClient = createMockApiClient();
+    vi.mocked(apiClient.stream).mockReturnValue(fakeStream());
+    const client = createServerClient(apiClient);
+
+    const controller = new AbortController();
+    const messages = [{ role: 'user', content: 'test' }];
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    for await (const _ of client.streamChat(messages, undefined, controller.signal)) {
+      /* drain */
+    }
+
+    expect(apiClient.stream).toHaveBeenCalledWith(
+      '/ai/extension/chat',
+      { messages, conversationId: undefined },
+      { signal: controller.signal, timeout: 120_000 },
+    );
+  });
+
+  it('forwards conversationId in body when provided', async () => {
+    const apiClient = createMockApiClient();
+    vi.mocked(apiClient.stream).mockReturnValue(fakeStream());
+    const client = createServerClient(apiClient);
+
+    const messages = [{ role: 'user', content: 'hi' }];
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    for await (const _ of client.streamChat(messages, 'conv-999')) {
+      /* drain */
+    }
+
+    expect(apiClient.stream).toHaveBeenCalledWith(
+      '/ai/extension/chat',
+      { messages, conversationId: 'conv-999' },
+      expect.objectContaining({ timeout: 120_000 }),
+    );
+  });
+
+  it('omits conversationId from body when undefined', async () => {
+    const apiClient = createMockApiClient();
+    vi.mocked(apiClient.stream).mockReturnValue(fakeStream());
+    const client = createServerClient(apiClient);
+
+    const messages = [{ role: 'user', content: 'test' }];
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    for await (const _ of client.streamChat(messages)) {
+      /* drain */
+    }
+
+    const callArgs = vi.mocked(apiClient.stream).mock.calls[0];
+    expect(callArgs[1]).toEqual({ messages, conversationId: undefined });
   });
 });

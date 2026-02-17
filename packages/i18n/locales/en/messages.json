@@ -1027,5 +1027,23 @@
         "example": "user@example.com"
       }
     }
+  },
+  "exec_domainQuery_fail": {
+    "message": "Domain query failed: $ERROR$",
+    "placeholders": {
+      "error": {
+        "content": "$1",
+        "example": "Network error"
+      }
+    }
+  },
+  "act_queryHotelData_start": {
+    "message": "Querying hotel data..."
+  },
+  "act_queryHotelData_ok": {
+    "message": "Hotel data retrieved"
+  },
+  "act_queryHotelData_escalated": {
+    "message": "Hotel data unavailable - needs browser"
   }
 }

@@ -22,12 +22,14 @@ import {
   nextPageActionSchema,
   scrollToTopActionSchema,
   scrollToBottomActionSchema,
+  queryHotelDataActionSchema,
 } from './schemas';
 import { z } from 'zod';
 import { createLogger } from '@src/background/log';
 import { ExecutionState, Actors } from '../event/types';
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import { wrapUntrustedContent } from '../messages/utils';
+import type { ServerClient } from '@src/background/services/server';
 
 const logger = createLogger('Action');
 
@@ -143,10 +145,12 @@ export function buildDynamicActionSchema(actions: Action[]): z.ZodType {
 export class ActionBuilder {
   private readonly context: AgentContext;
   private readonly extractorLLM: BaseChatModel;
+  private readonly serverClient: ServerClient | null;
 
-  constructor(context: AgentContext, extractorLLM: BaseChatModel) {
+  constructor(context: AgentContext, extractorLLM: BaseChatModel, serverClient?: ServerClient | null) {
     this.context = context;
     this.extractorLLM = extractorLLM;
+    this.serverClient = serverClient ?? null;
   }
 
   buildDefaultActions() {
@@ -702,6 +706,38 @@ export class ActionBuilder {
       true,
     );
     actions.push(selectDropdownOption);
+
+    if (this.serverClient) {
+      const serverClient = this.serverClient;
+      const context = this.context;
+      const queryHotelData = new Action(async (params: { query: string }) => {
+        try {
+          context.emitEvent(Actors.NAVIGATOR, ExecutionState.ACT_START, t('act_queryHotelData_start'));
+          const result = await serverClient.queryData(params.query);
+          if (result.escalation) {
+            context.emitEvent(Actors.NAVIGATOR, ExecutionState.ACT_OK, t('act_queryHotelData_escalated'));
+            return new ActionResult({
+              extractedContent: '[Hotel data unavailable for this query — requires browser]',
+              includeInMemory: true,
+            });
+          }
+          context.emitEvent(Actors.NAVIGATOR, ExecutionState.ACT_OK, t('act_queryHotelData_ok'));
+          return new ActionResult({
+            extractedContent: result.text ?? '',
+            includeInMemory: true,
+          });
+        } catch (error) {
+          const errorMsg = error instanceof Error ? error.message : String(error);
+          context.emitEvent(Actors.NAVIGATOR, ExecutionState.ACT_FAIL, errorMsg);
+          return new ActionResult({
+            extractedContent: `[Hotel data query failed: ${errorMsg}]`,
+            error: errorMsg,
+            includeInMemory: true,
+          });
+        }
+      }, queryHotelDataActionSchema);
+      actions.push(queryHotelData);
+    }
 
     return actions;
   }

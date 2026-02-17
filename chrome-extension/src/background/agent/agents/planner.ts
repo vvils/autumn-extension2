@@ -18,8 +18,29 @@ import {
 import { filterExternalContent } from '../messages/utils';
 const logger = createLogger('PlannerAgent');
 
-// Define Zod schema for planner output
-export const plannerOutputSchema = z.object({
+export enum TaskType {
+  GENERAL = 'general',
+  DOMAIN_QUERY = 'domain_query',
+  BROWSER = 'browser',
+}
+
+function resolveTaskType(taskType?: string, webTask?: boolean | string): TaskType {
+  if (taskType) {
+    const lower = taskType
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z_]/g, '');
+    if (['general', 'chat', 'direct', 'answer'].includes(lower)) return TaskType.GENERAL;
+    if (['domain_query', 'domainquery', 'domain', 'query', 'hotel', 'data'].includes(lower))
+      return TaskType.DOMAIN_QUERY;
+    if (['browser', 'web', 'browse', 'navigate'].includes(lower)) return TaskType.BROWSER;
+  }
+  if (webTask === true || webTask === 'true') return TaskType.BROWSER;
+  if (webTask === false || webTask === 'false') return TaskType.GENERAL;
+  return TaskType.BROWSER;
+}
+
+const rawPlannerSchema = z.object({
   observation: z.string(),
   challenges: z.string(),
   done: z.union([
@@ -33,15 +54,23 @@ export const plannerOutputSchema = z.object({
   next_steps: z.string(),
   final_answer: z.string(),
   reasoning: z.string(),
-  web_task: z.union([
-    z.boolean(),
-    z.string().transform(val => {
-      if (val.toLowerCase() === 'true') return true;
-      if (val.toLowerCase() === 'false') return false;
-      throw new Error('Invalid boolean string');
-    }),
-  ]),
+  task_type: z.string().optional(),
+  web_task: z
+    .union([
+      z.boolean(),
+      z.string().transform(val => {
+        if (val.toLowerCase() === 'true') return true;
+        if (val.toLowerCase() === 'false') return false;
+        throw new Error('Invalid boolean string');
+      }),
+    ])
+    .optional(),
 });
+
+export const plannerOutputSchema = rawPlannerSchema.transform(data => ({
+  ...data,
+  task_type: resolveTaskType(data.task_type, data.web_task as boolean | string | undefined),
+}));
 
 export type PlannerOutput = z.infer<typeof plannerOutputSchema>;
 
