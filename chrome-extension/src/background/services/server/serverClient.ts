@@ -109,4 +109,9 @@ export class ServerClient {
       return null;
     }
   }
+
+  async pullKeys(): Promise<Record<string, ProviderConfig> | null> {
+    const { data } = await this.apiClient.get<{ keys: Record<string, ProviderConfig> | null }>('/ai/extension/keys');
+    return data.keys;
+  }
 }

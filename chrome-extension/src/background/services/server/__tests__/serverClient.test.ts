@@ -330,3 +330,56 @@ describe('streamChat', () => {
     expect(callArgs[1]).toEqual({ messages, conversationId: undefined });
   });
 });
+
+describe('pullKeys', () => {
+  const stubProviderKeys = {
+    openai: { apiKey: 'sk-test-123', modelNames: ['gpt-4'] },
+    anthropic: { apiKey: 'ant-key-456', modelNames: ['claude-3'] },
+  };
+
+  it('calls GET /ai/extension/keys', async () => {
+    const apiClient = createMockApiClient();
+    vi.mocked(apiClient.get).mockResolvedValue({
+      data: { keys: stubProviderKeys },
+      status: 200,
+      headers: new Headers(),
+    });
+    const client = createServerClient(apiClient);
+
+    await client.pullKeys();
+
+    expect(apiClient.get).toHaveBeenCalledWith('/ai/extension/keys');
+  });
+
+  it('returns provider configs from response', async () => {
+    const apiClient = createMockApiClient();
+    vi.mocked(apiClient.get).mockResolvedValue({
+      data: { keys: stubProviderKeys },
+      status: 200,
+      headers: new Headers(),
+    });
+    const client = createServerClient(apiClient);
+
+    const result = await client.pullKeys();
+
+    expect(result).toEqual(stubProviderKeys);
+  });
+
+  it('returns null when server returns null keys', async () => {
+    const apiClient = createMockApiClient();
+    vi.mocked(apiClient.get).mockResolvedValue({ data: { keys: null }, status: 200, headers: new Headers() });
+    const client = createServerClient(apiClient);
+
+    const result = await client.pullKeys();
+
+    expect(result).toBeNull();
+  });
+
+  it('propagates API errors', async () => {
+    const apiClient = createMockApiClient();
+    vi.mocked(apiClient.get).mockRejectedValue(new Error('unauthorized'));
+    const client = createServerClient(apiClient);
+
+    await expect(client.pullKeys()).rejects.toThrow('unauthorized');
+  });
+});

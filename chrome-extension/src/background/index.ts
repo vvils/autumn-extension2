@@ -90,6 +90,12 @@ chrome.tabs.onRemoved.addListener(async tabId => {
 
 logger.info('background loaded');
 
+chrome.runtime.onInstalled.addListener(async details => {
+  if (details.reason === 'install' || details.reason === 'update') {
+    await seedWorkflowPrompts();
+  }
+});
+
 // Initialize analytics
 analytics.init().catch(error => {
   logger.error('Failed to initialize analytics:', error);
@@ -115,6 +121,18 @@ async function initServerClient() {
           cachedHotelCapabilities = manifest.capabilities.map(c => `   - ${c.name}: ${c.description}`).join('\n');
           logger.info(`Hotel context loaded: ${manifest.capabilities.length} capabilities`);
         }
+
+        try {
+          const serverKeys = await serverClient.pullKeys();
+          if (serverKeys && Object.keys(serverKeys).length > 0) {
+            for (const [id, config] of Object.entries(serverKeys)) {
+              await llmProviderStore.setProvider(id, config);
+            }
+            logger.info(`Pulled ${Object.keys(serverKeys).length} provider keys from server`);
+          }
+        } catch (error) {
+          logger.warning('Failed to pull keys from server:', error);
+        }
       }
     } catch (error) {
       logger.warning('Failed to fetch hotel context:', error);
@@ -138,13 +156,6 @@ serverSettingsStore.subscribe(() => {
       logger.error('Failed to reinitialize server client:', error);
     });
   }
-});
-
-// Listen for simple messages (e.g., from options page)
-chrome.runtime.onMessage.addListener(() => {
-  // Handle other message types if needed in the future
-  // Return false if response is not sent asynchronously
-  // return false;
 });
 
 // Setup connection listener for long-lived connections (e.g., side panel)
