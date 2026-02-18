@@ -20,7 +20,7 @@ import { DEFAULT_AGENT_OPTIONS } from './agent/types';
 import { SpeechToTextService } from './services/speechToText';
 import { injectBuildDomTreeScripts } from './browser/dom/service';
 import { analytics } from './services/analytics';
-import { ServerClient } from './services/server';
+import { ServerClient, detectTokenFromTabs, listenForWebAppAuth } from './services/server';
 import type { AddMessagePayload } from './services/server/types';
 import { validateWidgetApplyRequest, executeWidgetApply } from './services/widgetApply';
 import { seedWorkflowPrompts } from './services/workflowPrompts';
@@ -152,6 +152,9 @@ async function initServerClient() {
   if (serverClient) {
     logger.info('Server client initialized');
     try {
+      if (!(await serverClient.isAuthenticated())) {
+        await detectTokenFromTabs(serverSettingsStore);
+      }
       if (await serverClient.isAuthenticated()) {
         const manifest = await serverClient.fetchHotelContext();
         if (manifest) {
@@ -217,6 +220,12 @@ serverSettingsStore.subscribe(() => {
       logger.error('Failed to reinitialize server client:', error);
     });
   }
+});
+
+listenForWebAppAuth(serverSettingsStore, () => {
+  initServerClient().catch(error => {
+    logger.error('Failed to reinit after auth change:', error);
+  });
 });
 
 // Setup connection listener for long-lived connections (e.g., side panel)
