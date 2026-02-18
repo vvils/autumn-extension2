@@ -22,6 +22,7 @@ import {
   scrollToTopActionSchema,
   scrollToBottomActionSchema,
   queryHotelDataActionSchema,
+  runIntegrationActionSchema,
 } from './schemas';
 import { z } from 'zod';
 import { createLogger } from '@src/background/log';
@@ -145,11 +146,18 @@ export class ActionBuilder {
   private readonly context: AgentContext;
   private readonly extractorLLM: BaseChatModel;
   private readonly serverClient: ServerClient | null;
+  private readonly connectedIntegrations?: string;
 
-  constructor(context: AgentContext, extractorLLM: BaseChatModel, serverClient?: ServerClient | null) {
+  constructor(
+    context: AgentContext,
+    extractorLLM: BaseChatModel,
+    serverClient?: ServerClient | null,
+    connectedIntegrations?: string,
+  ) {
     this.context = context;
     this.extractorLLM = extractorLLM;
     this.serverClient = serverClient ?? null;
+    this.connectedIntegrations = connectedIntegrations;
   }
 
   buildDefaultActions() {
@@ -731,6 +739,44 @@ export class ActionBuilder {
         }
       }, queryHotelDataActionSchema);
       actions.push(queryHotelData);
+    }
+
+    if (this.serverClient && this.connectedIntegrations) {
+      const serverClient = this.serverClient;
+      const context = this.context;
+      const runIntegration = new Action(
+        async (params: { action_key: string; app_slug: string; parameters: Record<string, unknown> }) => {
+          try {
+            context.emitEvent(Actors.NAVIGATOR, ExecutionState.ACT_START, 'Running integration action...');
+            const result = await serverClient.runIntegrationAction({
+              actionKey: params.action_key,
+              appSlug: params.app_slug,
+              parameters: params.parameters,
+            });
+            if (!result.success) {
+              context.emitEvent(Actors.NAVIGATOR, ExecutionState.ACT_FAIL, result.error ?? 'Integration action failed');
+              return new ActionResult({
+                error: result.error ?? 'Integration action failed',
+                includeInMemory: true,
+              });
+            }
+            const raw = JSON.stringify(result.data);
+            const extractedContent = raw.length > 2000 ? raw.slice(0, 2000) + '... (truncated)' : raw;
+            context.emitEvent(Actors.NAVIGATOR, ExecutionState.ACT_OK, 'Integration action completed');
+            return new ActionResult({ extractedContent, includeInMemory: true });
+          } catch (error) {
+            const errorMsg = error instanceof Error ? error.message : String(error);
+            context.emitEvent(Actors.NAVIGATOR, ExecutionState.ACT_FAIL, errorMsg);
+            return new ActionResult({
+              extractedContent: `[Integration action failed: ${errorMsg}]`,
+              error: errorMsg,
+              includeInMemory: true,
+            });
+          }
+        },
+        runIntegrationActionSchema,
+      );
+      actions.push(runIntegration);
     }
 
     return actions;

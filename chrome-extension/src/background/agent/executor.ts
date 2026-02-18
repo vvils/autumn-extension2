@@ -79,7 +79,7 @@ export class Executor {
       extraArgs?.connectedIntegrations,
     );
 
-    const actionBuilder = new ActionBuilder(context, extractorLLM, this.serverClient);
+    const actionBuilder = new ActionBuilder(context, extractorLLM, this.serverClient, extraArgs?.connectedIntegrations);
     const navigatorActionRegistry = new NavigatorActionRegistry(actionBuilder.buildDefaultActions());
 
     // Initialize agents with their respective prompts

@@ -223,14 +223,14 @@ async function initServerClient() {
               connectedAccounts: accounts.map(a => ({
                 accountId: a.id,
                 appName: a.app.name,
-                appSlug: a.app.name_slug,
-                createdAt: new Date(a.created_at).getTime(),
+                appSlug: a.app.nameSlug,
+                createdAt: new Date(a.createdAt).getTime(),
               })),
               availableActions: flatActions,
               lastSyncedAt: Date.now(),
             });
 
-            const connectedSlugs = new Set(accounts.map(a => a.app.name_slug));
+            const connectedSlugs = new Set(accounts.map(a => a.app.nameSlug));
             const lines: string[] = [];
             for (const [appSlug, app] of Object.entries(manifest.apps)) {
               if (!connectedSlugs.has(appSlug)) continue;

@@ -222,3 +222,13 @@ export const queryHotelDataActionSchema: ActionSchema = {
     query: z.string().describe('Natural language query about hotel data'),
   }),
 };
+
+export const runIntegrationActionSchema: ActionSchema = {
+  name: 'run_integration_action',
+  description: 'Execute an action on a connected third-party service (e.g. Slack, Gmail, Google Sheets)',
+  schema: z.object({
+    action_key: z.string().describe('the action key from the available integrations list'),
+    app_slug: z.string().describe('the app slug for the target service'),
+    parameters: z.record(z.unknown()).describe('parameters required by the action'),
+  }),
+};

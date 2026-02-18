@@ -110,15 +110,15 @@ export interface AddMessagePayload {
 
 export interface ConnectTokenResponse {
   token: string;
-  expires_at: string;
-  connect_link_url: string;
+  expiresAt: string;
+  connectLinkUrl: string;
 }
 
 export interface PipedreamAccount {
   id: string;
   name: string;
-  app: { name_slug: string; name: string };
-  created_at: string;
+  app: { nameSlug: string; name: string };
+  createdAt: string;
 }
 
 export interface IntegrationManifest {
