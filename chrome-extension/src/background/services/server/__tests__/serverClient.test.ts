@@ -362,7 +362,7 @@ describe('pullKeys', () => {
 
     const result = await client.pullKeys();
 
-    expect(result).toEqual(stubProviderKeys);
+    expect(result).toEqual({ keys: stubProviderKeys, agentModels: undefined });
   });
 
   it('returns null when server returns null keys', async () => {
@@ -372,7 +372,7 @@ describe('pullKeys', () => {
 
     const result = await client.pullKeys();
 
-    expect(result).toBeNull();
+    expect(result).toEqual({ keys: null, agentModels: undefined });
   });
 
   it('propagates API errors', async () => {

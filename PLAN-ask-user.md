@@ -8,10 +8,12 @@ The navigator agent currently runs autonomously and cannot pause to ask the user
 
 ### 1. `chrome-extension/src/background/agent/types.ts` — Add user input waiting to AgentContext
 
-Add a resolver field and two methods to the `AgentContext` class after `costTracker` (line 53). Note: all existing AgentContext members are public (no access modifiers), so keep this consistent. Also initialize `userInputResolve = null` in the constructor body alongside the other field initializations (lines 69-78).
+Add a resolver field and two methods to the `AgentContext` class after `costTracker` (line 53). Note: all existing AgentContext members are public (no access modifiers), so keep this consistent.
+
+**Field declaration** (line 54, after `costTracker: CostTracker;`): Declare the field _without_ a field initializer, matching the existing pattern where all fields are plain type annotations at the class level:
 
 ```typescript
-userInputResolve: ((value: string) => void) | null = null;
+userInputResolve: ((value: string) => void) | null;
 
 waitForUserInput(): Promise<string> {
   // Reject previous pending promise if re-entered (prevents orphaned promises)
@@ -39,6 +41,8 @@ resolveUserInput(value: string): void {
   this.userInputResolve = null;
 }
 ```
+
+**Constructor initialization** (line 79, after `this.costTracker = new CostTracker();`): Add `this.userInputResolve = null;` to match the existing pattern where every field is explicitly initialized in the constructor body.
 
 > **[HAZARD]** Re-entrancy: If the LLM emits two `ask_user` actions in one step, the second `waitForUserInput()` call would overwrite `userInputResolve`, orphaning the first promise forever (memory leak). The guard above resolves the previous promise with empty string before creating a new one. The prompt rule (step 11) also instructs the LLM to use `ask_user` as the only action in a step. Severity: Medium.
 
@@ -85,6 +89,8 @@ Add the action inside `buildDefaultActions()`, after the `wait` action (line 231
 
 Existing actions call `emitEvent` without `await` (fire-and-forget). However, for `ask_user` we must `await` the `WIDGET_EVENT` emission to ensure the widget arrives at the side panel _before_ we block on `waitForUserInput()`. The `emitEvent` method (`types.ts:81-89`) is `async` and calls `await this.eventManager.emit(event)`, so awaiting ensures the event callback (which posts to the port) completes before we block.
 
+Note: The first `emitEvent` call (`ACT_START`) is intentionally fire-and-forget (no `await`) to match every other action in the file. Only the `WIDGET_EVENT` emission is awaited.
+
 ```typescript
 const askUser = new Action(async (input) => {
   this.context.emitEvent(Actors.NAVIGATOR, ExecutionState.ACT_START, 'Asking user for input');
@@ -119,6 +125,8 @@ const askUser = new Action(async (input) => {
 actions.push(askUser);
 ```
 
+**Abort error propagation**: If the task is cancelled while `waitForUserInput()` is blocking, the promise rejects with `Error('Task cancelled while waiting for user input')`. This error propagates to `doMultiAction`'s catch block (`navigator.ts:444`), which emits `ACT_FAIL`, increments `errCount`, and pushes an error `ActionResult`. It does NOT re-throw (unless `errCount > 3`, which won't happen for a single cancellation). After `doMultiAction` returns, `execute()` checks `this.context.stopped` (line 222) and exits cleanly. The sequence is: `ACT_START` → `WIDGET_EVENT` → (cancel) → `ACT_FAIL` → `STEP_CANCEL` → `TASK_CANCEL`. This is correct behavior.
+
 > **[HAZARD]** The `doMultiAction` loop in `navigator.ts:378-460` adds a 1-second delay after each action (line 443) and checks `paused/stopped` status (lines 394, 438). During `ask_user`, `actionInstance.call()` blocks on `waitForUserInput()`, so the loop is suspended. If the LLM emits `ask_user` alongside other actions, subsequent actions execute after the user responds — potentially on a stale page state. The prompt rule in step 11 mitigates this by instructing the LLM to use `ask_user` as the sole action, but there is no code-level enforcement. Severity: Low (prompt-level constraint is standard; `done` relies on the same pattern).
 
 ### 4. `chrome-extension/src/background/agent/executor.ts` — Expose `resolveUserInput`
@@ -149,6 +157,8 @@ case 'permission_response': {
 ### 6. `pages/side-panel/src/components/widgets/types.ts` — Add PermissionWidgetData
 
 Add the new interface and update the union type. Also add `WidgetRespondFn` alongside the existing `WidgetApplyFn` (line 42).
+
+Note on widget type naming: Existing widget types use a `data-` prefix (`data-hotel-metrics-data`, `data-suggestion-action`) because they originate from the domain query system. The `permission-request` type intentionally breaks this convention to distinguish agent-system widgets from domain-data widgets. If a consistent prefix is preferred, use `agent-permission-request` instead and update all references in steps 3, 7, 8, 10A, and 10D.
 
 ```typescript
 export interface PermissionWidgetData {
@@ -187,7 +197,7 @@ Component structure:
 
 Note: `MarkdownContent` (`pages/side-panel/src/components/MarkdownContent.tsx`) only allows `['p', 'strong', 'em', 'code', 'pre', 'ul', 'ol', 'li', 'a', 'br']` — no tables. The schema description for `context` should reference "lists, summaries, comparisons" (not tables) so the LLM uses supported markdown elements.
 
-> **[HAZARD]** Historical unanswered widgets: If a task is cancelled while `ask_user` is pending, the widget is persisted without `answered: true`. On historical load, it renders as "pending" with interactive controls. Clicking a button calls `handlePermissionResponse` → port message → background checks `if (currentExecutor)` and safely drops it — no side effects. The UI still updates to "answered" state, which is mildly misleading but harmless. Consistent with `SuggestionActionWidget` which also remains interactive in historical sessions. Severity: Low.
+> **[HAZARD]** Historical unanswered widgets: If a task is cancelled while `ask_user` is pending, no `navigator_widget_response` message is persisted. On historical load, the widget's `data.answered` is falsy, so the component initializes in `pending` state with interactive controls (buttons and textarea remain enabled). Clicking a button in a historical session calls `handlePermissionResponse` → sends port message → background handler checks `if (currentExecutor)` which is likely `null` (no active task) and drops it — no side effects. The UI still transitions to "answered" state locally (state update in `setMessages`), and a `navigator_widget_response` message is persisted so subsequent loads show it as answered. This is consistent with `SuggestionActionWidget` (`widgets/SuggestionActionWidget.tsx`) which also remains fully interactive in historical sessions (Apply/Dismiss buttons work). Severity: Low.
 
 ### 8. `pages/side-panel/src/components/widgets/WidgetRenderer.tsx` — Add permission-request case
 
@@ -203,7 +213,7 @@ interface WidgetRendererProps {
   onRespond?: WidgetRespondFn;
 }
 
-// Add case in switch:
+// Add case in switch (TypeScript narrows `widget` to `PermissionWidgetData` via the discriminated union on `type`):
 case 'permission-request':
   return <PermissionWidget widget={widget} onRespond={onRespond} />;
 ```
@@ -249,7 +259,11 @@ case ExecutionState.WIDGET_EVENT: {
 }
 ```
 
-Note: We persist with `actor: 'navigator_widget'` (not `'widget'`) to distinguish from synthesizer widgets during historical session loading. Navigator widgets are standalone messages (`actor: Actors.SYSTEM`) rather than being merged into the nearest synthesizer message. The existing `mergeWidgetIntoMessages` utility (`packages/storage/lib/chat/mergeWidget.ts`) merges into `Actors.SYNTHESIZER` messages and must NOT be used here.
+The message uses `actor: Actors.SYSTEM` with `content: ''` (empty). In `MessageBlock` (`MessageList.tsx:38-77`), `ACTOR_PROFILES` maps `system` → `{ name: 'System' }` (`types/message.ts:7-11`), so a "SYSTEM" label appears above the widget. The empty `content` passed to `MarkdownContent` renders no DOM elements. The `widgets` array renders below via `WidgetRenderer`. Visual result: "SYSTEM" label → PermissionWidget.
+
+Note: The handler ends with `return;` (not `break;`) to exit `handleTaskState` entirely, preventing the `skip` check and `appendMessage` call at lines 551-557. This matches the pattern used by the SYNTHESIZER `WIDGET_EVENT` handler (line 526) and all `STEP_STREAMING` handlers.
+
+We persist with `actor: 'navigator_widget'` (not `'widget'`) to distinguish from synthesizer widgets during historical session loading. Navigator widgets are standalone messages (`actor: Actors.SYSTEM`) rather than being merged into the nearest synthesizer message. The existing `mergeWidgetIntoMessages` utility (`packages/storage/lib/chat/mergeWidget.ts`) merges into `Actors.SYNTHESIZER` messages and must NOT be used here.
 
 > **[HAZARD]** Historical session loading (`SidePanel.tsx` lines 608-641) currently merges ALL `role === 'widget'` messages into the nearest `Actors.SYNTHESIZER` message. Using `actor: 'navigator_widget'` avoids this code path entirely. The historical loading code (step 10D below) must handle this new role. Severity: High.
 
@@ -275,6 +289,8 @@ const handlePermissionResponse = useCallback((widgetId: string, response: string
 }, [persistMessage]);
 ```
 
+Note: The `setMessages` call maps over ALL messages in state, not just the one containing the target widget. This is O(n) over all messages but correct — the alternative (walking backwards to find the specific message, as done in `mergeWidgetIntoMessages`) would be more efficient but requires more complex immutable update logic. Since permission requests are infrequent (at most a few per task), the full scan is acceptable.
+
 **C) Pass to MessageList** (line 1232-1236):
 
 ```tsx
@@ -286,7 +302,9 @@ const handlePermissionResponse = useCallback((widgetId: string, response: string
 />
 ```
 
-**D) Update historical session loading** (lines 608-641 inside `setupConnection`). In the `conversation_messages_result` handler, add handling for `navigator_widget` and `navigator_widget_response` roles. These must be inserted between the existing `if (m.role === 'widget')` block (line 609) and the final `else` block (line 634):
+**D) Update historical session loading** (lines 608-641 inside `setupConnection`). In the `conversation_messages_result` handler, add handling for `navigator_widget` and `navigator_widget_response` roles. These must be inserted between the existing `if (m.role === 'widget')` block (line 609) and the final `else` block (line 634).
+
+**Ordering assumption**: The `navigator_widget_response` handler walks backwards through `mapped` to find the matching widget by `widgetId`. This requires the `navigator_widget` message to appear BEFORE its `navigator_widget_response` in the server's response array. This is guaranteed because: (1) the widget is persisted in the `WIDGET_EVENT` handler (before the user responds), (2) the response is persisted in `handlePermissionResponse` (after the user clicks), and (3) the server returns messages in `createdAt` order.
 
 ```typescript
 // After the existing `if (m.role === 'widget')` block, add:
@@ -337,13 +355,20 @@ Add rule 13 after rule 12 (Plan), before the closing `</system_instructions>` ta
 - ask_user should always be the only action in a step — do NOT combine it with other actions.
 ```
 
+## Dependency Notes
+
+- `handlePermissionResponse` is a standalone `useCallback` with dependency `[persistMessage]`. It is NOT called from `handleTaskState` — it flows through props to `MessageList` → `WidgetRenderer` → `PermissionWidget`. Therefore it does NOT need to be added to `handleTaskState`'s dependency array (line 559) or `setupConnection`'s (line 711).
+- `handlePermissionResponse` does NOT need to be added to the `setupConnection` dependency array because it's not used inside `setupConnection` — it's only referenced in the JSX.
+
 ## Edge Cases Handled
 
 - **Cancel while waiting**: `waitForUserInput()` listens to the abort signal and rejects the promise, preventing a permanent hang. The 300ms delay in `AgentContext.stop()` before abort is acceptable.
 - **Double response**: `resolveUserInput()` nulls out the resolver after first call — safe.
 - **Re-entrant waitForUserInput**: If somehow called twice, the previous promise is resolved with empty string before creating a new one.
-- **Historical conversations**: Permission widgets loaded from history render as answered (the `answered` flag and `response` are reconstructed from the persisted `navigator_widget_response` message). Unanswered widgets in historical sessions render in disabled state since `widget.data.answered` is falsy and the PermissionWidget should check this on mount.
+- **Historical conversations**: Permission widgets loaded from history render as answered when a `navigator_widget_response` message exists (the `answered` flag and `response` are reconstructed by step 10D's backwards walk). Unanswered widgets (task was cancelled before user responded) render in `pending` state with interactive controls — consistent with `SuggestionActionWidget` behavior. Clicking a button in a stale historical session safely no-ops on the background side (see step 7 hazard note).
 - **Side panel disconnect while waiting**: `port.onDisconnect` calls `currentExecutor?.cancel()` which triggers abort, which rejects the waiting promise.
+- **Abort listener cleanup**: When `waitForUserInput()` resolves normally (user responds), the `{ once: true }` abort listener remains registered but is harmless — calling `reject` on an already-settled promise is a no-op in JavaScript. The listener fires at most once (if abort happens later) and is then garbage-collected with the `AbortSignal`. Since `AgentContext` is created per task, there is no cross-task listener leak.
+- **Stop button during ask_user**: When the user clicks "Stop" in the UI, `handleStopTask` sends `cancel_task` → `executor.cancel()` → `context.stop()` → 300ms delay → `controller.abort()`. The abort signal triggers the `onAbort` callback in `waitForUserInput()`, which rejects the promise. The `doMultiAction` catch block handles the rejection (see step 3 abort error propagation note). The UI immediately enables input and hides the stop button (`handleStopTask` lines 996-997) regardless of the background resolution timing.
 
 ## Skipped from Original Plan
 

@@ -348,7 +348,7 @@ export class NavigatorAgent extends BaseAgent<z.ZodType, NavigatorResult> {
     let actions: Record<string, unknown>[] = [];
     if (Array.isArray(response.action)) {
       // if the item is null, skip it
-      actions = response.action.filter((item: unknown) => item !== null);
+      actions = response.action.filter((item: unknown) => item != null);
       if (actions.length === 0) {
         logger.warning('No valid actions found', response.action);
       }
@@ -387,6 +387,10 @@ export class NavigatorAgent extends BaseAgent<z.ZodType, NavigatorResult> {
     await browserContext.removeHighlight();
 
     for (const [i, action] of actions.entries()) {
+      if (!action || typeof action !== 'object') {
+        logger.warning(`Skipping invalid action at index ${i}:`, action);
+        continue;
+      }
       const actionName = Object.keys(action)[0];
       const actionArgs = action[actionName];
       try {

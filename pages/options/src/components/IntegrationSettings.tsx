@@ -1,4 +1,4 @@
-import { useState, useCallback, useSyncExternalStore } from 'react';
+import { useState, useCallback, useMemo, useSyncExternalStore } from 'react';
 import {
   serverSettingsStore,
   DEFAULT_SERVER_SETTINGS,
@@ -6,6 +6,7 @@ import {
   DEFAULT_INTEGRATION_SETTINGS,
 } from '@extension/storage';
 import type { CuratedAction } from '@extension/storage';
+import { createFrontendClient } from '@pipedream/sdk/browser';
 
 interface IntegrationSettingsProps {
   isDarkMode?: boolean;
@@ -37,13 +38,18 @@ export const IntegrationSettings = ({ isDarkMode = false }: IntegrationSettingsP
   const integrationSettings = integrationSnapshot ?? DEFAULT_INTEGRATION_SETTINGS;
 
   const [refreshing, setRefreshing] = useState(false);
-  const [connecting, setConnecting] = useState(false);
+  const [connectingApp, setConnectingApp] = useState<string | null>(null);
   const [disconnectingId, setDisconnectingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const cardClass = `rounded-lg border ${isDarkMode ? 'border-slate-700 bg-slate-800' : 'border-gray-200 bg-white'} p-6 text-left shadow-sm`;
   const headingClass = `mb-4 text-left text-xl font-semibold ${isDarkMode ? 'text-gray-200' : 'text-gray-800'}`;
   const labelClass = `text-xs font-medium uppercase tracking-wider ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`;
+
+  const connectedAppSlugs = useMemo(
+    () => new Set(integrationSettings.connectedAccounts.map(a => a.appSlug)),
+    [integrationSettings.connectedAccounts],
+  );
 
   const refresh = useCallback(async () => {
     setRefreshing(true);
@@ -87,24 +93,40 @@ export const IntegrationSettings = ({ isDarkMode = false }: IntegrationSettingsP
     }
   }, []);
 
-  const connect = useCallback(async () => {
-    setConnecting(true);
-    setError(null);
-    try {
-      const res = await serverFetch('/ai/extension/integrations/connect-token', { method: 'POST' });
-      if (!res.ok) throw new Error(`Server returned ${res.status}`);
-      const data = await res.json();
-      const connectUrl = data.connectLinkUrl;
-      if (!connectUrl) {
-        throw new Error('No connect link returned');
+  const connectApp = useCallback(
+    async (appSlug: string) => {
+      setConnectingApp(appSlug);
+      setError(null);
+      try {
+        const { userId } = await serverSettingsStore.getSettings();
+        if (!userId) throw new Error('Not authenticated');
+
+        const pd = createFrontendClient({
+          externalUserId: userId,
+          tokenCallback: async () => {
+            const res = await serverFetch('/ai/extension/integrations/connect-token', { method: 'POST' });
+            if (!res.ok) throw new Error(`Server returned ${res.status}`);
+            return res.json();
+          },
+        });
+        pd.connectAccount({
+          app: appSlug,
+          onSuccess: async () => {
+            setConnectingApp(null);
+            await refresh();
+          },
+          onError: (err: Error) => {
+            setError(`Connection failed: ${err.message}`);
+            setConnectingApp(null);
+          },
+        });
+      } catch (err) {
+        setError(`Failed to start connection: ${err instanceof Error ? err.message : 'unknown error'}`);
+        setConnectingApp(null);
       }
-      await chrome.tabs.create({ url: connectUrl });
-    } catch (err) {
-      setError(`Failed to start connection flow: ${err instanceof Error ? err.message : 'unknown error'}`);
-    } finally {
-      setConnecting(false);
-    }
-  }, []);
+    },
+    [refresh],
+  );
 
   const disconnect = useCallback(
     async (accountId: string) => {
@@ -187,22 +209,6 @@ export const IntegrationSettings = ({ isDarkMode = false }: IntegrationSettingsP
         )}
       </div>
 
-      {/* Connect a Service */}
-      <div className={cardClass}>
-        <h2 className={headingClass}>{'Connect a Service'}</h2>
-        <p className={`mb-4 text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-          {"You'll be redirected to authorize access."}
-        </p>
-        <button
-          onClick={connect}
-          disabled={connecting}
-          className={`rounded-md px-4 py-2 text-sm font-medium text-white ${
-            connecting ? 'bg-blue-400' : 'bg-blue-600 hover:bg-blue-700'
-          } disabled:opacity-50`}>
-          {connecting ? 'Connecting...' : 'Connect'}
-        </button>
-      </div>
-
       {/* Available Actions */}
       {integrationSettings.availableActions.length > 0 && (
         <div className={cardClass}>
@@ -210,7 +216,26 @@ export const IntegrationSettings = ({ isDarkMode = false }: IntegrationSettingsP
           <div className="space-y-4">
             {Array.from(actionsByApp.entries()).map(([appSlug, actions]) => (
               <div key={appSlug}>
-                <h3 className={`mb-2 ${labelClass}`}>{appSlug}</h3>
+                <div className="mb-2 flex items-center justify-between">
+                  <h3 className={labelClass}>{appSlug}</h3>
+                  {connectedAppSlugs.has(appSlug) ? (
+                    <span
+                      className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${
+                        isDarkMode ? 'bg-green-900/50 text-green-300' : 'bg-green-100 text-green-700'
+                      }`}>
+                      {'Connected'}
+                    </span>
+                  ) : (
+                    <button
+                      onClick={() => connectApp(appSlug)}
+                      disabled={connectingApp !== null}
+                      className={`rounded-md px-3 py-1 text-xs font-medium text-white ${
+                        connectingApp === appSlug ? 'bg-blue-400' : 'bg-blue-600 hover:bg-blue-700'
+                      } disabled:opacity-50`}>
+                      {connectingApp === appSlug ? 'Connecting...' : 'Connect'}
+                    </button>
+                  )}
+                </div>
                 <div className="space-y-2">
                   {actions.map(action => (
                     <div

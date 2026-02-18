@@ -774,7 +774,10 @@ export class ActionBuilder {
             });
           }
         },
-        runIntegrationActionSchema,
+        {
+          ...runIntegrationActionSchema,
+          description: `${runIntegrationActionSchema.description}. Available actions:\n${this.connectedIntegrations}`,
+        },
       );
       actions.push(runIntegration);
     }

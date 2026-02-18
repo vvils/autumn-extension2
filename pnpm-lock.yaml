@@ -112,9 +112,6 @@ importers:
 
   chrome-extension:
     dependencies:
-      '@extension/i18n':
-        specifier: workspace:*
-        version: link:../packages/i18n
       '@extension/shared':
         specifier: workspace:*
         version: link:../packages/shared
@@ -344,9 +341,6 @@ importers:
 
   pages/options:
     dependencies:
-      '@extension/i18n':
-        specifier: workspace:*
-        version: link:../../packages/i18n
       '@extension/shared':
         specifier: workspace:*
         version: link:../../packages/shared
@@ -356,6 +350,9 @@ importers:
       '@extension/ui':
         specifier: workspace:*
         version: link:../../packages/ui
+      '@pipedream/sdk':
+        specifier: ^2.3.7
+        version: 2.3.7
       react-icons:
         specifier: ^5.0.0
         version: 5.5.0(react@18.3.1)
@@ -378,9 +375,6 @@ importers:
 
   pages/side-panel:
     dependencies:
-      '@extension/i18n':
-        specifier: workspace:*
-        version: link:../../packages/i18n
       '@extension/shared':
         specifier: workspace:*
         version: link:../../packages/shared
@@ -807,6 +801,10 @@ packages:
   '@opentelemetry/semantic-conventions@1.39.0':
     resolution: {integrity: sha512-R5R9tb2AXs2IRLNKLBJDynhkfmx7mX0vi8NkhZb3gUkPWHn6HXk5J8iQ/dql0U3ApfWym4kXXmBDRGO+oeOfjg==}
     engines: {node: '>=14'}
+
+  '@pipedream/sdk@2.3.7':
+    resolution: {integrity: sha512-kr3qbP650P8d7nS+NWT9GK7jCtilLMcvhoEigqkgcJepwWPWdcg7vryHUli4JCgoMTXW7eO49Pgz0ZckOY6gVw==}
+    engines: {node: '>=18.0.0'}
 
   '@pkgr/core@0.2.9':
     resolution: {integrity: sha512-QNqXyfVS2wm9hweSYD2O7F0G06uurj9kZ96TRQE5Y9hU7+tgdZwIkbAKc5Ocy1HxEY2kuDQa6cQ1WRs/O5LFKA==}
@@ -4500,6 +4498,8 @@ snapshots:
       '@opentelemetry/semantic-conventions': 1.39.0
 
   '@opentelemetry/semantic-conventions@1.39.0': {}
+
+  '@pipedream/sdk@2.3.7': {}
 
   '@pkgr/core@0.2.9': {}
 

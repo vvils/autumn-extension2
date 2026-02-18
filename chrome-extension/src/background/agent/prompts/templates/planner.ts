@@ -92,7 +92,23 @@ export function buildPlannerSystemPrompt(options?: BuildPlannerSystemPromptOptio
 ${commonSecurityRules}
 
 ${responsibilitiesSection}
-${connectedIntegrations ? `\n# CONNECTED INTEGRATIONS (Pipedream):\nThe user has the following app integrations connected. You may suggest using these when relevant to the task:\n${connectedIntegrations}\n` : ''}
+${
+  connectedIntegrations
+    ? `
+# CONNECTED INTEGRATIONS (Pipedream):
+The user has the following app integrations connected:
+${connectedIntegrations}
+
+IMPORTANT — Integration routing rules:
+- When a task can be fulfilled by a connected integration action, ALWAYS prefer it over browser automation.
+  For example, "check my email" should use the gmail-find-email integration, NOT navigate to gmail.com.
+- Set task_type to "browser" (the navigator agent will execute the action via run_integration_action).
+- In "next_steps", explicitly name the integration action_key, app_slug, and required parameters so the navigator can execute it directly.
+  Example next_steps: "Use run_integration_action with action_key 'gmail-find-email', app_slug 'gmail', parameters: { query: 'is:unread' }"
+- Only fall back to browser automation if no connected integration covers the task.
+`
+    : ''
+}
 # TASK COMPLETION VALIDATION:
 When determining if a task is "done":
 1. Read the task description carefully - neither miss any detailed requirements nor make up any requirements
