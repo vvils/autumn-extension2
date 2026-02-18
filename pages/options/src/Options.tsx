@@ -2,7 +2,6 @@ import { useState } from 'react';
 import '@src/Options.css';
 import { Button } from '@extension/ui';
 import { withErrorBoundary, withSuspense } from '@extension/shared';
-import { t } from '@extension/i18n';
 import { FiSettings, FiShield, FiTrendingUp, FiServer } from 'react-icons/fi';
 import { GeneralSettings } from './components/GeneralSettings';
 import { FirewallSettings } from './components/FirewallSettings';
@@ -12,9 +11,9 @@ import { ServerSettings } from './components/ServerSettings';
 type TabTypes = 'general' | 'firewall' | 'analytics' | 'server';
 
 const TABS: { id: TabTypes; icon: React.ComponentType<{ className?: string }>; label: string }[] = [
-  { id: 'server', icon: FiServer, label: t('options_tabs_server') },
-  { id: 'general', icon: FiSettings, label: t('options_tabs_general') },
-  { id: 'firewall', icon: FiShield, label: t('options_tabs_firewall') },
+  { id: 'server', icon: FiServer, label: 'Server' },
+  { id: 'general', icon: FiSettings, label: 'General' },
+  { id: 'firewall', icon: FiShield, label: 'Firewall' },
   { id: 'analytics', icon: FiTrendingUp, label: 'Analytics' },
 ];
 
@@ -43,9 +42,7 @@ const Options = () => {
       {/* Vertical Navigation Bar */}
       <nav className={`w-48 border-r ${isDarkMode ? 'border-slate-700 bg-slate-800/80' : 'border-gray-200 bg-white'}`}>
         <div className="p-4">
-          <h1 className={`mb-6 text-xl font-bold ${isDarkMode ? 'text-gray-200' : 'text-gray-800'}`}>
-            {t('options_nav_header')}
-          </h1>
+          <h1 className={`mb-6 text-xl font-bold ${isDarkMode ? 'text-gray-200' : 'text-gray-800'}`}>{'Settings'}</h1>
           <ul className="space-y-1">
             {TABS.map(item => (
               <li key={item.id}>

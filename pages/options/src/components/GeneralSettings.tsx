@@ -1,7 +1,5 @@
 import { useState, useEffect } from 'react';
 import { type GeneralSettingsConfig, generalSettingsStore, DEFAULT_GENERAL_SETTINGS } from '@extension/storage';
-import { t } from '@extension/i18n';
-
 interface GeneralSettingsProps {
   isDarkMode?: boolean;
 }
@@ -32,21 +30,21 @@ export const GeneralSettings = ({ isDarkMode = false }: GeneralSettingsProps) =>
       <div
         className={`rounded-lg border ${isDarkMode ? 'border-slate-700 bg-slate-800' : 'border-gray-200 bg-white'} p-6 text-left shadow-sm`}>
         <h2 className={`mb-4 text-left text-xl font-semibold ${isDarkMode ? 'text-gray-200' : 'text-gray-800'}`}>
-          {t('options_general_header')}
+          {'General'}
         </h2>
 
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <div>
               <h3 className={`text-base font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
-                {t('options_general_maxSteps')}
+                {'Max Steps per Task'}
               </h3>
               <p className={`text-sm font-normal ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                {t('options_general_maxSteps_desc')}
+                {'Step limit per task'}
               </p>
             </div>
             <label htmlFor="maxSteps" className="sr-only">
-              {t('options_general_maxSteps')}
+              {'Max Steps per Task'}
             </label>
             <input
               id="maxSteps"
@@ -62,14 +60,14 @@ export const GeneralSettings = ({ isDarkMode = false }: GeneralSettingsProps) =>
           <div className="flex items-center justify-between">
             <div>
               <h3 className={`text-base font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
-                {t('options_general_maxActions')}
+                {'Max Actions per Step'}
               </h3>
               <p className={`text-sm font-normal ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                {t('options_general_maxActions_desc')}
+                {'Action limit per step'}
               </p>
             </div>
             <label htmlFor="maxActionsPerStep" className="sr-only">
-              {t('options_general_maxActions')}
+              {'Max Actions per Step'}
             </label>
             <input
               id="maxActionsPerStep"
@@ -85,14 +83,14 @@ export const GeneralSettings = ({ isDarkMode = false }: GeneralSettingsProps) =>
           <div className="flex items-center justify-between">
             <div>
               <h3 className={`text-base font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
-                {t('options_general_maxFailures')}
+                {'Failure Tolerance'}
               </h3>
               <p className={`text-sm font-normal ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                {t('options_general_maxFailures_desc')}
+                {'How many consecutive failures before stopping'}
               </p>
             </div>
             <label htmlFor="maxFailures" className="sr-only">
-              {t('options_general_maxFailures')}
+              {'Failure Tolerance'}
             </label>
             <input
               id="maxFailures"
@@ -108,10 +106,10 @@ export const GeneralSettings = ({ isDarkMode = false }: GeneralSettingsProps) =>
           <div className="flex items-center justify-between">
             <div>
               <h3 className={`text-base font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
-                {t('options_general_enableVision')}
+                {'Enable Vision'}
               </h3>
               <p className={`text-sm font-normal ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                {t('options_general_enableVision_desc')}
+                {'Use vision capability of LLMs (consumes more tokens for better results)'}
               </p>
             </div>
             <div className="relative inline-flex cursor-pointer items-center">
@@ -125,7 +123,7 @@ export const GeneralSettings = ({ isDarkMode = false }: GeneralSettingsProps) =>
               <label
                 htmlFor="useVision"
                 className={`peer h-6 w-11 rounded-full ${isDarkMode ? 'bg-slate-600' : 'bg-gray-200'} after:absolute after:left-[2px] after:top-[2px] after:size-5 after:rounded-full after:border after:border-gray-300 after:bg-white after:transition-all after:content-[''] peer-checked:bg-accent peer-checked:after:translate-x-full peer-checked:after:border-white peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-accent-muted`}>
-                <span className="sr-only">{t('options_general_enableVision')}</span>
+                <span className="sr-only">{'Enable Vision'}</span>
               </label>
             </div>
           </div>
@@ -133,10 +131,10 @@ export const GeneralSettings = ({ isDarkMode = false }: GeneralSettingsProps) =>
           <div className="flex items-center justify-between">
             <div>
               <h3 className={`text-base font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
-                {t('options_general_displayHighlights')}
+                {'Display Highlights'}
               </h3>
               <p className={`text-sm font-normal ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                {t('options_general_displayHighlights_desc')}
+                {'Show visual highlights on interactive elements (e.g. buttons, links, etc.)'}
               </p>
             </div>
             <div className="relative inline-flex cursor-pointer items-center">
@@ -150,7 +148,7 @@ export const GeneralSettings = ({ isDarkMode = false }: GeneralSettingsProps) =>
               <label
                 htmlFor="displayHighlights"
                 className={`peer h-6 w-11 rounded-full ${isDarkMode ? 'bg-slate-600' : 'bg-gray-200'} after:absolute after:left-[2px] after:top-[2px] after:size-5 after:rounded-full after:border after:border-gray-300 after:bg-white after:transition-all after:content-[''] peer-checked:bg-accent peer-checked:after:translate-x-full peer-checked:after:border-white peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-accent-muted`}>
-                <span className="sr-only">{t('options_general_displayHighlights')}</span>
+                <span className="sr-only">{'Display Highlights'}</span>
               </label>
             </div>
           </div>
@@ -158,14 +156,14 @@ export const GeneralSettings = ({ isDarkMode = false }: GeneralSettingsProps) =>
           <div className="flex items-center justify-between">
             <div>
               <h3 className={`text-base font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
-                {t('options_general_planningInterval')}
+                {'Replanning Frequency'}
               </h3>
               <p className={`text-sm font-normal ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                {t('options_general_planningInterval_desc')}
+                {'Reconsider and update the plan every [Number] steps'}
               </p>
             </div>
             <label htmlFor="planningInterval" className="sr-only">
-              {t('options_general_planningInterval')}
+              {'Replanning Frequency'}
             </label>
             <input
               id="planningInterval"
@@ -181,15 +179,15 @@ export const GeneralSettings = ({ isDarkMode = false }: GeneralSettingsProps) =>
           <div className="flex items-center justify-between">
             <div>
               <h3 className={`text-base font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
-                {t('options_general_minWaitPageLoad')}
+                {'Page Load Wait Time'}
               </h3>
               <p className={`text-sm font-normal ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                {t('options_general_minWaitPageLoad_desc')}
+                {'Minimum wait time after page loads (250-5000ms)'}
               </p>
             </div>
             <div className="flex items-center space-x-2">
               <label htmlFor="minWaitPageLoad" className="sr-only">
-                {t('options_general_minWaitPageLoad')}
+                {'Page Load Wait Time'}
               </label>
               <input
                 id="minWaitPageLoad"
@@ -207,10 +205,10 @@ export const GeneralSettings = ({ isDarkMode = false }: GeneralSettingsProps) =>
           <div className="flex items-center justify-between">
             <div>
               <h3 className={`text-base font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
-                {t('options_general_showCostEstimate')}
+                {'Show Cost Estimate'}
               </h3>
               <p className={`text-sm font-normal ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                {t('options_general_showCostEstimate_desc')}
+                {'Display estimated token usage and cost during task execution'}
               </p>
             </div>
             <div className="relative inline-flex cursor-pointer items-center">
@@ -224,7 +222,7 @@ export const GeneralSettings = ({ isDarkMode = false }: GeneralSettingsProps) =>
               <label
                 htmlFor="showCostEstimate"
                 className={`peer h-6 w-11 rounded-full ${isDarkMode ? 'bg-slate-600' : 'bg-gray-200'} after:absolute after:left-[2px] after:top-[2px] after:size-5 after:rounded-full after:border after:border-gray-300 after:bg-white after:transition-all after:content-[''] peer-checked:bg-accent peer-checked:after:translate-x-full peer-checked:after:border-white peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-accent-muted`}>
-                <span className="sr-only">{t('options_general_showCostEstimate')}</span>
+                <span className="sr-only">{'Show Cost Estimate'}</span>
               </label>
             </div>
           </div>
@@ -232,10 +230,10 @@ export const GeneralSettings = ({ isDarkMode = false }: GeneralSettingsProps) =>
           <div className="flex items-center justify-between">
             <div>
               <h3 className={`text-base font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
-                {t('options_general_replayHistoricalTasks')}
+                {'Replay Historical Tasks( experimental )'}
               </h3>
               <p className={`text-sm font-normal ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                {t('options_general_replayHistoricalTasks_desc')}
+                {'Enable storing and replaying of agent step history (experimental, may have issues)'}
               </p>
             </div>
             <div className="relative inline-flex cursor-pointer items-center">
@@ -249,7 +247,7 @@ export const GeneralSettings = ({ isDarkMode = false }: GeneralSettingsProps) =>
               <label
                 htmlFor="replayHistoricalTasks"
                 className={`peer h-6 w-11 rounded-full ${isDarkMode ? 'bg-slate-600' : 'bg-gray-200'} after:absolute after:left-[2px] after:top-[2px] after:size-5 after:rounded-full after:border after:border-gray-300 after:bg-white after:transition-all after:content-[''] peer-checked:bg-accent peer-checked:after:translate-x-full peer-checked:after:border-white peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-accent-muted`}>
-                <span className="sr-only">{t('options_general_replayHistoricalTasks')}</span>
+                <span className="sr-only">{'Replay Historical Tasks( experimental )'}</span>
               </label>
             </div>
           </div>

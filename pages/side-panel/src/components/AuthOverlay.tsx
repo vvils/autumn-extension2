@@ -1,5 +1,3 @@
-import { t } from '@extension/i18n';
-
 const CLIENT_URL = import.meta.env.VITE_CLIENT_URL || 'http://localhost:3000';
 
 export function AuthOverlay() {
@@ -13,13 +11,15 @@ export function AuthOverlay() {
   return (
     <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-white p-6 text-center">
       <img src="/logo.svg" alt="Autumn" className="mb-6 h-8" />
-      <h2 className="mb-2 text-lg font-semibold text-gray-900">{t('auth_overlay_title')}</h2>
-      <p className="mb-6 max-w-[260px] text-sm text-gray-500">{t('auth_overlay_subtitle')}</p>
+      <h2 className="mb-2 text-lg font-semibold text-gray-900">{'Sign in to get started'}</h2>
+      <p className="mb-6 max-w-[260px] text-sm text-gray-500">
+        {'Sign in to your Autumn account to start using the extension'}
+      </p>
       <button
         type="button"
         onClick={handleSignIn}
         className="bg-accent hover:bg-accent-hover rounded-lg px-5 py-2.5 text-sm font-medium text-white transition-colors">
-        {t('auth_overlay_signIn')}
+        {'Sign in'}
       </button>
     </div>
   );

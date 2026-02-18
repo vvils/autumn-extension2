@@ -10,6 +10,158 @@ This plan was validated against the actual codebase patterns. Changes from origi
 
 ---
 
+## Phase 0: Backend Implementation
+
+The 5 endpoints the extension calls don't exist yet on this backend. This phase adds the NestJS backend implementation that powers the entire integration. The extension agent runs third-party actions (Slack, Gmail, Google Sheets) via Pipedream Connect; the backend handles all Pipedream SDK interactions.
+
+### 0a. Install Pipedream SDK
+
+```bash
+npm install @pipedream/sdk --save-exact
+```
+
+### 0b. Environment Variables
+
+Add to `.env`:
+
+```
+PIPEDREAM_PROJECT_ID=
+PIPEDREAM_CLIENT_ID=
+PIPEDREAM_CLIENT_SECRET=
+PIPEDREAM_PROJECT_ENVIRONMENT=development
+```
+
+### 0c. PipedreamService
+
+**New file**: `src/shared/providers/pipedream.service.ts`
+
+Follows the `StripeService` pattern: singleton SDK init in constructor via `process.env`.
+
+```typescript
+@Injectable()
+export class PipedreamService {
+  private readonly client: PipedreamClient;
+  private readonly logger = new Logger(PipedreamService.name);
+
+  constructor() {
+    this.client = new PipedreamClient({
+      clientId: process.env.PIPEDREAM_CLIENT_ID,
+      clientSecret: process.env.PIPEDREAM_CLIENT_SECRET,
+    });
+  }
+```
+
+**Methods:**
+
+| Method | SDK Call | Purpose |
+|---|---|---|
+| `createConnectToken(userId)` | `client.tokens.create({ externalUserId })` | Generate token for frontend OAuth flow |
+| `getAccounts(userId)` | `client.accounts.list({ externalUserId })` | List user's connected accounts |
+| `deleteAccount(accountId)` | `client.accounts.delete(accountId)` | Disconnect an account |
+| `runAction(userId, actionKey, appSlug, params)` | `client.actions.run({ id, externalUserId, configuredProps })` | Execute action — auto-injects `authProvisionId` |
+| `getManifest()` | Returns curated static config | Available apps + actions |
+
+**Key design: `runAction` auto-resolves `authProvisionId`**. The extension sends `appSlug` + `parameters`. The backend:
+1. Calls `getAccounts(userId)` to find the account matching `appSlug` via `account.app.nameSlug`
+2. Injects `{ [appSlug]: { authProvisionId: account.id } }` into `configuredProps`
+3. Merges with the user-provided parameters
+4. Calls `client.actions.run()`
+
+This keeps Pipedream internals out of the extension/agent layer.
+
+**Manifest**: Hardcoded curated action list (v1). Keeps it simple, gives us control over what the agent can do. Expandable later by querying Pipedream's component registry.
+
+```typescript
+const CURATED_INTEGRATIONS: Record<string, CuratedApp> = {
+  slack: {
+    name: 'Slack',
+    actions: [
+      { key: 'slack-send-message-to-channel', name: 'Send Message to Channel', description: 'Send a message to a Slack channel', requiredProps: ['channel', 'text'] },
+    ],
+  },
+  gmail: {
+    name: 'Gmail',
+    actions: [
+      { key: 'gmail-send-email', name: 'Send Email', description: 'Send an email via Gmail', requiredProps: ['to', 'subject', 'body'] },
+    ],
+  },
+  google_sheets: {
+    name: 'Google Sheets',
+    actions: [
+      { key: 'google_sheets-add-single-row', name: 'Add Row', description: 'Add a single row to a Google Sheets spreadsheet', requiredProps: ['spreadsheetId', 'sheetName', 'cells'] },
+    ],
+  },
+};
+```
+
+### 0d. ExtensionIntegrationsController
+
+**New file**: `src/modules/ai/controllers/extension-integrations.controller.ts`
+
+Follows `ExtensionController` patterns exactly:
+- `@Controller('ai/extension/integrations')`
+- `@UseGuards(JwtAuthGuard)` at class level
+- `@ApiBearerAuth()`, `@ApiTags('AI Extension Integrations')`
+- `requireUserId()` helper (same pattern as `ExtensionController.requireUserId`)
+
+**Endpoints:**
+
+| Route | Method | Handler | Returns |
+|---|---|---|---|
+| `/connect-token` | POST | `createConnectToken()` | `{ token, expiresAt, connectLinkUrl }` |
+| `/accounts` | GET | `getAccounts()` | `Account[]` |
+| `/accounts/:accountId` | DELETE | `disconnectAccount()` | 204 No Content |
+| `/manifest` | GET | `getManifest()` | `{ apps: Record<string, { name, actions[] }> }` |
+| `/actions/run` | POST | `runAction()` | `{ exports?, ret?, os? }` |
+
+### 0e. DTOs
+
+**New file**: `src/modules/ai/dto/integration.dto.ts`
+
+```typescript
+class RunIntegrationActionDto {
+  @IsString() actionKey: string;
+  @IsString() appSlug: string;
+  @IsObject() parameters: Record<string, unknown>;
+}
+```
+
+### 0f. Register in AI Module
+
+**Modify**: `src/modules/ai/ai.module.ts`
+
+- Add `PipedreamService` to `providers`
+- Add `ExtensionIntegrationsController` to `controllers`
+
+### Phase 0 Files Summary
+
+| File | Action |
+|---|---|
+| `src/shared/providers/pipedream.service.ts` | **New** — Pipedream SDK wrapper |
+| `src/modules/ai/controllers/extension-integrations.controller.ts` | **New** — 5 integration endpoints |
+| `src/modules/ai/dto/integration.dto.ts` | **New** — Request validation DTOs |
+| `src/modules/ai/ai.module.ts` | Add controller + provider |
+| `.env` | Add 4 Pipedream env vars |
+
+### Phase 0 Verification
+
+```bash
+# Type check
+npm run build
+
+# Test the endpoints manually
+# 1. Get manifest (no Pipedream credentials needed)
+curl -H "Authorization: Bearer $TOKEN" http://localhost:3004/ai/extension/integrations/manifest
+
+# 2. Create connect token (needs Pipedream credentials)
+curl -X POST -H "Authorization: Bearer $TOKEN" http://localhost:3004/ai/extension/integrations/connect-token
+
+# 3. List accounts
+curl -H "Authorization: Bearer $TOKEN" http://localhost:3004/ai/extension/integrations/accounts
+```
+
+---
+
 ## Phase 1: Storage — `integrationSettings.ts`
 
 **New file**: `packages/storage/lib/settings/integrationSettings.ts`
@@ -519,6 +671,10 @@ Keys to add (shown in English; pt_BR/zh_TW get the same keys with translated mes
 
 | File | Action | Phase |
 |---|---|---|
+| `src/shared/providers/pipedream.service.ts` | **New** — Pipedream SDK wrapper | 0 |
+| `src/modules/ai/controllers/extension-integrations.controller.ts` | **New** — 5 integration endpoints | 0 |
+| `src/modules/ai/dto/integration.dto.ts` | **New** — Request validation DTOs | 0 |
+| `src/modules/ai/ai.module.ts` | Add controller + provider | 0 |
 | `packages/storage/lib/settings/integrationSettings.ts` | **New** | 1 |
 | `packages/storage/lib/settings/index.ts` | Add export | 1 |
 | `chrome-extension/src/background/services/server/types.ts` | Add 5 interfaces | 2 |
@@ -535,7 +691,7 @@ Keys to add (shown in English; pt_BR/zh_TW get the same keys with translated mes
 | `packages/i18n/locales/pt_BR/messages.json` | Add 12 keys | 5 |
 | `packages/i18n/locales/zh_TW/messages.json` | Add 12 keys | 5 |
 
-Total: 2 new files, 13 modified files.
+Total: 5 new files, 14 modified files.
 
 ---
 

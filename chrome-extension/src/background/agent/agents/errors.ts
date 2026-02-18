@@ -232,7 +232,7 @@ export class MaxStepsReachedError extends Error {
   /**
    * Creates a new MaxStepsReachedError
    *
-   * @param message - The localized error message (should use t('exec_errors_maxStepsReached'))
+   * @param message - The error message
    * @param cause - The original error that caused this error
    */
   constructor(
@@ -263,7 +263,7 @@ export class MaxFailuresReachedError extends Error {
   /**
    * Creates a new MaxFailuresReachedError
    *
-   * @param message - The localized error message (should use t('exec_errors_maxFailuresReached'))
+   * @param message - The error message
    * @param cause - The original error that caused this error
    */
   constructor(

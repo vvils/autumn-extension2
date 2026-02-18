@@ -8,8 +8,6 @@ import {
   type AgentNameEnum,
 } from '@extension/storage';
 import type { ModelConfig } from '@extension/storage/lib/settings/agentModels';
-import { t } from '@extension/i18n';
-
 interface ServerSettingsProps {
   isDarkMode?: boolean;
 }
@@ -59,26 +57,24 @@ export const ServerSettings = ({ isDarkMode = false }: ServerSettingsProps) => {
     <section className="space-y-6">
       {/* Server URL */}
       <div className={cardClass}>
-        <h2 className={headingClass}>{t('options_server_url_label')}</h2>
+        <h2 className={headingClass}>{'Server URL'}</h2>
         <p className={`text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>
-          {settings.serverUrl || t('options_server_status_notConfigured')}
+          {settings.serverUrl || 'Not configured'}
         </p>
       </div>
 
       {/* Authentication Status */}
       <div className={cardClass}>
-        <h2 className={headingClass}>{t('options_server_auth_title')}</h2>
+        <h2 className={headingClass}>{'Authentication'}</h2>
         <div className="flex items-center gap-3">
           <span className={`inline-block size-2.5 rounded-full ${isAuthenticated ? 'bg-green-500' : 'bg-red-500'}`} />
           <p className={`text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>
-            {isAuthenticated
-              ? t('options_server_status_autoConnected', [settings.userId])
-              : t('options_server_status_notConnected')}
+            {isAuthenticated ? `Automatically connected as ${settings.userId}` : 'Not connected'}
           </p>
         </div>
         {!isAuthenticated && (
           <p className={`mt-2 text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-            {t('options_server_status_notConnected_hint')}
+            {'Sign in at the Autumn dashboard to connect automatically'}
           </p>
         )}
       </div>
@@ -88,18 +84,18 @@ export const ServerSettings = ({ isDarkMode = false }: ServerSettingsProps) => {
         <div className={cardClass}>
           <div className="mb-4 flex items-center gap-2">
             <h2 className={`text-left text-xl font-semibold ${isDarkMode ? 'text-gray-200' : 'text-gray-800'}`}>
-              {t('options_server_config_title')}
+              {'Server Configuration'}
             </h2>
             <span
               className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${isDarkMode ? 'bg-slate-600 text-gray-300' : 'bg-gray-100 text-gray-500'}`}>
-              {t('options_server_config_managed')}
+              {'Managed by server'}
             </span>
           </div>
 
           {/* API Keys / Providers */}
           {Object.keys(providers).length > 0 && (
             <div className="mb-5">
-              <h3 className={`mb-2 ${labelClass}`}>{t('options_server_config_providers')}</h3>
+              <h3 className={`mb-2 ${labelClass}`}>{'API Providers'}</h3>
               <div className="space-y-2">
                 {Object.entries(providers).map(([id, config]) => (
                   <div
@@ -127,7 +123,7 @@ export const ServerSettings = ({ isDarkMode = false }: ServerSettingsProps) => {
           {/* Agent Model Assignments */}
           {Object.keys(agentModels).length > 0 && (
             <div>
-              <h3 className={`mb-2 ${labelClass}`}>{t('options_server_config_agentModels')}</h3>
+              <h3 className={`mb-2 ${labelClass}`}>{'Agent Model Assignments'}</h3>
               <div className="space-y-2">
                 {Object.entries(agentModels).map(([agentKey, config]) => (
                   <div
@@ -148,7 +144,7 @@ export const ServerSettings = ({ isDarkMode = false }: ServerSettingsProps) => {
 
           {Object.keys(providers).length === 0 && Object.keys(agentModels).length === 0 && (
             <p className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-              {t('options_server_config_empty')}
+              {'No configuration received from server yet'}
             </p>
           )}
         </div>

@@ -49,14 +49,10 @@ function withOperaSidebar(manifest) {
 const manifest = withOperaSidebar(
   withSidePanel({
     manifest_version: 3,
-    default_locale: 'en',
-    /**
-     * if you want to support multiple languages, you can use the following reference
-     * https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/Internationalization
-     */
-    name: '__MSG_app_metadata_name__',
+    name: 'Autumn AI Co-Pilot',
     version: packageJson.version,
-    description: '__MSG_app_metadata_description__',
+    description:
+      'Automate web tasks with AI! Autumn AI Co-Pilot is a browser extension that lets you extract data, fill forms, and more.',
     host_permissions: ['<all_urls>'],
     permissions: [
       'storage',

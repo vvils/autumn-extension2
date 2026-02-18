@@ -1,6 +1,5 @@
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import { type ActionResult, AgentContext, type AgentOptions, type AgentOutput } from './types';
-import { t } from '@extension/i18n';
 import { NavigatorAgent, NavigatorActionRegistry } from './agents/navigator';
 import { PlannerAgent, type PlannerOutput, TaskType } from './agents/planner';
 import { NavigatorPrompt } from './prompts/navigator';
@@ -36,6 +35,7 @@ export interface ExecutorExtraArgs {
   generalSettings?: GeneralSettingsConfig;
   serverClient?: ServerClient | null;
   hotelCapabilities?: string;
+  connectedIntegrations?: string;
 }
 
 export class Executor {
@@ -73,7 +73,11 @@ export class Executor {
     this.generalSettings = extraArgs?.generalSettings;
     this.tasks.push(task);
     this.navigatorPrompt = new NavigatorPrompt(context.options.maxActionsPerStep);
-    this.plannerPrompt = new PlannerPrompt(!!this.serverClient, extraArgs?.hotelCapabilities);
+    this.plannerPrompt = new PlannerPrompt(
+      !!this.serverClient,
+      extraArgs?.hotelCapabilities,
+      extraArgs?.connectedIntegrations,
+    );
 
     const actionBuilder = new ActionBuilder(context, extractorLLM, this.serverClient);
     const navigatorActionRegistry = new NavigatorActionRegistry(actionBuilder.buildDefaultActions());
@@ -162,11 +166,7 @@ export class Executor {
           return;
         }
         if (domainResult === 'error') {
-          this.context.emitEvent(
-            Actors.SYSTEM,
-            ExecutionState.TASK_FAIL,
-            t('exec_domainQuery_fail', ['Stream failed']),
-          );
+          this.context.emitEvent(Actors.SYSTEM, ExecutionState.TASK_FAIL, 'Domain query failed: Stream failed');
           void analytics.trackTaskFailed(this.context.taskId, analytics.categorizeError('domain_query_error'));
           return;
         }
@@ -226,23 +226,23 @@ export class Executor {
         void analytics.trackTaskComplete(this.context.taskId);
       } else if (step >= allowedMaxSteps) {
         logger.error('❌ Task failed: Max steps reached');
-        this.context.emitEvent(Actors.SYSTEM, ExecutionState.TASK_FAIL, t('exec_errors_maxStepsReached'));
-        const maxStepsError = new MaxStepsReachedError(t('exec_errors_maxStepsReached'));
+        this.context.emitEvent(Actors.SYSTEM, ExecutionState.TASK_FAIL, 'Max steps reached');
+        const maxStepsError = new MaxStepsReachedError('Max steps reached');
         const errorCategory = analytics.categorizeError(maxStepsError);
         void analytics.trackTaskFailed(this.context.taskId, errorCategory);
       } else if (this.context.stopped) {
-        this.context.emitEvent(Actors.SYSTEM, ExecutionState.TASK_CANCEL, t('exec_task_cancel'));
+        this.context.emitEvent(Actors.SYSTEM, ExecutionState.TASK_CANCEL, 'Task cancelled');
         void analytics.trackTaskCancelled(this.context.taskId);
       } else {
-        this.context.emitEvent(Actors.SYSTEM, ExecutionState.TASK_PAUSE, t('exec_task_pause'));
+        this.context.emitEvent(Actors.SYSTEM, ExecutionState.TASK_PAUSE, 'Task paused');
       }
     } catch (error) {
       if (error instanceof RequestCancelledError) {
-        this.context.emitEvent(Actors.SYSTEM, ExecutionState.TASK_CANCEL, t('exec_task_cancel'));
+        this.context.emitEvent(Actors.SYSTEM, ExecutionState.TASK_CANCEL, 'Task cancelled');
         void analytics.trackTaskCancelled(this.context.taskId);
       } else {
         const errorMessage = error instanceof Error ? error.message : String(error);
-        this.context.emitEvent(Actors.SYSTEM, ExecutionState.TASK_FAIL, t('exec_task_fail', [errorMessage]));
+        this.context.emitEvent(Actors.SYSTEM, ExecutionState.TASK_FAIL, `Task failed: \n\n${errorMessage}`);
         const errorCategory = analytics.categorizeError(error instanceof Error ? error : errorMessage);
         void analytics.trackTaskFailed(this.context.taskId, errorCategory);
       }
@@ -372,7 +372,7 @@ export class Executor {
       context.consecutiveFailures++;
       logger.error(`Failed to execute planner: ${error}`);
       if (context.consecutiveFailures >= context.options.maxFailures) {
-        throw new MaxFailuresReachedError(t('exec_errors_maxFailuresReached'));
+        throw new MaxFailuresReachedError('Max failures reached');
       }
       return null;
     }
@@ -414,7 +414,7 @@ export class Executor {
       context.consecutiveFailures++;
       logger.error(`Failed to execute step: ${error}`);
       if (context.consecutiveFailures >= context.options.maxFailures) {
-        throw new MaxFailuresReachedError(t('exec_errors_maxFailuresReached'));
+        throw new MaxFailuresReachedError('Max failures reached');
       }
     }
     return false;
@@ -488,12 +488,12 @@ export class Executor {
     try {
       const historyFromStorage = await chatHistoryStore.loadAgentStepHistory(sessionId);
       if (!historyFromStorage) {
-        throw new Error(t('exec_replay_historyNotFound'));
+        throw new Error('History not found');
       }
 
       const history = JSON.parse(historyFromStorage.history) as AgentStepHistory;
       if (history.history.length === 0) {
-        throw new Error(t('exec_replay_historyEmpty'));
+        throw new Error('History is empty');
       }
       logger.debug(`🔄 Replaying history: ${JSON.stringify(history, null, 2)}`);
       this.context.emitEvent(Actors.SYSTEM, ExecutionState.TASK_START, this.context.taskId);
@@ -526,14 +526,14 @@ export class Executor {
       }
 
       if (this.context.stopped) {
-        this.context.emitEvent(Actors.SYSTEM, ExecutionState.TASK_CANCEL, t('exec_replay_cancel'));
+        this.context.emitEvent(Actors.SYSTEM, ExecutionState.TASK_CANCEL, 'Replay cancelled');
       } else {
-        this.context.emitEvent(Actors.SYSTEM, ExecutionState.TASK_OK, t('exec_replay_ok'));
+        this.context.emitEvent(Actors.SYSTEM, ExecutionState.TASK_OK, 'Replay completed');
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       replayLogger.error(`Replay failed: ${errorMessage}`);
-      this.context.emitEvent(Actors.SYSTEM, ExecutionState.TASK_FAIL, t('exec_replay_fail', [errorMessage]));
+      this.context.emitEvent(Actors.SYSTEM, ExecutionState.TASK_FAIL, `Replay failed: \n\n${errorMessage}`);
     }
 
     return results;

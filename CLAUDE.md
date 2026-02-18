@@ -74,7 +74,6 @@ This is a **monorepo** using **Turbo** for build orchestration and **pnpm worksp
 - `storage/` - Chrome extension storage abstraction
 - `ui/` - Shared React components
 - `schema-utils/` - Validation schemas
-- `i18n/` - Internationalization
 - Others: `dev-utils/`, `zipper/`, `vite-config/`, `tailwind-config/`, `hmr/`,
   `tsconfig/`
 
@@ -115,7 +114,7 @@ Agent logic is under `chrome-extension/src/background/agent/`.
 - Multi-agent coordination happens through Chrome messaging APIs
 - Distribution zips are written to `dist-zip/`
 - Build flags: set `__DEV__=true` for watch builds; 
-- Do not edit generated outputs: `dist/**`, `build/**`, `packages/i18n/lib/**`
+- Do not edit generated outputs: `dist/**`, `build/**`
 
 ## Unit Tests
 
@@ -133,87 +132,6 @@ After building, load the extension:
 2. Enable "Developer mode"
 3. Click "Load unpacked"
 4. Select the `dist/` directory
-
-## Internationalization (i18n)
-
-### Key Naming Convention
-
-Follow the structured naming pattern: `component_category_specificAction_state`
-
-**Semantic Prefixes by Component:**
-
-- `bg_` - Background service worker operations
-- `exec_` - Executor/agent execution lifecycle
-- `act_` - Agent actions and web automation
-- `errors_` - Global error messages
-- `options_` - Settings page components
-- `chat_` - Chat interface elements
-- `nav_` - Navigation elements
-- `permissions_` - Permission-related messages
-
-**State-Based Suffixes:**
-
-- `_start` - Action beginning (e.g., `act_goToUrl_start`)
-- `_ok` - Successful completion (e.g., `act_goToUrl_ok`)
-- `_fail` - Failure state (e.g., `exec_task_fail`)
-- `_cancel` - Cancelled operation
-- `_pause` - Paused state
-
-**Error Categorization:**
-
-- `_errors_` subcategory for component-specific errors
-- Global `errors_` prefix for system-wide errors
-- Descriptive error names (e.g., `act_errors_elementNotExist`)
-
-**Command Structure:**
-
-- `_cmd_` for command-related messages (e.g., `bg_cmd_newTask_noTask`)
-- `_setup_` for configuration issues (e.g., `bg_setup_noApiKeys`)
-
-### Usage
-
-```typescript
-import { t } from '@extension/i18n';
-
-// Simple message
-t('bg_errors_noTabId')
-
-// With placeholders
-t('act_click_ok', ['5', 'Submit Button'])
-```
-
-### Placeholders
-
-Use Chrome i18n placeholder format with proper definitions:
-
-```json
-{
-  "act_goToUrl_start": {
-    "message": "Navigating to $URL$",
-    "placeholders": {
-      "url": {
-        "content": "$1",
-        "example": "https://example.com"
-      }
-    }
-  }
-}
-```
-
-**Guidelines:**
-
-- Use descriptive, self-documenting key names
-- Separate user-facing strings from internal/log strings
-- Follow hierarchical naming for maintainability
-- Add placeholders with examples for dynamic content
-- Group related keys by component prefix
-
-### Generation
-
-- Do not edit generated files under `packages/i18n/lib/**`.
-- The generator `packages/i18n/genenrate-i18n.mjs` runs via the `@extension/i18n`
-  workspace `ready`/`build` scripts to (re)generate types and runtime helpers.
-  Edit source locale JSON in `packages/i18n/locales/**` instead.
 
 ## Code Quality Standards
 
@@ -274,7 +192,7 @@ Use Chrome i18n placeholder format with proper definitions:
 - Zipped distributions are written to `dist-zip/`
 - Only supports Chrome/Edge 
 - Keep diffs minimal and scoped; avoid mass refactors or reformatting unrelated files
-- Do not modify generated artifacts (`dist/**`, `build/**`, `packages/i18n/lib/**`)
+- Do not modify generated artifacts (`dist/**`, `build/**`)
   or workspace/global configs (`turbo.json`, `pnpm-workspace.yaml`, `tsconfig*`)
   without approval
  - Prefer workspace-scoped checks:

@@ -1,7 +1,5 @@
 /* eslint-disable react/prop-types */
 import { Trash2 } from 'lucide-react';
-import { t } from '@extension/i18n';
-
 interface ChatHistoryItem {
   id: string;
   title: string;
@@ -24,7 +22,7 @@ const ChatHistoryList: React.FC<ChatHistoryListProps> = ({ sessions, onSessionSe
   return (
     <div className="scrollbar-thin h-full overflow-y-auto px-3 py-2">
       {sessions.length === 0 ? (
-        <p className="py-8 text-center text-[13px] text-gray-400">{t('chat_history_empty')}</p>
+        <p className="py-8 text-center text-[13px] text-gray-400">{'No chat history available'}</p>
       ) : (
         <div className="space-y-1">
           {sessions.map(session => (
@@ -46,7 +44,7 @@ const ChatHistoryList: React.FC<ChatHistoryListProps> = ({ sessions, onSessionSe
                     onSessionDelete(session.id);
                   }}
                   className="rounded-md p-1.5 text-gray-400 transition-colors hover:bg-red-50 hover:text-red-500"
-                  aria-label={t('chat_history_delete')}
+                  aria-label="Delete session"
                   type="button">
                   <Trash2 size={13} />
                 </button>

@@ -19,7 +19,6 @@
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
-    "@extension/i18n": "workspace:*",
     "@extension/shared": "workspace:*",
     "@extension/storage": "workspace:*",
     "lucide-react": "^0.468.0",

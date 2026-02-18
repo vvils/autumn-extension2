@@ -36,7 +36,6 @@ function portRpc(
     port.postMessage({ type, requestId, ...payload });
   });
 }
-import { t } from '@extension/i18n';
 import MessageList from './components/MessageList';
 import ChatInput from './components/ChatInput';
 import ChatHistoryList from './components/ChatHistoryList';
@@ -586,7 +585,7 @@ const SidePanel = () => {
         } else if (message && message.type === 'error') {
           appendMessage({
             actor: Actors.SYSTEM,
-            content: message.error || t('errors_unknown'),
+            content: message.error || 'Unknown error occurred',
             timestamp: Date.now(),
           });
           setInputEnabled(true);
@@ -704,7 +703,7 @@ const SidePanel = () => {
       console.error('Failed to establish connection:', error);
       appendMessage({
         actor: Actors.SYSTEM,
-        content: t('errors_conn_serviceWorker'),
+        content: 'Failed to connect to service worker',
         timestamp: Date.now(),
       });
       portRef.current = null;
@@ -747,7 +746,8 @@ const SidePanel = () => {
       if (!replayEnabled) {
         appendMessage({
           actor: Actors.SYSTEM,
-          content: t('chat_replay_disabled'),
+          content:
+            'Replay is disabled in general settings. Please enable "Replay Historical Tasks" in the extension settings to use this feature.',
           timestamp: Date.now(),
         });
         return;
@@ -757,7 +757,7 @@ const SidePanel = () => {
       if (!historyData) {
         appendMessage({
           actor: Actors.SYSTEM,
-          content: t('chat_replay_noHistory', historySessionId.substring(0, 20)),
+          content: `No action history found for session "${historySessionId.substring(0, 20)}...". This session may not contain replayable actions.\n\nIt's a replay session itself (replay sessions cannot be replayed again), or it was created before the replay feature was available.`,
           timestamp: Date.now(),
         });
         return;
@@ -819,7 +819,7 @@ const SidePanel = () => {
 
       appendMessage({
         actor: Actors.SYSTEM,
-        content: t('chat_replay_starting', historyData.task),
+        content: `Starting replay of task:\n\n"${historyData.task}"`,
         timestamp: Date.now(),
       });
       setIsReplaying(true);
@@ -827,7 +827,7 @@ const SidePanel = () => {
       const errorMessage = err instanceof Error ? err.message : String(err);
       appendMessage({
         actor: Actors.SYSTEM,
-        content: t('chat_replay_failed', errorMessage),
+        content: `Replay failed: ${errorMessage}`,
         timestamp: Date.now(),
       });
     }
@@ -858,7 +858,7 @@ const SidePanel = () => {
         if (parts.length !== 2) {
           appendMessage({
             actor: Actors.SYSTEM,
-            content: t('chat_replay_invalidArgs'),
+            content: 'Invalid arguments. Please use the format: /replay <historySessionId>',
             timestamp: Date.now(),
           });
           return true;
@@ -871,7 +871,7 @@ const SidePanel = () => {
 
       appendMessage({
         actor: Actors.SYSTEM,
-        content: t('errors_cmd_unknown', command),
+        content: `Unsupported command: ${command}.\n\nAvailable commands: /state, /nohighlight, /replay <historySessionId>`,
         timestamp: Date.now(),
       });
       return true;
@@ -1074,7 +1074,7 @@ const SidePanel = () => {
     if (!SpeechRecognitionCtor) {
       appendMessage({
         actor: Actors.SYSTEM,
-        content: t('chat_voice_notSupported'),
+        content: 'Speech recognition is not supported in this browser',
         timestamp: Date.now(),
       });
       return;
@@ -1097,7 +1097,7 @@ const SidePanel = () => {
       if (event.error !== 'aborted') {
         appendMessage({
           actor: Actors.SYSTEM,
-          content: t('chat_voice_recognitionFailed'),
+          content: 'Speech recognition failed',
           timestamp: Date.now(),
         });
       }
@@ -1141,31 +1141,27 @@ const SidePanel = () => {
             type="button"
             onClick={handleLoadHistory}
             className="rounded-md p-1.5 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
-            aria-label={t('nav_loadHistory_a11y')}>
+            aria-label="Load History">
             <History size={15} />
           </button>
           <button
             type="button"
             onClick={handleNewChat}
             className="rounded-md p-1.5 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
-            aria-label={t('nav_newChat_a11y')}>
+            aria-label="New Chat">
             <SquarePen size={15} />
           </button>
           <button
             type="button"
             onClick={() => chrome.runtime.openOptionsPage()}
             className="rounded-md p-1.5 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
-            aria-label={t('nav_settings_a11y')}>
+            aria-label="Settings">
             <Settings size={15} />
           </button>
         </div>
       </header>
 
-      <SlidePanel
-        open={showHistory}
-        onClose={() => handleBackToChat(false)}
-        title={t('chat_history_title')}
-        side="left">
+      <SlidePanel open={showHistory} onClose={() => handleBackToChat(false)} title="Chat History" side="left">
         <ChatHistoryList
           sessions={chatSessions}
           onSessionSelect={handleSessionSelect}
@@ -1177,7 +1173,7 @@ const SidePanel = () => {
         <div className="text-accent flex flex-1 items-center justify-center p-8">
           <div className="text-center">
             <div className="border-accent mx-auto mb-4 size-8 animate-spin rounded-full border-2 border-t-transparent" />
-            <p>{t('status_checkingConfig')}</p>
+            <p>{'Checking configuration...'}</p>
           </div>
         </div>
       )}
@@ -1186,12 +1182,14 @@ const SidePanel = () => {
         <div className="text-accent-foreground flex flex-1 items-center justify-center p-8">
           <div className="max-w-md text-center">
             <img src="/autumn-logo.svg" alt="Autumn" className="mx-auto mb-4 h-8 opacity-60" />
-            <h3 className="mb-2 text-lg font-semibold text-gray-900">{t('welcome_title')}</h3>
-            <p className="mb-4 text-[13px] text-gray-500">{t('welcome_instruction')}</p>
+            <h3 className="mb-2 text-lg font-semibold text-gray-900">{'Welcome to Autumn AI Co-Pilot!'}</h3>
+            <p className="mb-4 text-[13px] text-gray-500">
+              {'To get started, please configure your API keys in the settings page.'}
+            </p>
             <button
               onClick={() => chrome.runtime.openOptionsPage()}
               className="bg-accent hover:bg-accent-hover my-4 rounded-lg px-4 py-2 font-medium text-white transition-colors">
-              {t('welcome_openSettings')}
+              {'Open Settings'}
             </button>
           </div>
         </div>
@@ -1204,12 +1202,12 @@ const SidePanel = () => {
               <div className="flex flex-1 flex-col items-center justify-center px-5">
                 <img src="/autumn-logo.svg" alt="Autumn" className="mb-3 h-8 opacity-40" />
                 <p className="max-w-[240px] text-center text-[13px] leading-relaxed text-black/40">
-                  {t('welcome_subtitle')}
+                  {'Your AI-powered web automation assistant'}
                 </p>
               </div>
               <div className="scrollbar-thin overflow-y-auto px-3 pb-2">
                 <h3 className="mb-2 px-1 text-[12px] font-medium uppercase tracking-wide text-gray-400">
-                  {t('chat_bookmarks_header')}
+                  {'Quick Start'}
                 </h3>
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                   {WORKFLOW_PROMPTS.map(wp => (

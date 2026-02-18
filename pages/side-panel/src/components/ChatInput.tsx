@@ -1,6 +1,5 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { Mic, Paperclip, ArrowUp, Square, Play, X } from 'lucide-react';
-import { t } from '@extension/i18n';
 import { CostDisplay, type CostDisplayProps } from './CostDisplay';
 
 interface ChatInputProps {
@@ -169,7 +168,7 @@ export default function ChatInput({
           type="button"
           onClick={onStopTask}
           className="bg-accent hover:bg-accent-hover rounded-lg p-1.5 text-white transition-colors"
-          aria-label={t('chat_buttons_stop')}>
+          aria-label="Stop">
           <Square size={14} fill="currentColor" strokeWidth={0} />
         </button>
       );
@@ -182,7 +181,7 @@ export default function ChatInput({
           onClick={handleReplay}
           disabled={!historicalSessionId}
           className="rounded-lg bg-green-500 p-1.5 text-white transition-colors hover:bg-green-600 disabled:opacity-30"
-          aria-label={t('chat_buttons_replay')}>
+          aria-label="Replay">
           <Play size={14} fill="currentColor" strokeWidth={0} />
         </button>
       );
@@ -194,7 +193,7 @@ export default function ChatInput({
         onClick={handleSubmit}
         disabled={isSendButtonDisabled}
         className="bg-accent hover:bg-accent-hover rounded-lg p-1.5 text-white transition-colors disabled:opacity-30"
-        aria-label={t('chat_buttons_send')}>
+        aria-label="Send">
         <ArrowUp size={16} strokeWidth={2.5} />
       </button>
     );
@@ -232,8 +231,8 @@ export default function ChatInput({
           aria-disabled={disabled}
           rows={1}
           className={`max-h-[200px] min-h-[24px] w-full resize-none bg-transparent text-[13px] leading-6 text-gray-900 outline-none placeholder:text-gray-400 ${disabled ? 'cursor-not-allowed opacity-50' : ''}`}
-          placeholder={attachedFiles.length > 0 ? 'Add a message (optional)...' : t('chat_input_placeholder')}
-          aria-label={t('chat_input_editor')}
+          placeholder={attachedFiles.length > 0 ? 'Add a message (optional)...' : 'What can I help you with?'}
+          aria-label="Message input"
         />
 
         <div className="mt-1 flex items-center justify-between">
@@ -274,7 +273,7 @@ export default function ChatInput({
                 type="button"
                 onClick={onMicClick}
                 disabled={disabled}
-                aria-label={isRecording ? t('chat_voice_recording_stop') : t('chat_voice_input_start')}
+                aria-label={isRecording ? 'Stop recording' : 'Start voice input'}
                 className={`relative rounded-lg p-1.5 transition-colors ${
                   disabled
                     ? 'cursor-not-allowed opacity-50'

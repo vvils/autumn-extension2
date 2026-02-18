@@ -3,11 +3,13 @@ import { commonSecurityRules } from './common';
 interface BuildPlannerSystemPromptOptions {
   serverAvailable?: boolean;
   hotelCapabilities?: string;
+  connectedIntegrations?: string;
 }
 
 export function buildPlannerSystemPrompt(options?: BuildPlannerSystemPromptOptions): string {
   const serverAvailable = options?.serverAvailable ?? false;
   const hotelCapabilities = options?.hotelCapabilities;
+  const connectedIntegrations = options?.connectedIntegrations;
 
   const responsibilitiesSection = serverAvailable
     ? `# RESPONSIBILITIES:
@@ -90,7 +92,7 @@ export function buildPlannerSystemPrompt(options?: BuildPlannerSystemPromptOptio
 ${commonSecurityRules}
 
 ${responsibilitiesSection}
-
+${connectedIntegrations ? `\n# CONNECTED INTEGRATIONS (Pipedream):\nThe user has the following app integrations connected. You may suggest using these when relevant to the task:\n${connectedIntegrations}\n` : ''}
 # TASK COMPLETION VALIDATION:
 When determining if a task is "done":
 1. Read the task description carefully - neither miss any detailed requirements nor make up any requirements

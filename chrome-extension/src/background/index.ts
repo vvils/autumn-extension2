@@ -7,8 +7,9 @@ import {
   llmProviderStore,
   analyticsSettingsStore,
   serverSettingsStore,
+  integrationSettingsStore,
+  type CuratedAction,
 } from '@extension/storage';
-import { t } from '@extension/i18n';
 import BrowserContext from './browser/context';
 import { Executor } from './agent/executor';
 import { createLogger } from './log';
@@ -28,6 +29,7 @@ const browserContext = new BrowserContext({});
 let currentExecutor: Executor | null = null;
 let serverClient: ServerClient | null = null;
 let cachedHotelCapabilities: string | undefined;
+let cachedIntegrationCapabilities: string | undefined;
 let currentPort: chrome.runtime.Port | null = null;
 const SIDE_PANEL_URL = chrome.runtime.getURL('side-panel/index.html');
 
@@ -157,6 +159,7 @@ async function initServerClient() {
   await autoPopulateServerUrls();
   serverClient = await ServerClient.create(serverSettingsStore);
   cachedHotelCapabilities = undefined;
+  cachedIntegrationCapabilities = undefined;
   if (serverClient) {
     logger.info('Server client initialized');
     try {
@@ -202,6 +205,46 @@ async function initServerClient() {
           }
         } catch (error) {
           logger.warning('Failed to pull keys from server:', error);
+        }
+
+        try {
+          const accounts = await serverClient.getConnectedAccounts();
+          const manifest = await serverClient.getIntegrationManifest();
+
+          if (manifest) {
+            const flatActions: CuratedAction[] = [];
+            for (const [appSlug, app] of Object.entries(manifest.apps)) {
+              for (const action of app.actions) {
+                flatActions.push({ ...action, appSlug });
+              }
+            }
+
+            await integrationSettingsStore.updateSettings({
+              connectedAccounts: accounts.map(a => ({
+                accountId: a.id,
+                appName: a.app.name,
+                appSlug: a.app.name_slug,
+                createdAt: new Date(a.created_at).getTime(),
+              })),
+              availableActions: flatActions,
+              lastSyncedAt: Date.now(),
+            });
+
+            const connectedSlugs = new Set(accounts.map(a => a.app.name_slug));
+            const lines: string[] = [];
+            for (const [appSlug, app] of Object.entries(manifest.apps)) {
+              if (!connectedSlugs.has(appSlug)) continue;
+              lines.push(`- ${app.name}:`);
+              for (const action of app.actions) {
+                const params = action.requiredProps.join(', ');
+                lines.push(`  - ${action.key}: ${action.description} (params: ${params})`);
+              }
+            }
+            cachedIntegrationCapabilities = lines.join('\n');
+            logger.info(`Integration data loaded: ${accounts.length} accounts, ${flatActions.length} actions`);
+          }
+        } catch (error) {
+          logger.warning('Failed to fetch integration data:', error);
         }
       }
     } catch (error) {
@@ -276,8 +319,8 @@ chrome.runtime.onConnect.addListener(port => {
           }
 
           case 'new_task': {
-            if (!message.task) return port.postMessage({ type: 'error', error: t('bg_cmd_newTask_noTask') });
-            if (!message.tabId) return port.postMessage({ type: 'error', error: t('bg_errors_noTabId') });
+            if (!message.task) return port.postMessage({ type: 'error', error: 'No task provided' });
+            if (!message.tabId) return port.postMessage({ type: 'error', error: 'No tab ID provided' });
 
             logger.info('new_task', message.tabId, message.task);
             browserContext.updateCurrentTabId(message.tabId);
@@ -291,8 +334,8 @@ chrome.runtime.onConnect.addListener(port => {
           }
 
           case 'follow_up_task': {
-            if (!message.task) return port.postMessage({ type: 'error', error: t('bg_cmd_followUpTask_noTask') });
-            if (!message.tabId) return port.postMessage({ type: 'error', error: t('bg_errors_noTabId') });
+            if (!message.task) return port.postMessage({ type: 'error', error: 'No follow up task provided' });
+            if (!message.tabId) return port.postMessage({ type: 'error', error: 'No tab ID provided' });
 
             logger.info('follow_up_task', message.tabId, message.task);
 
@@ -306,31 +349,31 @@ chrome.runtime.onConnect.addListener(port => {
             } else {
               // executor was cleaned up, can not add follow-up task
               logger.info('follow_up_task: executor was cleaned up, can not add follow-up task');
-              return port.postMessage({ type: 'error', error: t('bg_cmd_followUpTask_cleaned') });
+              return port.postMessage({ type: 'error', error: 'Executor was cleaned up, can not add follow-up task' });
             }
             break;
           }
 
           case 'cancel_task': {
-            if (!currentExecutor) return port.postMessage({ type: 'error', error: t('bg_errors_noRunningTask') });
+            if (!currentExecutor) return port.postMessage({ type: 'error', error: 'No running task' });
             await currentExecutor.cancel();
             break;
           }
 
           case 'resume_task': {
-            if (!currentExecutor) return port.postMessage({ type: 'error', error: t('bg_cmd_resumeTask_noTask') });
+            if (!currentExecutor) return port.postMessage({ type: 'error', error: 'No task to resume' });
             await currentExecutor.resume();
             return port.postMessage({ type: 'success' });
           }
 
           case 'pause_task': {
-            if (!currentExecutor) return port.postMessage({ type: 'error', error: t('bg_errors_noRunningTask') });
+            if (!currentExecutor) return port.postMessage({ type: 'error', error: 'No running task' });
             await currentExecutor.pause();
             return port.postMessage({ type: 'success' });
           }
 
           case 'screenshot': {
-            if (!message.tabId) return port.postMessage({ type: 'error', error: t('bg_errors_noTabId') });
+            if (!message.tabId) return port.postMessage({ type: 'error', error: 'No tab ID provided' });
             const page = await browserContext.switchTab(message.tabId);
             const screenshot = await page.takeScreenshot();
             logger.info('screenshot', message.tabId, screenshot);
@@ -346,24 +389,24 @@ chrome.runtime.onConnect.addListener(port => {
 
               logger.info('state', browserState);
               logger.info('interactive elements', elementsText);
-              return port.postMessage({ type: 'success', msg: t('bg_cmd_state_printed') });
+              return port.postMessage({ type: 'success', msg: 'State printed to console' });
             } catch (error) {
               logger.error('Failed to get state:', error);
-              return port.postMessage({ type: 'error', error: t('bg_cmd_state_failed') });
+              return port.postMessage({ type: 'error', error: 'Failed to get state' });
             }
           }
 
           case 'nohighlight': {
             const page = await browserContext.getCurrentPage();
             await page.removeHighlight();
-            return port.postMessage({ type: 'success', msg: t('bg_cmd_nohighlight_ok') });
+            return port.postMessage({ type: 'success', msg: 'highlight removed' });
           }
 
           case 'replay': {
-            if (!message.tabId) return port.postMessage({ type: 'error', error: t('bg_errors_noTabId') });
-            if (!message.taskId) return port.postMessage({ type: 'error', error: t('bg_errors_noTaskId') });
+            if (!message.tabId) return port.postMessage({ type: 'error', error: 'No tab ID provided' });
+            if (!message.taskId) return port.postMessage({ type: 'error', error: 'No task ID provided' });
             if (!message.historySessionId)
-              return port.postMessage({ type: 'error', error: t('bg_cmd_replay_noHistory') });
+              return port.postMessage({ type: 'error', error: 'No history session ID provided' });
             logger.info('replay', message.tabId, message.taskId, message.historySessionId);
 
             try {
@@ -380,7 +423,7 @@ chrome.runtime.onConnect.addListener(port => {
               logger.error('Replay failed:', error);
               return port.postMessage({
                 type: 'error',
-                error: error instanceof Error ? error.message : t('bg_cmd_replay_failed'),
+                error: error instanceof Error ? error.message : 'Replay failed',
               });
             }
             break;
@@ -525,13 +568,16 @@ chrome.runtime.onConnect.addListener(port => {
           }
 
           default:
-            return port.postMessage({ type: 'error', error: t('errors_cmd_unknown', [message.type]) });
+            return port.postMessage({
+              type: 'error',
+              error: `Unsupported command: ${message.type}.\n\nAvailable commands: /state, /nohighlight, /replay <historySessionId>`,
+            });
         }
       } catch (error) {
         console.error('Error handling port message:', error);
         port.postMessage({
           type: 'error',
-          error: error instanceof Error ? error.message : t('errors_unknown'),
+          error: error instanceof Error ? error.message : 'Unknown error occurred',
         });
       }
     });
@@ -548,7 +594,7 @@ async function setupExecutor(taskId: string, task: string, browserContext: Brows
   const providers = await llmProviderStore.getAllProviders();
   // if no providers, need to display the options page
   if (Object.keys(providers).length === 0) {
-    throw new Error(t('bg_setup_noApiKeys'));
+    throw new Error('Please configure API keys in the settings first');
   }
 
   // Clean up any legacy validator settings for backward compatibility
@@ -558,13 +604,13 @@ async function setupExecutor(taskId: string, task: string, browserContext: Brows
   // verify if every provider used in the agent models exists in the providers
   for (const agentModel of Object.values(agentModels)) {
     if (!providers[agentModel.provider]) {
-      throw new Error(t('bg_setup_noProvider', [agentModel.provider]));
+      throw new Error(`Provider ${agentModel.provider} not found in the settings`);
     }
   }
 
   const navigatorModel = agentModels[AgentNameEnum.Navigator];
   if (!navigatorModel) {
-    throw new Error(t('bg_setup_noNavigatorModel'));
+    throw new Error('Please choose a model for the navigator in the settings first');
   }
   // Log the provider config being used for the navigator
   const navigatorProviderConfig = providers[navigatorModel.provider];
@@ -611,6 +657,7 @@ async function setupExecutor(taskId: string, task: string, browserContext: Brows
     generalSettings: generalSettings,
     serverClient,
     hotelCapabilities: cachedHotelCapabilities,
+    connectedIntegrations: cachedIntegrationCapabilities,
   });
 
   return executor;
