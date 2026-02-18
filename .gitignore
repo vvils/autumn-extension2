@@ -9,12 +9,11 @@
 **/build
 **/dist-zip
 
-# env
+# env (real secrets go in .env.local, which is gitignored)
 **/.env.local
 **/.env.development.local
 **/.env.test.local
 **/.env.production.local
-**/.env
 
 # etc
 .DS_Store

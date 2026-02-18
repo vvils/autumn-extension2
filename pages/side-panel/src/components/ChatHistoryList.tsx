@@ -1,5 +1,5 @@
 /* eslint-disable react/prop-types */
-import { Trash2, Bookmark } from 'lucide-react';
+import { Trash2 } from 'lucide-react';
 import { t } from '@extension/i18n';
 
 interface ChatHistoryItem {
@@ -13,15 +13,9 @@ interface ChatHistoryListProps {
   sessions: ChatHistoryItem[];
   onSessionSelect: (sessionId: string) => void;
   onSessionDelete: (sessionId: string) => void;
-  onSessionBookmark: (sessionId: string) => void;
 }
 
-const ChatHistoryList: React.FC<ChatHistoryListProps> = ({
-  sessions,
-  onSessionSelect,
-  onSessionDelete,
-  onSessionBookmark,
-}) => {
+const ChatHistoryList: React.FC<ChatHistoryListProps> = ({ sessions, onSessionSelect, onSessionDelete }) => {
   const formatDate = (timestamp: number) => {
     const date = new Date(timestamp);
     return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
@@ -46,19 +40,6 @@ const ChatHistoryList: React.FC<ChatHistoryListProps> = ({
               </button>
 
               <div className="absolute right-2 top-1/2 flex -translate-y-1/2 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
-                {onSessionBookmark && session.source !== 'server_chat' && (
-                  <button
-                    onClick={e => {
-                      e.stopPropagation();
-                      onSessionBookmark(session.id);
-                    }}
-                    className="hover:text-accent hover:bg-accent/[0.08] rounded-md p-1.5 text-gray-400 transition-colors"
-                    aria-label={t('chat_history_bookmark')}
-                    type="button">
-                    <Bookmark size={13} />
-                  </button>
-                )}
-
                 <button
                   onClick={e => {
                     e.stopPropagation();

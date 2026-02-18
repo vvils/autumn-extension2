@@ -9,6 +9,11 @@ import type {
   PullKeysResponse,
   CreateConversationPayload,
   AddMessagePayload,
+  ConnectTokenResponse,
+  PipedreamAccount,
+  IntegrationManifest,
+  ActionRunRequest,
+  ActionRunResult,
 } from './types';
 import { ServerApiClient } from './apiClient';
 
@@ -131,5 +136,37 @@ export class ServerClient {
   async pullKeys(): Promise<PullKeysResponse> {
     const { data } = await this.apiClient.get<PullKeysResponse>('/ai/extension/keys');
     return { keys: data.keys, agentModels: data.agentModels };
+  }
+
+  async createConnectToken(): Promise<ConnectTokenResponse> {
+    const { data } = await this.apiClient.post<ConnectTokenResponse>('/ai/extension/integrations/connect-token', {});
+    return data;
+  }
+
+  async getConnectedAccounts(): Promise<PipedreamAccount[]> {
+    try {
+      const { data } = await this.apiClient.get<PipedreamAccount[]>('/ai/extension/integrations/accounts');
+      return data;
+    } catch {
+      return [];
+    }
+  }
+
+  async disconnectAccount(accountId: string): Promise<void> {
+    await this.apiClient.delete(`/ai/extension/integrations/accounts/${encodeURIComponent(accountId)}`);
+  }
+
+  async getIntegrationManifest(): Promise<IntegrationManifest | null> {
+    try {
+      const { data } = await this.apiClient.get<IntegrationManifest>('/ai/extension/integrations/manifest');
+      return data;
+    } catch {
+      return null;
+    }
+  }
+
+  async runIntegrationAction(request: ActionRunRequest): Promise<ActionRunResult> {
+    const { data } = await this.apiClient.post<ActionRunResult>('/ai/extension/integrations/actions/run', request);
+    return data;
   }
 }

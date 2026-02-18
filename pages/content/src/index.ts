@@ -10,10 +10,11 @@ function sendTokenToBackground(token: string | null) {
 async function detectAuth() {
   const result = await chrome.storage.local.get(SERVER_SETTINGS_KEY);
   const settings = result[SERVER_SETTINGS_KEY];
-  if (!settings?.serverUrl) return;
+  const clientUrl = settings?.clientUrl || settings?.serverUrl;
+  if (!clientUrl) return;
 
   try {
-    if (window.location.origin !== new URL(settings.serverUrl).origin) return;
+    if (window.location.origin !== new URL(clientUrl).origin) return;
   } catch {
     return;
   }

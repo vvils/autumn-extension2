@@ -69,6 +69,8 @@ export default defineConfig(({ mode }) => {
       'import.meta.env.VITE_POSTHOG_API_KEY': JSON.stringify(
         env.VITE_POSTHOG_API_KEY || process.env.VITE_POSTHOG_API_KEY || '',
       ),
+      'import.meta.env.VITE_SERVER_URL': JSON.stringify(env.VITE_SERVER_URL || ''),
+      'import.meta.env.VITE_CLIENT_URL': JSON.stringify(env.VITE_CLIENT_URL || ''),
     },
 
     envDir: '../',

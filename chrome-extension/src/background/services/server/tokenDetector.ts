@@ -15,6 +15,21 @@ function decodeJwtPayload(token: string): JwtPayload {
   return { userId: payload.userId, exp: payload.exp * 1000 };
 }
 
+async function getClientOrigin(settings: ServerSettingsStorage): Promise<string | null> {
+  const config = await settings.getSettings();
+  const clientUrl = config.clientUrl || config.serverUrl;
+  if (!clientUrl) {
+    logger.debug('getClientOrigin: no clientUrl or serverUrl configured');
+    return null;
+  }
+  try {
+    return new URL(clientUrl).origin;
+  } catch {
+    logger.warning('getClientOrigin: invalid URL', clientUrl);
+    return null;
+  }
+}
+
 async function readTokenFromTab(tabId: number): Promise<string | null> {
   try {
     const [result] = await chrome.scripting.executeScript({
@@ -23,38 +38,71 @@ async function readTokenFromTab(tabId: number): Promise<string | null> {
       args: [WEB_APP_TOKEN_KEY],
     });
     return result?.result ?? null;
-  } catch {
+  } catch (error) {
+    logger.debug('readTokenFromTab: script execution failed for tab', tabId, error);
     return null;
   }
 }
 
-export async function detectTokenFromTabs(settings: ServerSettingsStorage): Promise<boolean> {
+async function storeTokenIfValid(token: string, settings: ServerSettingsStorage): Promise<boolean> {
   const config = await settings.getSettings();
-  if (!config.serverUrl) return false;
-
-  let serverOrigin: string;
-  try {
-    serverOrigin = new URL(config.serverUrl).origin;
-  } catch {
+  if (token === config.accessToken) {
+    logger.debug('storeTokenIfValid: token unchanged, skipping');
     return false;
   }
+  const { userId, exp } = decodeJwtPayload(token);
+  await settings.setAuth(token, userId, exp);
+  logger.info('Auth token stored — userId:', userId, 'expires:', new Date(exp).toISOString());
+  return true;
+}
 
-  const tabs = await chrome.tabs.query({ url: `${serverOrigin}/*` });
+export async function detectTokenFromTabs(settings: ServerSettingsStorage): Promise<boolean> {
+  const clientOrigin = await getClientOrigin(settings);
+  if (!clientOrigin) return false;
+
+  const tabs = await chrome.tabs.query({ url: `${clientOrigin}/*` });
+  logger.debug('detectTokenFromTabs: found', tabs.length, 'tabs matching', clientOrigin);
+
   for (const tab of tabs) {
     if (!tab.id) continue;
     const token = await readTokenFromTab(tab.id);
-    if (token) {
-      try {
-        const { userId, exp } = decodeJwtPayload(token);
-        await settings.setAuth(token, userId, exp);
-        logger.info('Auto-detected auth token from open tab');
-        return true;
-      } catch {
-        logger.warning('Found token in tab but failed to decode');
-      }
+    logger.debug('detectTokenFromTabs: tab', tab.id, tab.url, '→ token', token ? 'present' : 'absent');
+    if (!token) continue;
+    try {
+      if (await storeTokenIfValid(token, settings)) return true;
+    } catch (error) {
+      logger.warning('detectTokenFromTabs: failed to decode token from tab', tab.id, error);
     }
   }
   return false;
+}
+
+export function watchTabsForAuth(settings: ServerSettingsStorage, onAuthChanged: () => void): void {
+  chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+    if (changeInfo.status !== 'complete') return;
+
+    (async () => {
+      const clientOrigin = await getClientOrigin(settings);
+      if (!clientOrigin) return;
+      if (!tab.url?.startsWith(clientOrigin)) return;
+
+      logger.debug('watchTabsForAuth: tab loaded on client origin', tabId, tab.url);
+      const token = await readTokenFromTab(tabId);
+      if (!token) {
+        logger.debug('watchTabsForAuth: no token in tab', tabId);
+        return;
+      }
+      try {
+        if (await storeTokenIfValid(token, settings)) {
+          onAuthChanged();
+        }
+      } catch (error) {
+        logger.warning('watchTabsForAuth: failed to process token from tab', tabId, error);
+      }
+    })();
+  });
+
+  logger.info('watchTabsForAuth: listening for tab updates');
 }
 
 export function listenForWebAppAuth(settings: ServerSettingsStorage, onAuthChanged: () => void): void {
@@ -64,6 +112,7 @@ export function listenForWebAppAuth(settings: ServerSettingsStorage, onAuthChang
 
     (async () => {
       const token: string | null = message.token;
+      logger.debug('listenForWebAppAuth: received token', token ? 'present' : 'null');
       const config = await settings.getSettings();
 
       if (token) {

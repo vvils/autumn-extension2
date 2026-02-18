@@ -1,221 +1,155 @@
-import { useState, useEffect, useRef } from 'react';
-import { type ServerSettingsConfig, serverSettingsStore, DEFAULT_SERVER_SETTINGS } from '@extension/storage';
+import { useState, useEffect, useCallback, useSyncExternalStore } from 'react';
+import {
+  serverSettingsStore,
+  DEFAULT_SERVER_SETTINGS,
+  llmProviderStore,
+  agentModelStore,
+  type ProviderConfig,
+  type AgentNameEnum,
+} from '@extension/storage';
+import type { ModelConfig } from '@extension/storage/lib/settings/agentModels';
 import { t } from '@extension/i18n';
 
 interface ServerSettingsProps {
   isDarkMode?: boolean;
 }
 
-type ConnectionStatus = 'idle' | 'testing' | 'connected' | 'failed';
-
-function decodeJwtExp(token: string): number {
-  const payload = JSON.parse(atob(token.split('.')[1]));
-  return payload.exp * 1000;
+function maskApiKey(key: string): string {
+  if (!key || key.length < 8) return '••••••••';
+  return `${key.slice(0, 3)}...${key.slice(-4)}`;
 }
 
 export const ServerSettings = ({ isDarkMode = false }: ServerSettingsProps) => {
-  const [settings, setSettings] = useState<ServerSettingsConfig>(DEFAULT_SERVER_SETTINGS);
-  const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('idle');
-  const [latencyMs, setLatencyMs] = useState<number>(0);
-  const [loginEmail, setLoginEmail] = useState('');
-  const [loginPassword, setLoginPassword] = useState('');
-  const [loginError, setLoginError] = useState('');
-  const [isLoggingIn, setIsLoggingIn] = useState(false);
-  const urlInputRef = useRef<HTMLInputElement>(null);
+  const settingsSnapshot = useSyncExternalStore(serverSettingsStore.subscribe, serverSettingsStore.getSnapshot);
+  const settings = settingsSnapshot ?? DEFAULT_SERVER_SETTINGS;
+  const isAuthenticated = Boolean(settings.accessToken) && settings.tokenExpiresAt > Date.now();
 
-  useEffect(() => {
-    serverSettingsStore.getSettings().then(setSettings);
+  const [providers, setProviders] = useState<Record<string, ProviderConfig>>({});
+  const [agentModels, setAgentModels] = useState<Record<string, ModelConfig>>({});
+
+  const loadServerConfig = useCallback(async () => {
+    const [allProviders, allAgentModels] = await Promise.all([
+      llmProviderStore.getAllProviders(),
+      agentModelStore.getAllAgentModels(),
+    ]);
+    setProviders(allProviders);
+    setAgentModels(allAgentModels);
   }, []);
 
-  const isAuthenticated = Boolean(settings.accessToken) && settings.tokenExpiresAt > Date.now();
-  const hasServerUrl = Boolean(settings.serverUrl);
-
-  const saveServerUrl = async (url: string) => {
-    const trimmed = url.replace(/\/+$/, '');
-    setSettings(prev => ({ ...prev, serverUrl: trimmed }));
-    await serverSettingsStore.updateSettings({ serverUrl: trimmed });
-    setConnectionStatus('idle');
-  };
-
-  const testConnection = async () => {
-    if (!settings.serverUrl) return;
-    setConnectionStatus('testing');
-    try {
-      const start = performance.now();
-      const response = await fetch(`${settings.serverUrl}/health`, {
-        method: 'GET',
-        signal: AbortSignal.timeout(5000),
-      });
-      const elapsed = Math.round(performance.now() - start);
-      if (response.ok) {
-        setConnectionStatus('connected');
-        setLatencyMs(elapsed);
-      } else {
-        setConnectionStatus('failed');
-      }
-    } catch {
-      setConnectionStatus('failed');
-    }
-  };
-
-  const handleLogin = async () => {
-    if (!loginEmail || !loginPassword) return;
-    setIsLoggingIn(true);
-    setLoginError('');
-    try {
-      const response = await fetch(`${settings.serverUrl}/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: loginEmail, password: loginPassword }),
-        signal: AbortSignal.timeout(10_000),
-      });
-      if (!response.ok) {
-        const body = await response.text().catch(() => '');
-        let message = `Login failed (${response.status})`;
-        try {
-          const parsed = JSON.parse(body) as { message?: string };
-          if (parsed.message) message = parsed.message;
-        } catch {
-          // use default message
-        }
-        setLoginError(message);
-        return;
-      }
-      const data = (await response.json()) as { id: string; accessToken: string };
-      const expiresAt = decodeJwtExp(data.accessToken);
-      await serverSettingsStore.setAuth(data.accessToken, data.id, expiresAt);
-      setSettings(await serverSettingsStore.getSettings());
-      setLoginEmail('');
-      setLoginPassword('');
-    } catch (err) {
-      setLoginError(err instanceof Error ? err.message : 'Login failed');
-    } finally {
-      setIsLoggingIn(false);
-    }
-  };
-
-  const handleLogout = async () => {
-    await serverSettingsStore.clearAuth();
-    setSettings(await serverSettingsStore.getSettings());
-  };
+  useEffect(() => {
+    loadServerConfig();
+    const unsubLlm = llmProviderStore.subscribe(() => {
+      loadServerConfig();
+    });
+    const unsubAgent = agentModelStore.subscribe(() => {
+      loadServerConfig();
+    });
+    return () => {
+      unsubLlm();
+      unsubAgent();
+    };
+  }, [loadServerConfig]);
 
   const cardClass = `rounded-lg border ${isDarkMode ? 'border-slate-700 bg-slate-800' : 'border-gray-200 bg-white'} p-6 text-left shadow-sm`;
   const headingClass = `mb-4 text-left text-xl font-semibold ${isDarkMode ? 'text-gray-200' : 'text-gray-800'}`;
-  const labelClass = `text-base font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`;
-  const inputClass = `w-full rounded-md border ${isDarkMode ? 'border-slate-600 bg-slate-700 text-gray-200' : 'border-gray-300 bg-white text-gray-700'} px-3 py-2`;
-  const btnPrimary = `rounded-md px-4 py-2 text-sm font-medium text-white ${isDarkMode ? 'bg-accent hover:bg-accent-hover' : 'bg-accent hover:bg-accent-hover'} disabled:opacity-50`;
-  const btnDanger = `rounded-md px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700`;
+  const labelClass = `text-xs font-medium uppercase tracking-wider ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`;
+  const valueClass = `text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`;
 
   return (
     <section className="space-y-6">
       {/* Server URL */}
       <div className={cardClass}>
         <h2 className={headingClass}>{t('options_server_url_label')}</h2>
-
-        <div className="space-y-4">
-          <div>
-            <label htmlFor="serverUrl" className="sr-only">
-              {t('options_server_url_label')}
-            </label>
-            <input
-              ref={urlInputRef}
-              id="serverUrl"
-              type="url"
-              placeholder={t('options_server_url_placeholder')}
-              value={settings.serverUrl}
-              onChange={e => setSettings(prev => ({ ...prev, serverUrl: e.target.value }))}
-              onBlur={e => saveServerUrl(e.target.value)}
-              onKeyDown={e => {
-                if (e.key === 'Enter') saveServerUrl((e.target as HTMLInputElement).value);
-              }}
-              className={inputClass}
-            />
-          </div>
-
-          <div className="flex items-center gap-4">
-            <button
-              type="button"
-              onClick={testConnection}
-              disabled={!hasServerUrl || connectionStatus === 'testing'}
-              className={btnPrimary}>
-              {connectionStatus === 'testing' ? '...' : t('options_server_testConnection')}
-            </button>
-
-            <span
-              className={`text-sm font-medium ${
-                connectionStatus === 'connected'
-                  ? 'text-green-500'
-                  : connectionStatus === 'failed'
-                    ? 'text-red-500'
-                    : isDarkMode
-                      ? 'text-gray-400'
-                      : 'text-gray-500'
-              }`}>
-              {connectionStatus === 'idle' && !hasServerUrl && t('options_server_status_notConfigured')}
-              {connectionStatus === 'idle' && hasServerUrl && ''}
-              {connectionStatus === 'testing' && '...'}
-              {connectionStatus === 'connected' && t('options_server_status_connected', [String(latencyMs)])}
-              {connectionStatus === 'failed' && t('options_server_status_failed')}
-            </span>
-          </div>
-        </div>
+        <p className={`text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>
+          {settings.serverUrl || t('options_server_status_notConfigured')}
+        </p>
       </div>
 
-      {/* Authentication */}
-      {hasServerUrl && (
+      {/* Authentication Status */}
+      <div className={cardClass}>
+        <h2 className={headingClass}>{t('options_server_auth_title')}</h2>
+        <div className="flex items-center gap-3">
+          <span className={`inline-block size-2.5 rounded-full ${isAuthenticated ? 'bg-green-500' : 'bg-red-500'}`} />
+          <p className={`text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>
+            {isAuthenticated
+              ? t('options_server_status_autoConnected', [settings.userId])
+              : t('options_server_status_notConnected')}
+          </p>
+        </div>
+        {!isAuthenticated && (
+          <p className={`mt-2 text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+            {t('options_server_status_notConnected_hint')}
+          </p>
+        )}
+      </div>
+
+      {/* Server-provided configuration (read-only) */}
+      {isAuthenticated && (
         <div className={cardClass}>
-          <h2 className={headingClass}>{t('options_server_auth_title')}</h2>
+          <div className="mb-4 flex items-center gap-2">
+            <h2 className={`text-left text-xl font-semibold ${isDarkMode ? 'text-gray-200' : 'text-gray-800'}`}>
+              {t('options_server_config_title')}
+            </h2>
+            <span
+              className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${isDarkMode ? 'bg-slate-600 text-gray-300' : 'bg-gray-100 text-gray-500'}`}>
+              {t('options_server_config_managed')}
+            </span>
+          </div>
 
-          {isAuthenticated ? (
-            <div className="flex items-center justify-between">
-              <p className={`text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>
-                {t('options_server_auth_loggedIn', [settings.userId])}
-              </p>
-              <button type="button" onClick={handleLogout} className={btnDanger}>
-                {t('options_server_auth_logout')}
-              </button>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              <div>
-                <label htmlFor="loginEmail" className={labelClass}>
-                  {t('options_server_auth_email')}
-                </label>
-                <input
-                  id="loginEmail"
-                  type="email"
-                  value={loginEmail}
-                  onChange={e => setLoginEmail(e.target.value)}
-                  className={`mt-1 ${inputClass}`}
-                />
+          {/* API Keys / Providers */}
+          {Object.keys(providers).length > 0 && (
+            <div className="mb-5">
+              <h3 className={`mb-2 ${labelClass}`}>{t('options_server_config_providers')}</h3>
+              <div className="space-y-2">
+                {Object.entries(providers).map(([id, config]) => (
+                  <div
+                    key={id}
+                    className={`flex items-center justify-between rounded-md border px-3 py-2 ${isDarkMode ? 'border-slate-600 bg-slate-700/50' : 'border-gray-100 bg-gray-50'}`}>
+                    <div>
+                      <span className={`text-sm font-medium ${isDarkMode ? 'text-gray-200' : 'text-gray-800'}`}>
+                        {config.name || id}
+                      </span>
+                      {config.type && (
+                        <span className={`ml-2 text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                          {config.type}
+                        </span>
+                      )}
+                    </div>
+                    <code className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                      {maskApiKey(config.apiKey)}
+                    </code>
+                  </div>
+                ))}
               </div>
-
-              <div>
-                <label htmlFor="loginPassword" className={labelClass}>
-                  {t('options_server_auth_password')}
-                </label>
-                <input
-                  id="loginPassword"
-                  type="password"
-                  value={loginPassword}
-                  onChange={e => setLoginPassword(e.target.value)}
-                  onKeyDown={e => {
-                    if (e.key === 'Enter') handleLogin();
-                  }}
-                  className={`mt-1 ${inputClass}`}
-                />
-              </div>
-
-              {loginError && <p className="text-sm text-red-500">{loginError}</p>}
-
-              <button
-                type="button"
-                onClick={handleLogin}
-                disabled={isLoggingIn || !loginEmail || !loginPassword}
-                className={btnPrimary}>
-                {isLoggingIn ? '...' : t('options_server_auth_login')}
-              </button>
             </div>
+          )}
+
+          {/* Agent Model Assignments */}
+          {Object.keys(agentModels).length > 0 && (
+            <div>
+              <h3 className={`mb-2 ${labelClass}`}>{t('options_server_config_agentModels')}</h3>
+              <div className="space-y-2">
+                {Object.entries(agentModels).map(([agentKey, config]) => (
+                  <div
+                    key={agentKey}
+                    className={`flex items-center justify-between rounded-md border px-3 py-2 ${isDarkMode ? 'border-slate-600 bg-slate-700/50' : 'border-gray-100 bg-gray-50'}`}>
+                    <span
+                      className={`text-sm font-medium capitalize ${isDarkMode ? 'text-gray-200' : 'text-gray-800'}`}>
+                      {agentKey as AgentNameEnum}
+                    </span>
+                    <span className={valueClass}>
+                      {config.provider} / {config.modelName}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {Object.keys(providers).length === 0 && Object.keys(agentModels).length === 0 && (
+            <p className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+              {t('options_server_config_empty')}
+            </p>
           )}
         </div>
       )}

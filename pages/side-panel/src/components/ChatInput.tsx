@@ -8,7 +8,6 @@ interface ChatInputProps {
   onStopTask: () => void;
   onMicClick?: () => void;
   isRecording?: boolean;
-  isProcessingSpeech?: boolean;
   disabled: boolean;
   showStopButton: boolean;
   setContent?: (setter: (text: string) => void) => void;
@@ -29,7 +28,6 @@ export default function ChatInput({
   onStopTask,
   onMicClick,
   isRecording = false,
-  isProcessingSpeech = false,
   disabled,
   showStopButton,
   setContent,
@@ -275,27 +273,17 @@ export default function ChatInput({
               <button
                 type="button"
                 onClick={onMicClick}
-                disabled={disabled || isProcessingSpeech}
-                aria-label={
-                  isProcessingSpeech
-                    ? t('chat_stt_processing')
-                    : isRecording
-                      ? t('chat_stt_recording_stop')
-                      : t('chat_stt_input_start')
-                }
+                disabled={disabled}
+                aria-label={isRecording ? t('chat_voice_recording_stop') : t('chat_voice_input_start')}
                 className={`relative rounded-lg p-1.5 transition-colors ${
-                  disabled || isProcessingSpeech
+                  disabled
                     ? 'cursor-not-allowed opacity-50'
                     : isRecording
                       ? 'bg-red-100 text-red-500 hover:bg-red-200'
                       : 'text-gray-400 hover:bg-gray-100 hover:text-gray-600'
                 }`}>
                 {isRecording && <span className="absolute inset-0 animate-voice-pulse rounded-lg bg-red-400" />}
-                {isProcessingSpeech ? (
-                  <div className="border-accent size-4 animate-spin rounded-full border-2 border-t-transparent" />
-                ) : (
-                  <Mic size={16} strokeWidth={2} className="relative" />
-                )}
+                <Mic size={16} strokeWidth={2} className="relative" />
               </button>
             )}
 

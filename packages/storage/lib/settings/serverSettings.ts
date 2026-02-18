@@ -4,6 +4,7 @@ import type { BaseStorage } from '../base/types';
 
 export interface ServerSettingsConfig {
   serverUrl: string;
+  clientUrl: string;
   accessToken: string;
   userId: string;
   tokenExpiresAt: number;
@@ -21,6 +22,7 @@ export type ServerSettingsStorage = BaseStorage<ServerSettingsConfig> & {
 
 export const DEFAULT_SERVER_SETTINGS: ServerSettingsConfig = {
   serverUrl: '',
+  clientUrl: '',
   accessToken: '',
   userId: '',
   tokenExpiresAt: 0,

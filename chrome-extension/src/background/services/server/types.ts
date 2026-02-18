@@ -107,3 +107,43 @@ export interface AddMessagePayload {
   content: string;
   timestamp?: number;
 }
+
+export interface ConnectTokenResponse {
+  token: string;
+  expires_at: string;
+  connect_link_url: string;
+}
+
+export interface PipedreamAccount {
+  id: string;
+  name: string;
+  app: { name_slug: string; name: string };
+  created_at: string;
+}
+
+export interface IntegrationManifest {
+  apps: Record<
+    string,
+    {
+      name: string;
+      actions: Array<{
+        key: string;
+        name: string;
+        description: string;
+        requiredProps: string[];
+      }>;
+    }
+  >;
+}
+
+export interface ActionRunRequest {
+  actionKey: string;
+  appSlug: string;
+  parameters: Record<string, unknown>;
+}
+
+export interface ActionRunResult {
+  success: boolean;
+  data: Record<string, unknown>;
+  error?: string;
+}

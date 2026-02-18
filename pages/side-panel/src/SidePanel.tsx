@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useSyncExternalStore } from 'react';
 import { History, SquarePen, Settings } from 'lucide-react';
 import {
   type Message,
@@ -7,6 +7,7 @@ import {
   chatHistoryStore,
   agentModelStore,
   generalSettingsStore,
+  serverSettingsStore,
   mergeWidgetIntoMessages,
 } from '@extension/storage';
 
@@ -35,23 +36,61 @@ function portRpc(
     port.postMessage({ type, requestId, ...payload });
   });
 }
-import favoritesStorage, { type FavoritePrompt } from '@extension/storage/lib/prompt/favorites';
 import { t } from '@extension/i18n';
 import MessageList from './components/MessageList';
 import ChatInput from './components/ChatInput';
 import ChatHistoryList from './components/ChatHistoryList';
-import BookmarkList from './components/BookmarkList';
 import ThinkingWidget from './components/ThinkingWidget';
 import { ActiveGroupOverlay } from './components/ActiveGroupOverlay';
+import { AuthOverlay } from './components/AuthOverlay';
 import { SlidePanel } from './components/SlidePanel';
 import { EventType, type AgentEvent, ExecutionState } from './types/event';
 import { useThinkingState } from './hooks/useThinkingState';
 import { useTaskTimer } from './hooks/useTaskTimer';
 import './SidePanel.css';
 
+interface SpeechRecognitionResult {
+  readonly [index: number]: SpeechRecognitionAlternative;
+  readonly length: number;
+}
+
+interface SpeechRecognitionAlternative {
+  readonly transcript: string;
+  readonly confidence: number;
+}
+
+interface SpeechRecognitionResultList {
+  readonly [index: number]: SpeechRecognitionResult;
+  readonly length: number;
+}
+
+interface SpeechRecognitionEvent extends Event {
+  readonly results: SpeechRecognitionResultList;
+}
+
+interface SpeechRecognitionErrorEvent extends Event {
+  readonly error: string;
+}
+
+interface SpeechRecognitionInstance extends EventTarget {
+  continuous: boolean;
+  interimResults: boolean;
+  lang: string;
+  onresult: ((event: SpeechRecognitionEvent) => void) | null;
+  onerror: ((event: SpeechRecognitionErrorEvent) => void) | null;
+  onend: (() => void) | null;
+  start: () => void;
+  stop: () => void;
+  abort: () => void;
+}
+
+type SpeechRecognitionConstructor = new () => SpeechRecognitionInstance;
+
 declare global {
   interface Window {
     chrome: typeof chrome;
+    SpeechRecognition?: SpeechRecognitionConstructor;
+    webkitSpeechRecognition?: SpeechRecognitionConstructor;
   }
 }
 
@@ -60,6 +99,44 @@ function serverRoleToActor(role: string): Actors {
   if (role === 'assistant') return Actors.SYNTHESIZER;
   return Actors.SYSTEM;
 }
+
+const CLIENT_URL = import.meta.env.VITE_CLIENT_URL || 'http://localhost:3000';
+
+const WORKFLOW_PROMPTS = [
+  {
+    id: 'ota-rate-parity',
+    name: 'OTA Rate Parity Check',
+    description: 'Compare rates on Google Travel and adjust in Mews',
+    icon: '💲',
+    prompt: [
+      'Go to google.com/travel/hotels and search for the Olea Hotel. Open the hotel\'s detail page and record the nightly rates for the Direct channel and Booking.com from the price comparison panel for the currently displayed check-in date, saving the result as a finding with the key prices_checkin and a value such as "Direct: $189, Booking.com: $205".',
+      'Next, calculate the variance using (Booking.com price − Direct price) / Direct price × 100 and flag it if the variance falls outside the acceptable range of −2% to +15%, with the target markup being 10%. Save the analysis as a finding with the key parity_analysis, including the variance percentage and whether it is flagged.',
+      'If flagged, calculate the target Direct rate by dividing the Booking.com price by 1.10 and rounding down to the nearest whole dollar, never setting it below a floor price of $150. Then go to Mews at https://app.mews-demo.com/Commander/742af69f-59a4-453b-8833-ac7500ad9cb8/Dashboard/Index, select the "Stay" service from the dropdown on the left, and navigate to Rate Management.',
+      'On the Rate Management page, locate the Base price row on the left — it should be the first row with orange cells. You\'ll see a grid of prices with dates as columns. Click the cell corresponding to the relevant date on the Base price row only — do not modify any other rate, category, or date row. A form will appear with "Absolute adjustment" and "Relative adjustment %" fields. Enter the new rate using the Absolute adjustment field, calculated as the difference between the new target rate and the current base price, leave Relative adjustment % unchanged, and save.',
+      'Save the adjustment as a finding with the key adjusted_direct and a value such as "Old: $195 → New: $178".',
+    ].join('\n'),
+  },
+  {
+    id: 'group-booking-inquiries',
+    name: 'Group Booking Inquiries',
+    description: 'Process group booking emails and draft replies',
+    icon: '🏨',
+    prompt: [
+      'First, navigate to https://mail.google.com/mail/u/3/#inbox to verify you are on the correct Gmail account — the user will already be logged in.',
+      'Search for group booking inquiries using the query: "group booking OR block reservation OR event inquiry OR RFP OR corporate rate OR wedding block OR room block". Open the matching email and read the full content.',
+      'Next, navigate to the Autumn application at http://localhost:3000 and open the sidebar. Go to the Group Bookings section. Paste the email content into the Quick Import field and generate a quote. Once the quote is generated, scroll down and copy the generated email reply.',
+      "Navigate back to Gmail at https://mail.google.com/mail/u/3/#inbox. Open the original email thread, click reply, and paste the generated reply into the compose window. Save it as a draft only — do NOT send it. Ask me first if I'd like to send it, and only send if I confirm.",
+      'Confirm once the draft reply has been saved in Gmail (or sent, if approved).',
+    ].join('\n'),
+  },
+  {
+    id: 'performance-next-week',
+    name: 'Performance Next Week',
+    description: 'Check upcoming performance outlook',
+    icon: '📊',
+    prompt: 'How does my performance next week look?',
+  },
+] as const;
 
 const SidePanel = () => {
   const [messages, setMessages] = useState<Message[]>([]);
@@ -74,10 +151,8 @@ const SidePanel = () => {
   >([]);
   const [isFollowUpMode, setIsFollowUpMode] = useState(false);
   const [isHistoricalSession, setIsHistoricalSession] = useState(false);
-  const [favoritePrompts, setFavoritePrompts] = useState<FavoritePrompt[]>([]);
   const [hasConfiguredModels, setHasConfiguredModels] = useState<boolean | null>(null);
   const [isRecording, setIsRecording] = useState(false);
-  const [isProcessingSpeech, setIsProcessingSpeech] = useState(false);
   const [isReplaying, setIsReplaying] = useState(false);
   const [replayEnabled, setReplayEnabled] = useState(false);
   const [isStreamingPlanner, setIsStreamingPlanner] = useState(false);
@@ -97,9 +172,7 @@ const SidePanel = () => {
   const heartbeatIntervalRef = useRef<number | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const setInputTextRef = useRef<((text: string) => void) | null>(null);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const audioChunksRef = useRef<Blob[]>([]);
-  const recordingTimerRef = useRef<number | null>(null);
+  const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
   const widgetApplyCallbacksRef = useRef<Map<string, { resolve: (r: { success: boolean; error?: string }) => void }>>(
     new Map(),
   );
@@ -165,22 +238,38 @@ const SidePanel = () => {
     }
   }, []);
 
+  const serverSettings = useSyncExternalStore(serverSettingsStore.subscribe, serverSettingsStore.getSnapshot);
+  const isAuthenticated =
+    serverSettings === null ? null : Boolean(serverSettings.accessToken) && serverSettings.tokenExpiresAt > Date.now();
+
   useEffect(() => {
     checkModelConfiguration();
     loadGeneralSettings();
   }, [checkModelConfiguration, loadGeneralSettings]);
+
+  const requestAuthDetection = useCallback(() => {
+    if (isAuthenticated === false) {
+      portRef.current?.postMessage({ type: 'detect_auth', clientUrl: CLIENT_URL });
+    }
+  }, [isAuthenticated]);
+
+  useEffect(() => {
+    requestAuthDetection();
+  }, [requestAuthDetection]);
 
   useEffect(() => {
     const handleVisibilityChange = () => {
       if (!document.hidden) {
         checkModelConfiguration();
         loadGeneralSettings();
+        requestAuthDetection();
       }
     };
 
     const handleFocus = () => {
       checkModelConfiguration();
       loadGeneralSettings();
+      requestAuthDetection();
     };
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
@@ -190,7 +279,7 @@ const SidePanel = () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('focus', handleFocus);
     };
-  }, [checkModelConfiguration, loadGeneralSettings]);
+  }, [checkModelConfiguration, loadGeneralSettings, requestAuthDetection]);
 
   useEffect(() => {
     const listener = (activeInfo: chrome.tabs.TabActiveInfo) => {
@@ -502,18 +591,6 @@ const SidePanel = () => {
           });
           setInputEnabled(true);
           setShowStopButton(false);
-        } else if (message && message.type === 'speech_to_text_result') {
-          if (message.text && setInputTextRef.current) {
-            setInputTextRef.current(message.text);
-          }
-          setIsProcessingSpeech(false);
-        } else if (message && message.type === 'speech_to_text_error') {
-          appendMessage({
-            actor: Actors.SYSTEM,
-            content: message.error || t('chat_stt_recognitionFailed'),
-            timestamp: Date.now(),
-          });
-          setIsProcessingSpeech(false);
         } else if (message && message.type === 'conversations_result') {
           const mapped = (message.conversations || []).map(
             (c: { id: string; title: string; createdAt: string; source?: string }) => ({
@@ -970,78 +1047,10 @@ const SidePanel = () => {
     portRef.current?.postMessage({ type: 'delete_conversation', conversationId: sessionId });
   };
 
-  const handleSessionBookmark = async (sessionId: string) => {
-    try {
-      const session = chatSessions.find(s => s.id === sessionId);
-      if (session) {
-        const title = session.title.split(' ').slice(0, 8).join(' ');
-        await favoritesStorage.addPrompt(title, session.title);
-        const prompts = await favoritesStorage.getAllPrompts();
-        setFavoritePrompts(prompts);
-        handleBackToChat(true);
-      }
-    } catch (error) {
-      console.error('Failed to pin session to favorites:', error);
-    }
-  };
-
-  const handleBookmarkSelect = (content: string) => {
-    if (setInputTextRef.current) {
-      setInputTextRef.current(content);
-    }
-  };
-
-  const handleBookmarkUpdateTitle = async (id: number, title: string) => {
-    try {
-      await favoritesStorage.updatePromptTitle(id, title);
-      const prompts = await favoritesStorage.getAllPrompts();
-      setFavoritePrompts(prompts);
-    } catch (error) {
-      console.error('Failed to update favorite prompt title:', error);
-    }
-  };
-
-  const handleBookmarkDelete = async (id: number) => {
-    try {
-      await favoritesStorage.removePrompt(id);
-      const prompts = await favoritesStorage.getAllPrompts();
-      setFavoritePrompts(prompts);
-    } catch (error) {
-      console.error('Failed to delete favorite prompt:', error);
-    }
-  };
-
-  const handleBookmarkReorder = async (draggedId: number, targetId: number) => {
-    try {
-      await favoritesStorage.reorderPrompts(draggedId, targetId);
-      const updatedPromptsFromStorage = await favoritesStorage.getAllPrompts();
-      setFavoritePrompts(updatedPromptsFromStorage);
-    } catch (error) {
-      console.error('Failed to reorder favorite prompts:', error);
-    }
-  };
-
-  useEffect(() => {
-    const loadFavorites = async () => {
-      try {
-        const prompts = await favoritesStorage.getAllPrompts();
-        setFavoritePrompts(prompts);
-      } catch (error) {
-        console.error('Failed to load favorite prompts:', error);
-      }
-    };
-
-    loadFavorites();
-  }, []);
-
   useEffect(() => {
     return () => {
-      if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
-        mediaRecorderRef.current.stop();
-      }
-      if (recordingTimerRef.current) {
-        clearTimeout(recordingTimerRef.current);
-        recordingTimerRef.current = null;
+      if (recognitionRef.current) {
+        recognitionRef.current.abort();
       }
       stopConnection();
     };
@@ -1052,147 +1061,57 @@ const SidePanel = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  const handleMicClick = async () => {
+  const handleMicClick = () => {
     if (isRecording) {
-      if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
-        mediaRecorderRef.current.stop();
-      }
-      if (recordingTimerRef.current) {
-        clearTimeout(recordingTimerRef.current);
-        recordingTimerRef.current = null;
+      if (recognitionRef.current) {
+        recognitionRef.current.abort();
       }
       setIsRecording(false);
       return;
     }
 
-    try {
-      const permissionStatus = await navigator.permissions.query({ name: 'microphone' as PermissionName });
-
-      if (permissionStatus.state === 'denied') {
-        appendMessage({
-          actor: Actors.SYSTEM,
-          content: t('chat_stt_microphone_permissionDenied'),
-          timestamp: Date.now(),
-        });
-        return;
-      }
-
-      if (permissionStatus.state !== 'granted') {
-        const permissionUrl = chrome.runtime.getURL('permission/index.html');
-
-        chrome.windows.create(
-          {
-            url: permissionUrl,
-            type: 'popup',
-            width: 500,
-            height: 600,
-          },
-          createdWindow => {
-            if (createdWindow?.id) {
-              chrome.windows.onRemoved.addListener(function onWindowClose(windowId) {
-                if (windowId === createdWindow.id) {
-                  chrome.windows.onRemoved.removeListener(onWindowClose);
-                  setTimeout(async () => {
-                    try {
-                      const newPermissionStatus = await navigator.permissions.query({
-                        name: 'microphone' as PermissionName,
-                      });
-                      if (newPermissionStatus.state === 'granted') {
-                        handleMicClick();
-                      }
-                    } catch (error) {
-                      console.error('Failed to check permission status:', error);
-                    }
-                  }, 500);
-                }
-              });
-            }
-          },
-        );
-        return;
-      }
-
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-
-      audioChunksRef.current = [];
-
-      const mediaRecorder = new MediaRecorder(stream);
-      mediaRecorderRef.current = mediaRecorder;
-
-      mediaRecorder.ondataavailable = event => {
-        if (event.data.size > 0) {
-          audioChunksRef.current.push(event.data);
-        }
-      };
-
-      mediaRecorder.onstop = async () => {
-        stream.getTracks().forEach(track => track.stop());
-
-        if (audioChunksRef.current.length > 0) {
-          const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-
-          const reader = new FileReader();
-          reader.onloadend = () => {
-            const base64Audio = reader.result as string;
-
-            if (!portRef.current) {
-              setupConnection();
-            }
-
-            try {
-              setIsProcessingSpeech(true);
-              portRef.current?.postMessage({
-                type: 'speech_to_text',
-                audio: base64Audio,
-              });
-            } catch (error) {
-              console.error('Failed to send audio for speech-to-text:', error);
-              appendMessage({
-                actor: Actors.SYSTEM,
-                content: t('chat_stt_processingFailed'),
-                timestamp: Date.now(),
-              });
-              setIsRecording(false);
-              setIsProcessingSpeech(false);
-            }
-          };
-          reader.readAsDataURL(audioBlob);
-        }
-      };
-
-      const maxDuration = 2 * 60 * 1000;
-      recordingTimerRef.current = window.setTimeout(() => {
-        if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
-          mediaRecorderRef.current.stop();
-        }
-        setIsRecording(false);
-        setIsProcessingSpeech(true);
-        recordingTimerRef.current = null;
-      }, maxDuration);
-
-      mediaRecorder.start();
-      setIsRecording(true);
-    } catch (error) {
-      console.error('Error accessing microphone:', error);
-
-      let errorMessage = t('chat_stt_microphone_accessFailed');
-      if (error instanceof Error) {
-        if (error.name === 'NotAllowedError') {
-          errorMessage += t('chat_stt_microphone_grantPermission');
-        } else if (error.name === 'NotFoundError') {
-          errorMessage += t('chat_stt_microphone_notFound');
-        } else {
-          errorMessage += error.message;
-        }
-      }
-
+    const SpeechRecognitionCtor = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognitionCtor) {
       appendMessage({
         actor: Actors.SYSTEM,
-        content: errorMessage,
+        content: t('chat_voice_notSupported'),
         timestamp: Date.now(),
       });
-      setIsRecording(false);
+      return;
     }
+
+    const recognition = new SpeechRecognitionCtor();
+    recognition.continuous = false;
+    recognition.interimResults = false;
+    recognition.lang = navigator.language;
+
+    recognition.onresult = (event: SpeechRecognitionEvent) => {
+      const transcript = event.results[0][0].transcript;
+      if (transcript && setInputTextRef.current) {
+        setInputTextRef.current(transcript);
+      }
+    };
+
+    recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
+      console.error('Speech recognition error:', event.error);
+      if (event.error !== 'aborted') {
+        appendMessage({
+          actor: Actors.SYSTEM,
+          content: t('chat_voice_recognitionFailed'),
+          timestamp: Date.now(),
+        });
+      }
+      setIsRecording(false);
+    };
+
+    recognition.onend = () => {
+      setIsRecording(false);
+      recognitionRef.current = null;
+    };
+
+    recognitionRef.current = recognition;
+    recognition.start();
+    setIsRecording(true);
   };
 
   const renderChatInput = () => (
@@ -1201,7 +1120,6 @@ const SidePanel = () => {
       onStopTask={handleStopTask}
       onMicClick={handleMicClick}
       isRecording={isRecording}
-      isProcessingSpeech={isProcessingSpeech}
       disabled={!inputEnabled || isHistoricalSession}
       showStopButton={showStopButton}
       setContent={setter => {
@@ -1252,7 +1170,6 @@ const SidePanel = () => {
           sessions={chatSessions}
           onSessionSelect={handleSessionSelect}
           onSessionDelete={handleSessionDelete}
-          onSessionBookmark={handleSessionBookmark}
         />
       </SlidePanel>
 
@@ -1290,14 +1207,24 @@ const SidePanel = () => {
                   {t('welcome_subtitle')}
                 </p>
               </div>
-              <div className="scrollbar-thin overflow-y-auto">
-                <BookmarkList
-                  bookmarks={favoritePrompts}
-                  onBookmarkSelect={handleBookmarkSelect}
-                  onBookmarkUpdateTitle={handleBookmarkUpdateTitle}
-                  onBookmarkDelete={handleBookmarkDelete}
-                  onBookmarkReorder={handleBookmarkReorder}
-                />
+              <div className="scrollbar-thin overflow-y-auto px-3 pb-2">
+                <h3 className="mb-2 px-1 text-[12px] font-medium uppercase tracking-wide text-gray-400">
+                  {t('chat_bookmarks_header')}
+                </h3>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  {WORKFLOW_PROMPTS.map(wp => (
+                    <button
+                      key={wp.id}
+                      type="button"
+                      onClick={() => setInputTextRef.current?.(wp.prompt)}
+                      className="rounded-xl border border-gray-100 p-3 text-left transition-colors hover:bg-gray-50">
+                      <div className="truncate text-[13px] font-medium text-gray-700">
+                        {wp.icon} {wp.name}
+                      </div>
+                      <div className="mt-0.5 truncate text-[11px] text-gray-400">{wp.description}</div>
+                    </button>
+                  ))}
+                </div>
               </div>
               {renderChatInput()}
             </div>
@@ -1317,6 +1244,8 @@ const SidePanel = () => {
           )}
         </>
       )}
+
+      {isAuthenticated === false && <AuthOverlay />}
 
       {activeGroupOverlay && (
         <ActiveGroupOverlay

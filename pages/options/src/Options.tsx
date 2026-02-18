@@ -3,41 +3,29 @@ import '@src/Options.css';
 import { Button } from '@extension/ui';
 import { withErrorBoundary, withSuspense } from '@extension/shared';
 import { t } from '@extension/i18n';
-import { FiSettings, FiCpu, FiShield, FiTrendingUp, FiServer, FiHelpCircle } from 'react-icons/fi';
+import { FiSettings, FiShield, FiTrendingUp, FiServer } from 'react-icons/fi';
 import { GeneralSettings } from './components/GeneralSettings';
-import { ModelSettings } from './components/ModelSettings';
 import { FirewallSettings } from './components/FirewallSettings';
 import { AnalyticsSettings } from './components/AnalyticsSettings';
 import { ServerSettings } from './components/ServerSettings';
 
-type TabTypes = 'general' | 'models' | 'firewall' | 'analytics' | 'server' | 'help';
+type TabTypes = 'general' | 'firewall' | 'analytics' | 'server';
 
 const TABS: { id: TabTypes; icon: React.ComponentType<{ className?: string }>; label: string }[] = [
+  { id: 'server', icon: FiServer, label: t('options_tabs_server') },
   { id: 'general', icon: FiSettings, label: t('options_tabs_general') },
-  { id: 'models', icon: FiCpu, label: t('options_tabs_models') },
   { id: 'firewall', icon: FiShield, label: t('options_tabs_firewall') },
   { id: 'analytics', icon: FiTrendingUp, label: 'Analytics' },
-  { id: 'server', icon: FiServer, label: t('options_tabs_server') },
-  { id: 'help', icon: FiHelpCircle, label: t('options_tabs_help') },
 ];
 
 const Options = () => {
-  const [activeTab, setActiveTab] = useState<TabTypes>('models');
+  const [activeTab, setActiveTab] = useState<TabTypes>('server');
   const isDarkMode = false;
-
-  const handleTabClick = (tabId: TabTypes) => {
-    if (tabId === 'help') {
-      return;
-    }
-    setActiveTab(tabId);
-  };
 
   const renderTabContent = () => {
     switch (activeTab) {
       case 'general':
         return <GeneralSettings isDarkMode={isDarkMode} />;
-      case 'models':
-        return <ModelSettings isDarkMode={isDarkMode} />;
       case 'firewall':
         return <FirewallSettings isDarkMode={isDarkMode} />;
       case 'analytics':
@@ -62,7 +50,7 @@ const Options = () => {
             {TABS.map(item => (
               <li key={item.id}>
                 <Button
-                  onClick={() => handleTabClick(item.id)}
+                  onClick={() => setActiveTab(item.id)}
                   className={`flex w-full items-center space-x-2 rounded-lg px-4 py-2 text-left text-base
                     ${
                       activeTab !== item.id

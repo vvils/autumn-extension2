@@ -79,15 +79,6 @@
   "chat_history_title": {
     "message": "Chat History"
   },
-  "chat_history_empty": {
-    "message": "No chat history available"
-  },
-  "chat_history_bookmark": {
-    "message": "Bookmark session"
-  },
-  "chat_history_delete": {
-    "message": "Delete session"
-  },
   "chat_bookmarks_header": {
     "message": "Quick Start"
   },
@@ -102,6 +93,24 @@
   },
   "chat_bookmarks_delete": {
     "message": "Delete bookmark"
+  },
+  "chat_history_empty": {
+    "message": "No chat history available"
+  },
+  "chat_history_delete": {
+    "message": "Delete session"
+  },
+  "chat_voice_notSupported": {
+    "message": "Speech recognition is not supported in this browser"
+  },
+  "chat_voice_recognitionFailed": {
+    "message": "Speech recognition failed"
+  },
+  "chat_voice_recording_stop": {
+    "message": "Stop recording"
+  },
+  "chat_voice_input_start": {
+    "message": "Start voice input"
   },
   "chat_replay_starting": {
     "message": "Starting replay of task:\n\n\"$TASK$\"",
@@ -135,36 +144,6 @@
         "example": "abc123def456789"
       }
     }
-  },
-  "chat_stt_processing": {
-    "message": "Processing speech..."
-  },
-  "chat_stt_recording_stop": {
-    "message": "Stop recording"
-  },
-  "chat_stt_input_start": {
-    "message": "Start voice input"
-  },
-  "chat_stt_processingFailed": {
-    "message": "Failed to process speech recording"
-  },
-  "chat_stt_model_notFound": {
-    "message": "No speech-to-text model configured or not a Gemini model. Please configure a Gemini model in settings."
-  },
-  "chat_stt_recognitionFailed": {
-    "message": "Speech recognition failed"
-  },
-  "chat_stt_microphone_permissionDenied": {
-    "message": "Microphone access denied. Please enable microphone permissions in browser settings."
-  },
-  "chat_stt_microphone_accessFailed": {
-    "message": "Failed to access microphone. "
-  },
-  "chat_stt_microphone_grantPermission": {
-    "message": "Please grant microphone permission."
-  },
-  "chat_stt_microphone_notFound": {
-    "message": "No microphone found."
   },
   "permissions_microphone_title": {
     "message": "Enable Voice Input"
@@ -205,17 +184,11 @@
   "options_tabs_general": {
     "message": "General"
   },
-  "options_tabs_models": {
-    "message": "Models"
-  },
   "options_tabs_firewall": {
     "message": "Firewall"
   },
   "options_tabs_server": {
     "message": "Server"
-  },
-  "options_tabs_help": {
-    "message": "Help"
   },
   "options_general_header": {
     "message": "General"
@@ -273,161 +246,6 @@
   },
   "options_general_showCostEstimate_desc": {
     "message": "Display estimated token usage and cost during task execution"
-  },
-
-  "options_models_providers_header": {
-    "message": "LLM Providers"
-  },
-  "options_models_providers_notConfigured": {
-    "message": "No providers configured yet. Add a provider to get started."
-  },
-  "options_models_providers_btnCancel": {
-    "message": "Cancel"
-  },
-  "options_models_providers_btnSave": {
-    "message": "Save"
-  },
-  "options_models_providers_btnDelete": {
-    "message": "Delete"
-  },
-  "options_models_providers_setupInstructions": {
-    "message": "Enter your API key and click Save to set it up."
-  },
-  "options_models_providers_custom_name": {
-    "message": "Name"
-  },
-  "options_models_providers_custom_name_desc": {
-    "message": "Provider name (spaces are not allowed when saving)"
-  },
-  "options_models_providers_custom_name_placeholder": {
-    "message": "Provider name"
-  },
-
-  "options_models_providers_apiKey": {
-    "message": "API Key"
-  },
-  "options_models_providers_apiKey_placeholder_optional": {
-    "message": "API Key (optional)"
-  },
-  "options_models_providers_apiKey_placeholder_required": {
-    "message": "API Key (required)"
-  },
-  "options_models_providers_apiKey_placeholder_ollama": {
-    "message": "API Key (leave empty for Ollama)"
-  },
-  "options_models_providers_apiKey_hide": {
-    "message": "Hide API key"
-  },
-  "options_models_providers_apiKey_show": {
-    "message": "Show API key"
-  },
-
-  "options_models_selection_header": {
-    "message": "Model Selection"
-  },
-  "options_models_speechToText_header": {
-    "message": "Speech-to-Text Model"
-  },
-
-  "options_models_agents_navigator": {
-    "message": "Navigates websites and performs actions"
-  },
-  "options_models_agents_planner": {
-    "message": "Develops and refines strategies to complete tasks"
-  },
-
-  "options_models_labels_model": {
-    "message": "Model"
-  },
-  "options_models_labels_temperature": {
-    "message": "Temperature"
-  },
-  "options_models_labels_topP": {
-    "message": "Top P"
-  },
-  "options_models_labels_reasoning": {
-    "message": "Reasoning"
-  },
-  "options_models_stt_desc": {
-    "message": "Configure the Gemini model used for converting speech to text when using the microphone feature."
-  },
-  "options_models_chooseModel": {
-    "message": "Choose Model"
-  },
-  "options_models_addNewProvider": {
-    "message": "Add New Provider"
-  },
-  "options_models_providers_openaiCompatible": {
-    "message": "OpenAI-compatible API Provider"
-  },
-  "options_models_providers_baseUrl": {
-    "message": "Base URL"
-  },
-  "options_models_providers_endpoint": {
-    "message": "Endpoint"
-  },
-  "options_models_providers_deployment": {
-    "message": "Deployment"
-  },
-  "options_models_providers_apiVersion": {
-    "message": "API Version"
-  },
-  "options_models_providers_models": {
-    "message": "Models"
-  },
-  "options_models_providers_placeholders_baseUrl_custom": {
-    "message": "Required OpenAI-compatible API endpoint"
-  },
-  "options_models_providers_placeholders_baseUrl_azure": {
-    "message": "https://YOUR_RESOURCE_NAME.openai.azure.com/"
-  },
-  "options_models_providers_placeholders_baseUrl_openrouter": {
-    "message": "OpenRouter Base URL (optional, defaults to https://openrouter.ai/api/v1)"
-  },
-  "options_models_providers_placeholders_baseUrl_llama": {
-    "message": "Llama API Base URL (defaults to https://api.llama.com/v1)"
-  },
-  "options_models_providers_placeholders_baseUrl_ollama": {
-    "message": "Ollama base URL"
-  },
-  "options_models_providers_placeholders_azureDeployment": {
-    "message": "Enter Azure model name (e.g. gpt-4o, gpt-4o-mini)"
-  },
-  "options_models_providers_placeholders_azureApiVersion": {
-    "message": "e.g., 2025-04-01-preview"
-  },
-  "options_models_providers_deployment_desc": {
-    "message": "Type model name and press Enter or Space to set. Deployment name should match OpenAI model name (e.g., gpt-4o) for best compatibility."
-  },
-  "options_models_providers_models_instructions": {
-    "message": "Type and Press Enter or Space to add."
-  },
-  "options_models_providers_models_openrouter_empty": {
-    "message": "No models selected. Add model names manually if needed."
-  },
-  "options_models_providers_ollama_reminder": {
-    "message": "environment variable MUST be set for the Ollama server."
-  },
-  "options_models_providers_ollama_learnMore": {
-    "message": "Learn more"
-  },
-  "options_models_providers_serverSynced": {
-    "message": "Server"
-  },
-  "options_models_providers_serverSynced_tooltip": {
-    "message": "This API key was synced from the server"
-  },
-  "options_models_providers_errors_spacesNotAllowed": {
-    "message": "Spaces are not allowed in provider names. Please use underscores or other characters instead."
-  },
-  "options_models_providers_errors_baseUrlRequired": {
-    "message": "Base URL is required for $PROVIDER$. Please enter it.",
-    "placeholders": {
-      "provider": {
-        "content": "$1",
-        "example": "Custom OpenAI"
-      }
-    }
   },
 
   "options_firewall_header": {
@@ -496,12 +314,6 @@
   },
   "bg_cmd_nohighlight_ok": {
     "message": "highlight removed"
-  },
-  "bg_cmd_stt_noAudioData": {
-    "message": "No audio data provided"
-  },
-  "bg_cmd_stt_failed": {
-    "message": "Speech recognition failed"
   },
   "bg_cmd_replay_noHistory": {
     "message": "No history session ID provided"
@@ -1034,6 +846,36 @@
       }
     }
   },
+  "options_server_status_autoConnected": {
+    "message": "Automatically connected as $USER_ID$",
+    "placeholders": {
+      "user_id": {
+        "content": "$1",
+        "example": "user@example.com"
+      }
+    }
+  },
+  "options_server_status_notConnected": {
+    "message": "Not connected"
+  },
+  "options_server_status_notConnected_hint": {
+    "message": "Sign in at the Autumn dashboard to connect automatically"
+  },
+  "options_server_config_title": {
+    "message": "Server Configuration"
+  },
+  "options_server_config_managed": {
+    "message": "Managed by server"
+  },
+  "options_server_config_providers": {
+    "message": "API Providers"
+  },
+  "options_server_config_agentModels": {
+    "message": "Agent Model Assignments"
+  },
+  "options_server_config_empty": {
+    "message": "No configuration received from server yet"
+  },
   "exec_domainQuery_fail": {
     "message": "Domain query failed: $ERROR$",
     "placeholders": {
@@ -1051,5 +893,14 @@
   },
   "act_queryHotelData_escalated": {
     "message": "Hotel data unavailable - needs browser"
+  },
+  "auth_overlay_title": {
+    "message": "Sign in to get started"
+  },
+  "auth_overlay_subtitle": {
+    "message": "Sign in to your Autumn account to start using the extension"
+  },
+  "auth_overlay_signIn": {
+    "message": "Sign in"
   }
 }

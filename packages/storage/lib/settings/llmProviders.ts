@@ -1,7 +1,7 @@
 import { StorageEnum } from '../base/enums';
 import { createStorage } from '../base/base';
 import type { BaseStorage } from '../base/types';
-import { type AgentNameEnum, llmProviderModelNames, llmProviderParameters, ProviderTypeEnum } from './types';
+import { llmProviderModelNames, ProviderTypeEnum } from './types';
 
 const AZURE_API_VERSION = '2025-04-01-preview';
 
@@ -73,9 +73,7 @@ export function getProviderTypeByProviderId(providerId: string): ProviderTypeEnu
   }
 }
 
-// Helper function to get display name from provider id
-// Make sure to update this function if you add a new provider type
-export function getDefaultDisplayNameFromProviderId(providerId: string): string {
+function getDefaultDisplayNameFromProviderId(providerId: string): string {
   switch (providerId) {
     case ProviderTypeEnum.OpenAI:
       return 'OpenAI';
@@ -100,74 +98,8 @@ export function getDefaultDisplayNameFromProviderId(providerId: string): string 
     case ProviderTypeEnum.Llama:
       return 'Llama';
     default:
-      return providerId; // Use the provider id as display name for custom providers by default
+      return providerId;
   }
-}
-
-// Get default configuration for built-in providers
-export function getDefaultProviderConfig(providerId: string): ProviderConfig {
-  switch (providerId) {
-    case ProviderTypeEnum.OpenAI:
-    case ProviderTypeEnum.Anthropic:
-    case ProviderTypeEnum.DeepSeek:
-    case ProviderTypeEnum.Gemini:
-    case ProviderTypeEnum.Grok:
-    case ProviderTypeEnum.OpenRouter: // OpenRouter uses modelNames
-    case ProviderTypeEnum.Groq: // Groq uses modelNames
-    case ProviderTypeEnum.Cerebras: // Cerebras uses modelNames
-    case ProviderTypeEnum.Llama: // Llama uses modelNames
-      return {
-        apiKey: '',
-        name: getDefaultDisplayNameFromProviderId(providerId),
-        type: providerId,
-        baseUrl:
-          providerId === ProviderTypeEnum.OpenRouter
-            ? 'https://openrouter.ai/api/v1'
-            : providerId === ProviderTypeEnum.Llama
-              ? 'https://api.llama.com/v1'
-              : undefined,
-        modelNames: [...(llmProviderModelNames[providerId] || [])],
-        createdAt: Date.now(),
-      };
-
-    case ProviderTypeEnum.Ollama:
-      return {
-        apiKey: 'ollama', // Set default API key for Ollama
-        name: getDefaultDisplayNameFromProviderId(ProviderTypeEnum.Ollama),
-        type: ProviderTypeEnum.Ollama,
-        modelNames: llmProviderModelNames[providerId],
-        baseUrl: 'http://localhost:11434',
-        createdAt: Date.now(),
-      };
-    case ProviderTypeEnum.AzureOpenAI:
-      return {
-        apiKey: '', // User needs to provide API Key
-        name: getDefaultDisplayNameFromProviderId(ProviderTypeEnum.AzureOpenAI),
-        type: ProviderTypeEnum.AzureOpenAI,
-        baseUrl: '', // User needs to provide Azure endpoint
-        // modelNames: [], // Not used for Azure configuration
-        azureDeploymentNames: [], // Azure deployment names
-        azureApiVersion: AZURE_API_VERSION, // Provide a common default API version
-        createdAt: Date.now(),
-      };
-    default: // Handles CustomOpenAI
-      return {
-        apiKey: '',
-        name: getDefaultDisplayNameFromProviderId(providerId),
-        type: ProviderTypeEnum.CustomOpenAI,
-        baseUrl: '',
-        modelNames: [], // Custom providers use modelNames
-        createdAt: Date.now(),
-      };
-  }
-}
-
-export function getDefaultAgentModelParams(providerId: string, agentName: AgentNameEnum): Record<string, number> {
-  const newParameters = llmProviderParameters[providerId as keyof typeof llmProviderParameters]?.[agentName] || {
-    temperature: 0.1,
-    topP: 0.1,
-  };
-  return newParameters;
 }
 
 // Helper function to ensure backward compatibility for provider configs

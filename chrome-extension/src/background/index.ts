@@ -7,7 +7,6 @@ import {
   llmProviderStore,
   analyticsSettingsStore,
   serverSettingsStore,
-  serverProvidedKeysStore,
 } from '@extension/storage';
 import { t } from '@extension/i18n';
 import BrowserContext from './browser/context';
@@ -17,13 +16,11 @@ import { ExecutionState } from './agent/event/types';
 import { createChatModel } from './agent/helper';
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import { DEFAULT_AGENT_OPTIONS } from './agent/types';
-import { SpeechToTextService } from './services/speechToText';
 import { injectBuildDomTreeScripts } from './browser/dom/service';
 import { analytics } from './services/analytics';
-import { ServerClient, detectTokenFromTabs, listenForWebAppAuth } from './services/server';
+import { ServerClient, detectTokenFromTabs, listenForWebAppAuth, watchTabsForAuth } from './services/server';
 import type { AddMessagePayload } from './services/server/types';
 import { validateWidgetApplyRequest, executeWidgetApply } from './services/widgetApply';
-import { seedWorkflowPrompts } from './services/workflowPrompts';
 
 const logger = createLogger('background');
 
@@ -127,26 +124,37 @@ chrome.tabs.onRemoved.addListener(async tabId => {
 
 logger.info('background loaded');
 
-chrome.runtime.onInstalled.addListener(async details => {
-  if (details.reason === 'install' || details.reason === 'update') {
-    await seedWorkflowPrompts();
-  }
+chrome.runtime.onInstalled.addListener(async () => {
+  // Reserved for future install/update hooks
 });
 
-// Initialize analytics
-analytics.init().catch(error => {
+analytics.init().catch((error: unknown) => {
   logger.error('Failed to initialize analytics:', error);
 });
 
-// Listen for analytics settings changes
 analyticsSettingsStore.subscribe(() => {
-  analytics.updateSettings().catch(error => {
+  analytics.updateSettings().catch((error: unknown) => {
     logger.error('Failed to update analytics settings:', error);
   });
 });
 
+async function autoPopulateServerUrls() {
+  const settings = await serverSettingsStore.getSettings();
+  const updates: Partial<typeof settings> = {};
+  if (!settings.serverUrl && import.meta.env.VITE_SERVER_URL) {
+    updates.serverUrl = import.meta.env.VITE_SERVER_URL;
+  }
+  if (!settings.clientUrl && import.meta.env.VITE_CLIENT_URL) {
+    updates.clientUrl = import.meta.env.VITE_CLIENT_URL;
+  }
+  if (Object.keys(updates).length > 0) {
+    await serverSettingsStore.updateSettings(updates);
+  }
+}
+
 // Initialize server client
 async function initServerClient() {
+  await autoPopulateServerUrls();
   serverClient = await ServerClient.create(serverSettingsStore);
   cachedHotelCapabilities = undefined;
   if (serverClient) {
@@ -167,12 +175,10 @@ async function initServerClient() {
           const serverKeys = pullResult.keys;
 
           if (serverKeys && Object.keys(serverKeys).length > 0) {
-            const serverKeyIds = Object.keys(serverKeys);
             for (const [id, config] of Object.entries(serverKeys)) {
               await llmProviderStore.setProvider(id, config);
             }
-            await serverProvidedKeysStore.setProviderIds(serverKeyIds);
-            logger.info(`Pulled ${serverKeyIds.length} provider keys from server`);
+            logger.info(`Pulled ${Object.keys(serverKeys).length} provider keys from server`);
           }
 
           if (pullResult.agentModels) {
@@ -222,11 +228,14 @@ serverSettingsStore.subscribe(() => {
   }
 });
 
-listenForWebAppAuth(serverSettingsStore, () => {
+const reinitOnAuthChange = () => {
   initServerClient().catch(error => {
     logger.error('Failed to reinit after auth change:', error);
   });
-});
+};
+
+listenForWebAppAuth(serverSettingsStore, reinitOnAuthChange);
+watchTabsForAuth(serverSettingsStore, reinitOnAuthChange);
 
 // Setup connection listener for long-lived connections (e.g., side panel)
 chrome.runtime.onConnect.addListener(port => {
@@ -249,6 +258,22 @@ chrome.runtime.onConnect.addListener(port => {
             // Acknowledge heartbeat
             port.postMessage({ type: 'heartbeat_ack' });
             break;
+
+          case 'detect_auth': {
+            if (message.clientUrl) {
+              const settings = await serverSettingsStore.getSettings();
+              if (!settings.clientUrl) {
+                await serverSettingsStore.updateSettings({ clientUrl: message.clientUrl });
+              }
+            }
+            const found = await detectTokenFromTabs(serverSettingsStore);
+            if (found) {
+              initServerClient().catch(error => {
+                logger.error('Failed to reinit after detect_auth:', error);
+              });
+            }
+            break;
+          }
 
           case 'new_task': {
             if (!message.task) return port.postMessage({ type: 'error', error: t('bg_cmd_newTask_noTask') });
@@ -332,46 +357,6 @@ chrome.runtime.onConnect.addListener(port => {
             const page = await browserContext.getCurrentPage();
             await page.removeHighlight();
             return port.postMessage({ type: 'success', msg: t('bg_cmd_nohighlight_ok') });
-          }
-
-          case 'speech_to_text': {
-            try {
-              if (!message.audio) {
-                return port.postMessage({
-                  type: 'speech_to_text_error',
-                  error: t('bg_cmd_stt_noAudioData'),
-                });
-              }
-
-              logger.info('Processing speech-to-text request...');
-
-              // Get all providers for speech-to-text service
-              const providers = await llmProviderStore.getAllProviders();
-
-              // Create speech-to-text service with all providers
-              const speechToTextService = await SpeechToTextService.create(providers);
-
-              // Extract base64 audio data (remove data URL prefix if present)
-              let base64Audio = message.audio;
-              if (base64Audio.startsWith('data:')) {
-                base64Audio = base64Audio.split(',')[1];
-              }
-
-              // Transcribe audio
-              const transcribedText = await speechToTextService.transcribeAudio(base64Audio);
-
-              logger.info('Speech-to-text completed successfully');
-              return port.postMessage({
-                type: 'speech_to_text_result',
-                text: transcribedText,
-              });
-            } catch (error) {
-              logger.error('Speech-to-text failed:', error);
-              return port.postMessage({
-                type: 'speech_to_text_error',
-                error: error instanceof Error ? error.message : t('bg_cmd_stt_failed'),
-              });
-            }
           }
 
           case 'replay': {
