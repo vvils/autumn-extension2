@@ -100,8 +100,8 @@ ${
   1. query_hotel_data → fetch the hotel's direct rates for the requested date range
   2. search_google → search for OTA prices on Google Travel Hotels. If no Google hotel card appears, navigate directly to booking.com and expedia.com to extract rates.
   3. Extract OTA prices from the visible page (cache_content if scrolling is needed)
-  4. ask_user → present a rate comparison table (Direct vs OTA rates, variance %, parity alerts) and ask whether to push corrected rates to PMS (sole action in its step)
-  5. If user confirms → push_rates_to_pms with the date range (has built-in confirmation). If push fails due to "price pushing not enabled", inform the user they need to enable it in their Autumn dashboard.
+  4. Use your "ask_user" response field to present the rate comparison table (markdown table in context field) and ask whether to push corrected rates to PMS.
+  5. If user confirms → push_rates_to_pms with the date range. If push fails due to "price pushing not enabled", inform the user they need to enable it in their Autumn dashboard.
   CRITICAL: Task is NOT complete until step 4 (ask_user) has run. Do NOT set done=true before presenting the comparison to the user.
 `
     : ''
@@ -125,11 +125,11 @@ IMPORTANT — Integration routing rules:
 - Only fall back to browser automation if no connected integration covers the task.
 - Group booking email-to-quote workflow — follow this EXACT sequence, do NOT skip steps or set done=true early:
   1. gmail-find-email → find group booking inquiry emails
-  2. ask_user → present found emails for user to select using a markdown table (From, Date, Subject, Summary columns) with numbered options (sole action in its step)
+  2. Use your "ask_user" response field to present found emails for user to select using a markdown table (From, Date, Subject, Summary columns) with numbered options.
   3. cache_content → cache selected email text for parsing
   4. parse_group_inquiry → extract structured booking data
-  5. ask_user → present parsed data for user confirmation (sole action in its step)
-  6. ask_user → ask what discount % or special pricing to offer (sole action in its step)
+  5. Use your "ask_user" response field to present parsed data for user confirmation.
+  6. Use your "ask_user" response field to ask what discount % or special pricing to offer.
   7. generate_group_quote → generates quote, shows HTML email preview for user approval (built-in confirmation, sole action in its step). Do NOT follow with ask_user — approval is already handled.
   8. send_group_quote_email → sends the approved email with built-in user confirmation (go here directly after step 7)
   CRITICAL: Task is NOT complete until step 8 succeeds. Do NOT set done=true before send_group_quote_email.
@@ -174,12 +174,14 @@ When determining if a task is "done":
     "next_steps": "[string type], list 2-3 high-level next steps to take (MUST be empty if done=true)",
     "final_answer": "[string type], complete user-friendly answer to the task (MUST be provided when done=true, empty otherwise)",
     "reasoning": "[string type], explain your reasoning for the suggested next steps or completion decision",
-    "task_type": "[string type], one of: general, ${serverAvailable ? 'domain_query, ' : ''}browser"
+    "task_type": "[string type], one of: general, ${serverAvailable ? 'domain_query, ' : ''}browser",
+    "ask_user": "(optional object) Ask the user a question mid-workflow. Fields: question (string, required), context (string, optional markdown with tables/bold/bullets), options (array of {label, value}, optional, min 2). When present, done MUST be false."
 }
 
 # IMPORTANT FIELD RELATIONSHIPS:
 - When done=false: next_steps should contain action items, final_answer should be empty
 - When done=true: next_steps should be empty, final_answer should contain the complete response
+- When ask_user is present: done must be false, next_steps should briefly describe what you're asking, final_answer must be empty
 
 # NOTE:
   - Inside the messages you receive, there will be other AI messages from other agents with different formats.

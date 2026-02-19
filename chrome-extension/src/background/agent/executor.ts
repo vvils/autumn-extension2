@@ -1,5 +1,5 @@
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
-import { type ActionResult, AgentContext, type AgentOptions, type AgentOutput } from './types';
+import { ActionResult, AgentContext, type AgentOptions, type AgentOutput } from './types';
 import { NavigatorAgent, NavigatorActionRegistry } from './agents/navigator';
 import { PlannerAgent, type PlannerOutput, TaskType } from './agents/planner';
 import { NavigatorPrompt } from './prompts/navigator';
@@ -148,7 +148,7 @@ export class Executor {
       void analytics.trackTaskStart(this.context.taskId);
 
       // Phase 1: Run initial planner to classify the task
-      let latestPlanOutput = await this.runPlanner();
+      let latestPlanOutput = await this.runPlannerWithAskUser();
 
       // Phase 2: Domain query check — MUST run BEFORE checkTaskCompletion (Hazard H1)
       // The planner sets done=true for domain_query tasks so the system routes to
@@ -172,7 +172,7 @@ export class Executor {
         }
         // domainResult === 'escalated': fall through to browser loop
         // Re-run planner for browser planning since escalation invalidated done=true (Hazard H2)
-        latestPlanOutput = await this.runPlanner();
+        latestPlanOutput = await this.runPlannerWithAskUser();
       }
 
       // Phase 3: General completion check
@@ -202,7 +202,7 @@ export class Executor {
         // Run planner periodically (skip step 0 — already ran above)
         if (step > 0 && this.planner && (context.nSteps % context.options.planningInterval === 0 || navigatorDone)) {
           navigatorDone = false;
-          latestPlanOutput = await this.runPlanner();
+          latestPlanOutput = await this.runPlannerWithAskUser();
 
           if (this.checkTaskCompletion(latestPlanOutput)) {
             break;
@@ -337,6 +337,46 @@ export class Executor {
     }
   }
 
+  private async handlePlannerAskUser(askUser: NonNullable<PlannerOutput['ask_user']>): Promise<string> {
+    const widgetData = {
+      widgetId: crypto.randomUUID(),
+      type: 'permission-request',
+      data: {
+        question: askUser.question,
+        context: askUser.context,
+        options: askUser.options,
+      },
+    };
+    await this.context.emitEvent(Actors.PLANNER, ExecutionState.WIDGET_EVENT, JSON.stringify(widgetData));
+
+    const userResponse = await this.context.waitForUserInput();
+
+    this.context.actionResults.push(
+      new ActionResult({
+        extractedContent: `User responded: ${userResponse}`,
+        includeInMemory: true,
+      }),
+    );
+
+    return userResponse;
+  }
+
+  private async runPlannerWithAskUser(): Promise<AgentOutput<PlannerOutput> | null> {
+    let planOutput = await this.runPlanner();
+    let askUserCount = 0;
+    const maxAskUser = 5;
+
+    while (planOutput?.result?.ask_user && askUserCount < maxAskUser) {
+      if (await this.shouldStop()) break;
+      await this.handlePlannerAskUser(planOutput.result.ask_user);
+      askUserCount++;
+      this.context.stateMessageAdded = false;
+      planOutput = await this.runPlanner();
+    }
+
+    return planOutput;
+  }
+
   /**
    * Helper method to run planner and store its output
    */
@@ -345,7 +385,7 @@ export class Executor {
     try {
       // Add current browser state to memory
       let positionForPlan = 0;
-      if (this.tasks.length > 1 || this.context.nSteps > 0) {
+      if (this.tasks.length > 1 || this.context.nSteps > 0 || this.context.actionResults.some(r => r.includeInMemory)) {
         await this.navigator.addStateMessageToMemory();
         positionForPlan = this.context.messageManager.length() - 1;
       } else {

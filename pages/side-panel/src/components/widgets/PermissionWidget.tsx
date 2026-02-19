@@ -48,7 +48,9 @@ export default memo(function PermissionWidget({ widget, onRespond }: PermissionW
   if (answered) {
     return (
       <div className="rounded-2xl border border-emerald-100 bg-emerald-50/50 px-4 py-3">
-        <p className="text-[13px] font-medium text-gray-500">{question}</p>
+        <div className="text-[13px] font-medium text-gray-500">
+          <MarkdownContent content={question} />
+        </div>
         <div className="mt-1.5 flex items-center gap-2">
           <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-emerald-100">
             <Check size={12} className="text-emerald-600" />
@@ -61,7 +63,9 @@ export default memo(function PermissionWidget({ widget, onRespond }: PermissionW
 
   return (
     <div className="rounded-2xl border border-accent-light/60 bg-accent-soft/40 p-4 shadow-sm">
-      <p className="mb-2 text-[13px] font-semibold text-gray-800">{question}</p>
+      <div className="mb-2 text-[13px] font-semibold text-gray-800">
+        <MarkdownContent content={question} />
+      </div>
 
       {context && (
         <div className="mb-3 rounded-xl bg-white/70 px-3 py-2 text-[12px] text-gray-600">

@@ -915,27 +915,6 @@ export class ActionBuilder {
           const intent = params.intent || `Pushing rates to PMS for ${params.start_date} to ${params.end_date}`;
           context.emitEvent(Actors.NAVIGATOR, ExecutionState.ACT_START, intent);
 
-          const widgetData = {
-            widgetId: crypto.randomUUID(),
-            type: 'permission-request',
-            data: {
-              question: `Push updated rates to PMS for ${params.start_date} to ${params.end_date}?`,
-              context:
-                'This will update room rates in your Property Management System. The backend calculates optimal prices from competitor data and your pricing rules.',
-              options: [
-                { label: 'Confirm', value: 'confirm' },
-                { label: 'Cancel', value: 'cancel' },
-              ],
-            },
-          };
-          await context.emitEvent(Actors.NAVIGATOR, ExecutionState.WIDGET_EVENT, JSON.stringify(widgetData));
-
-          const userResponse = await context.waitForUserInput();
-          if (userResponse.toLowerCase() !== 'confirm') {
-            context.emitEvent(Actors.NAVIGATOR, ExecutionState.ACT_OK, 'Rate push cancelled by user.');
-            return new ActionResult({ extractedContent: 'Rate push cancelled by user.', includeInMemory: true });
-          }
-
           const result = await serverClient.pushRates(params.start_date, params.end_date);
           if (!result.success) {
             context.emitEvent(Actors.NAVIGATOR, ExecutionState.ACT_FAIL, result.error ?? 'Failed to push rates');

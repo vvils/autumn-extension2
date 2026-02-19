@@ -487,6 +487,17 @@ const SidePanel = () => {
               plannerStreamingRef.current = false;
               setIsStreamingPlanner(false);
               break;
+            case ExecutionState.WIDGET_EVENT: {
+              try {
+                const widgetData = JSON.parse(content || '{}');
+                if (!widgetData.widgetId || !widgetData.type) return;
+                setMessages(prev => [...prev, { actor: Actors.SYSTEM, content: '', timestamp, widgets: [widgetData] }]);
+                persistMessage({ actor: 'planner_widget', content: content || '', timestamp });
+              } catch (err) {
+                console.error('Failed to parse planner widget event:', err);
+              }
+              return;
+            }
             default:
               console.error('Invalid step state', state);
               return;
@@ -685,6 +696,18 @@ const SidePanel = () => {
                     widgets: [widgetData],
                   });
                 }
+              } catch {
+                /* ignore malformed widget data */
+              }
+            } else if (m.role === 'planner_widget') {
+              try {
+                const widgetData = JSON.parse(m.content);
+                mapped.push({
+                  actor: Actors.SYSTEM,
+                  content: '',
+                  timestamp: new Date(m.createdAt).getTime(),
+                  widgets: [widgetData],
+                });
               } catch {
                 /* ignore malformed widget data */
               }

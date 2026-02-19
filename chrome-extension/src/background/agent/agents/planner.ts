@@ -54,6 +54,21 @@ const rawPlannerSchema = z.object({
   next_steps: z.string(),
   final_answer: z.string(),
   reasoning: z.string(),
+  ask_user: z
+    .object({
+      question: z.string(),
+      context: z.string().optional(),
+      options: z
+        .array(
+          z.object({
+            label: z.string(),
+            value: z.string(),
+          }),
+        )
+        .min(2)
+        .optional(),
+    })
+    .optional(),
   task_type: z.string().optional(),
   web_task: z
     .union([
