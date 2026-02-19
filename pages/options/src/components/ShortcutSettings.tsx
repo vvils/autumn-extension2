@@ -92,8 +92,8 @@ export const ShortcutSettings = ({ isDarkMode }: ShortcutSettingsProps) => {
                 className={`flex items-center justify-between rounded-md border px-3 py-2 ${
                   isDarkMode ? 'border-slate-600 bg-slate-700/50' : 'border-gray-100 bg-gray-50'
                 }`}>
-                <div className="mr-3 min-w-0 flex-1">
-                  <span className={`text-sm font-medium ${isDarkMode ? 'text-gray-200' : 'text-gray-800'}`}>
+                <div className="mr-3 flex min-w-0 flex-1 items-center">
+                  <span className={`shrink-0 text-sm font-medium ${isDarkMode ? 'text-gray-200' : 'text-gray-800'}`}>
                     /{shortcut.command}
                   </span>
                   <span className={`ml-2 truncate text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>

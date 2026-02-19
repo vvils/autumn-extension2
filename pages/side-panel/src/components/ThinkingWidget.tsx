@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   Brain,
   ChevronDown,
@@ -56,6 +56,13 @@ function getActionIcon(label: string): LucideIcon {
 
 export default function ThinkingWidget({ state }: ThinkingWidgetProps) {
   const [expanded, setExpanded] = useState(true);
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [state.actions.length]);
 
   if (!state.isActive && state.actions.length === 0) return null;
 
@@ -94,7 +101,7 @@ export default function ThinkingWidget({ state }: ThinkingWidgetProps) {
         <div
           className="grid transition-[grid-template-rows] duration-200 ease-out"
           style={{ gridTemplateRows: expanded ? '1fr' : '0fr' }}>
-          <div className="max-h-[120px] overflow-hidden overflow-y-auto">
+          <div ref={scrollRef} className="max-h-[120px] overflow-hidden overflow-y-auto">
             <div className="space-y-0.5 px-3 pb-1 pt-0.5">
               {state.actions.map((action, index) => (
                 <ActionItem key={action.id} action={action} index={index} />

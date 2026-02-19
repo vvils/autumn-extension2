@@ -33,6 +33,20 @@ interface AttachedFile {
   type: string;
 }
 
+function getShortcutContext(text: string, cursorPos: number): { slashIndex: number; query: string } | null {
+  for (let i = cursorPos - 1; i >= 0; i--) {
+    const ch = text[i];
+    if (ch === '/') {
+      if (i === 0 || /\s/.test(text[i - 1])) {
+        return { slashIndex: i, query: text.slice(i + 1, cursorPos) };
+      }
+      return null;
+    }
+    if (/\s/.test(ch)) return null;
+  }
+  return null;
+}
+
 export default function ChatInput({
   onSendMessage,
   onStopTask,
@@ -57,6 +71,7 @@ export default function ChatInput({
   const [shortcuts, setShortcuts] = useState<SavedShortcut[]>([]);
   const [selectedShortcut, setSelectedShortcut] = useState<SavedShortcut | null>(null);
   const [editedPrompt, setEditedPrompt] = useState('');
+  const [slashTriggerIndex, setSlashTriggerIndex] = useState<number | null>(null);
 
   useEffect(() => {
     if (showShortcuts) {
@@ -89,16 +104,35 @@ export default function ChatInput({
 
   const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const value = e.target.value;
+    const cursorPos = e.target.selectionStart ?? value.length;
     setText(value);
     resizeTextarea();
-    if (value.startsWith('/')) {
+    const ctx = getShortcutContext(value, cursorPos);
+    if (ctx) {
       setShowShortcuts(true);
-      setShortcutQuery(value.slice(1));
+      setShortcutQuery(ctx.query);
+      setSlashTriggerIndex(ctx.slashIndex);
       setSelectedShortcutIndex(0);
     } else {
       setShowShortcuts(false);
+      setSlashTriggerIndex(null);
     }
   };
+
+  const recheckShortcutContext = useCallback(() => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    const ctx = getShortcutContext(textarea.value, textarea.selectionStart);
+    if (ctx) {
+      setShowShortcuts(true);
+      setShortcutQuery(ctx.query);
+      setSlashTriggerIndex(ctx.slashIndex);
+      setSelectedShortcutIndex(0);
+    } else {
+      setShowShortcuts(false);
+      setSlashTriggerIndex(null);
+    }
+  }, []);
 
   useEffect(() => {
     if (setContent) {
@@ -173,17 +207,38 @@ export default function ChatInput({
 
   const handleCreateShortcutFromDropdown = useCallback(() => {
     setShowShortcuts(false);
+    setSlashTriggerIndex(null);
     setText('');
     onCreateShortcut?.();
   }, [onCreateShortcut]);
 
-  const handleShortcutSelect = useCallback((shortcut: SavedShortcut) => {
-    setSelectedShortcut(shortcut);
-    setEditedPrompt(shortcut.prompt);
-    setText('');
-    setShowShortcuts(false);
-    textareaRef.current?.focus();
-  }, []);
+  const handleShortcutSelect = useCallback(
+    (shortcut: SavedShortcut) => {
+      if (slashTriggerIndex === null) return;
+
+      const beforeSlash = text.slice(0, slashTriggerIndex);
+      const afterQuery = text.slice(slashTriggerIndex + 1 + shortcutQuery.length);
+      const isStandaloneCommand = !beforeSlash && !afterQuery;
+
+      if (isStandaloneCommand) {
+        setSelectedShortcut(shortcut);
+        setEditedPrompt(shortcut.prompt);
+        setText('');
+      } else {
+        const expanded = beforeSlash + shortcut.prompt + afterQuery;
+        setText(expanded);
+        const cursorPos = beforeSlash.length + shortcut.prompt.length;
+        requestAnimationFrame(() => {
+          textareaRef.current?.setSelectionRange(cursorPos, cursorPos);
+        });
+      }
+
+      setShowShortcuts(false);
+      setSlashTriggerIndex(null);
+      textareaRef.current?.focus();
+    },
+    [slashTriggerIndex, text, shortcutQuery],
+  );
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -201,6 +256,7 @@ export default function ChatInput({
         if (e.key === 'Escape') {
           e.preventDefault();
           setShowShortcuts(false);
+          setSlashTriggerIndex(null);
           return;
         }
         if (e.key === 'Enter' && !e.shiftKey) {
@@ -377,7 +433,12 @@ export default function ChatInput({
             value={text}
             onChange={handleTextChange}
             onKeyDown={handleKeyDown}
-            onBlur={() => setShowShortcuts(false)}
+            onKeyUp={recheckShortcutContext}
+            onClick={recheckShortcutContext}
+            onBlur={() => {
+              setShowShortcuts(false);
+              setSlashTriggerIndex(null);
+            }}
             disabled={disabled}
             aria-disabled={disabled}
             rows={1}

@@ -26,10 +26,14 @@ export function buildPlannerSystemPrompt(options?: BuildPlannerSystemPromptOptio
   - Do NOT offer anything that users don't explicitly ask for.
   - Do NOT make up anything, if you don't know the answer, just say "I don't know"
 
-3. If task_type is "domain_query", set done=true and put the user's question in "final_answer"
-  - The system will route this to the backend data pipeline for a detailed answer
-  - Set "next_steps" to empty string
-  - Set "observation", "challenges", "reasoning" to empty string
+3. If task_type is "domain_query", set done=true and put a REFINED query in "final_answer"
+  - The system routes final_answer to the backend data pipeline
+  - Do NOT echo the user's question. Reformulate into a precise data query:
+    * Resolve relative dates (e.g. "next week" → actual dates) using the current date
+    * Specify relevant metrics when the user is vague (e.g. "performance" → ADR, RevPAR, occupancy)
+    * Add context from conversation history when relevant
+    * If the query is already precise, keep it as-is
+  - Set "next_steps", "observation", "challenges", "reasoning" to empty string
 
 4. If task_type is "browser", help break down web tasks into smaller steps and reason about the current state
   - Analyze the current state and history

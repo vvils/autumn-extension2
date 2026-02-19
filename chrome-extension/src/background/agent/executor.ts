@@ -159,7 +159,8 @@ export class Executor {
         latestPlanOutput?.result?.task_type === TaskType.DOMAIN_QUERY &&
         latestPlanOutput.result.done
       ) {
-        const domainResult = await this.executeDomainQuery(task);
+        const refinedQuery = latestPlanOutput.result.final_answer || task;
+        const domainResult = await this.executeDomainQuery(refinedQuery);
         if (domainResult === 'completed') {
           this.appendConversationHistory(task, this.context.finalAnswer ?? '');
           void analytics.trackTaskComplete(this.context.taskId);
