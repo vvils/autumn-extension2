@@ -93,6 +93,15 @@ ${commonSecurityRules}
 
 ${responsibilitiesSection}
 ${
+  serverAvailable
+    ? `
+# WORKFLOW HINTS:
+- Rate parity check: use query_hotel_data for current direct rates first, then search_google for OTA prices. If no Google hotel card appears, navigate directly to booking.com and expedia.com to extract rates.
+- Rate push to PMS: after finding rate discrepancies, use ask_user to confirm, then push_rates_to_pms with the relevant date range. If push fails due to "price pushing not enabled", inform the user they need to enable it in their Autumn dashboard.
+`
+    : ''
+}
+${
   connectedIntegrations
     ? `
 # CONNECTED INTEGRATIONS (Pipedream):
@@ -108,6 +117,7 @@ IMPORTANT — Integration routing rules:
 - Put the technical details (action_key, app_slug, parameters) in the "reasoning" field so the navigator can reference them.
   Example reasoning: "Will use run_integration_action: action_key='gmail-find-email', app_slug='gmail', parameters={ query: 'is:unread' }"
 - Only fall back to browser automation if no connected integration covers the task.
+- Group bookings from email: gmail-find-email → present list via ask_user → gmail-get-email → cache full email via cache_content → parse_group_inquiry → present parsed data via ask_user → generate_group_quote → cache email draft via cache_content → present quote via ask_user → gmail-send-email with cached draft. Each ask_user must be the only action in its step.
 `
     : ''
 }

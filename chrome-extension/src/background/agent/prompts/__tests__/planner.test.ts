@@ -66,3 +66,45 @@ describe('PlannerPrompt', () => {
     expect(message.content as string).toContain('domain_query');
   });
 });
+
+describe('workflow hints', () => {
+  it('includes workflow hints when serverAvailable is true', () => {
+    const prompt = buildPlannerSystemPrompt({ serverAvailable: true });
+    expect(prompt).toContain('WORKFLOW HINTS');
+    expect(prompt).toContain('query_hotel_data');
+    expect(prompt).toContain('push_rates_to_pms');
+  });
+
+  it('does not include workflow hints when serverAvailable is false', () => {
+    const prompt = buildPlannerSystemPrompt({ serverAvailable: false });
+    expect(prompt).not.toContain('WORKFLOW HINTS');
+  });
+
+  it('does not include workflow hints when options omitted', () => {
+    const prompt = buildPlannerSystemPrompt();
+    expect(prompt).not.toContain('WORKFLOW HINTS');
+  });
+});
+
+describe('connected integrations', () => {
+  it('includes CONNECTED INTEGRATIONS section when provided', () => {
+    const prompt = buildPlannerSystemPrompt({ connectedIntegrations: 'gmail: find-email, send-email' });
+    expect(prompt).toContain('CONNECTED INTEGRATIONS');
+  });
+
+  it('includes group booking hints when provided', () => {
+    const prompt = buildPlannerSystemPrompt({ connectedIntegrations: 'gmail: find-email, send-email' });
+    expect(prompt).toContain('parse_group_inquiry');
+    expect(prompt).toContain('generate_group_quote');
+  });
+
+  it('does not include integrations section when omitted', () => {
+    const prompt = buildPlannerSystemPrompt();
+    expect(prompt).not.toContain('CONNECTED INTEGRATIONS');
+  });
+
+  it('does not include group booking hints when omitted', () => {
+    const prompt = buildPlannerSystemPrompt();
+    expect(prompt).not.toContain('parse_group_inquiry');
+  });
+});

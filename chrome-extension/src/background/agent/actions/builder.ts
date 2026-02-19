@@ -23,6 +23,7 @@ import {
   scrollToBottomActionSchema,
   queryHotelDataActionSchema,
   runIntegrationActionSchema,
+  pushRatesToPmsActionSchema,
   askUserActionSchema,
 } from './schemas';
 import { z } from 'zod';
@@ -765,6 +766,33 @@ export class ActionBuilder {
         }
       }, queryHotelDataActionSchema);
       actions.push(queryHotelData);
+
+      const pushRates = new Action(async (params: { intent?: string; start_date: string; end_date: string }) => {
+        try {
+          const intent = params.intent || `Pushing rates to PMS for ${params.start_date} to ${params.end_date}`;
+          context.emitEvent(Actors.NAVIGATOR, ExecutionState.ACT_START, intent);
+          const result = await serverClient.pushRates(params.start_date, params.end_date);
+          if (!result.success) {
+            context.emitEvent(Actors.NAVIGATOR, ExecutionState.ACT_FAIL, result.error ?? 'Failed to push rates');
+            return new ActionResult({
+              error: result.error ?? 'Failed to push rates',
+              includeInMemory: true,
+            });
+          }
+          const msg = result.message ?? 'Rates pushed to PMS successfully.';
+          context.emitEvent(Actors.NAVIGATOR, ExecutionState.ACT_OK, msg);
+          return new ActionResult({ extractedContent: msg, includeInMemory: true });
+        } catch (error) {
+          const errorMsg = error instanceof Error ? error.message : String(error);
+          context.emitEvent(Actors.NAVIGATOR, ExecutionState.ACT_FAIL, errorMsg);
+          return new ActionResult({
+            extractedContent: `[Push rates failed: ${errorMsg}]`,
+            error: errorMsg,
+            includeInMemory: true,
+          });
+        }
+      }, pushRatesToPmsActionSchema);
+      actions.push(pushRates);
     }
 
     if (this.serverClient && this.connectedIntegrations) {

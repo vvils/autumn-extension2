@@ -11,6 +11,7 @@ interface MessageListProps {
   isStreaming?: boolean;
   onWidgetApply?: WidgetApplyFn;
   onWidgetRespond?: WidgetRespondFn;
+  onShortcutClick?: (shortcut: { command: string; prompt: string }) => void;
 }
 
 export default memo(function MessageList({
@@ -18,6 +19,7 @@ export default memo(function MessageList({
   isStreaming = false,
   onWidgetApply,
   onWidgetRespond,
+  onShortcutClick,
 }: MessageListProps) {
   return (
     <div className="max-w-full space-y-4">
@@ -29,6 +31,7 @@ export default memo(function MessageList({
           isStreaming={isStreaming && index === messages.length - 1}
           onWidgetApply={onWidgetApply}
           onWidgetRespond={onWidgetRespond}
+          onShortcutClick={onShortcutClick}
         />
       ))}
     </div>
@@ -41,6 +44,7 @@ interface MessageBlockProps {
   isStreaming?: boolean;
   onWidgetApply?: WidgetApplyFn;
   onWidgetRespond?: WidgetRespondFn;
+  onShortcutClick?: (shortcut: { command: string; prompt: string }) => void;
 }
 
 function MessageBlock({
@@ -49,6 +53,7 @@ function MessageBlock({
   isStreaming = false,
   onWidgetApply,
   onWidgetRespond,
+  onShortcutClick,
 }: MessageBlockProps) {
   if (!message.actor) {
     console.error('No actor found');
@@ -58,10 +63,25 @@ function MessageBlock({
   const isUser = message.actor === Actors.USER;
 
   if (isUser) {
+    const { shortcut } = message;
+    const additionalText = shortcut ? message.content.replace(`/${shortcut.command}`, '').trim() : null;
+
     return (
       <div className="flex animate-fade-in justify-end">
         <div className="max-w-[85%] whitespace-pre-wrap break-words rounded-2xl rounded-br-md bg-accent px-3.5 py-2.5 text-[13px] leading-relaxed text-white">
-          {message.content}
+          {shortcut ? (
+            <>
+              <button
+                type="button"
+                onClick={() => onShortcutClick?.(shortcut)}
+                className="inline rounded-md bg-white/20 px-1.5 py-0.5 font-medium transition-colors hover:bg-white/30">
+                /{shortcut.command}
+              </button>
+              {additionalText && ` ${additionalText}`}
+            </>
+          ) : (
+            message.content
+          )}
         </div>
       </div>
     );

@@ -147,3 +147,17 @@ export interface ActionRunResult {
   data: Record<string, unknown>;
   error?: string;
 }
+
+export interface PushRatesResponse {
+  success: boolean;
+  message?: string;
+  error?: string;
+}
+
+export interface GenerateGroupQuoteParams {
+  checkInDate: string;
+  checkOutDate: string;
+  roomCount: number;
+  context?: string;
+  guestName?: string;
+}

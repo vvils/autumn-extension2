@@ -313,7 +313,9 @@ export default class BrowserContext {
   }
 
   public async getTabInfos(): Promise<TabInfo[]> {
-    const tabs = await chrome.tabs.query({});
+    const groupId = this._tabGroupManager.groupId;
+    const query = groupId !== null ? { groupId } : {};
+    const tabs = await chrome.tabs.query(query);
     const tabInfos: TabInfo[] = [];
 
     for (const tab of tabs) {

@@ -7,6 +7,9 @@ import type {
   SSEEvent,
   ExtensionQueryResponse,
   HotelContextManifest,
+  PushRatesResponse,
+  ActionRunResult,
+  GenerateGroupQuoteParams,
 } from '../types';
 
 function createMockApiClient() {
@@ -381,5 +384,114 @@ describe('pullKeys', () => {
     const client = createServerClient(apiClient);
 
     await expect(client.pullKeys()).rejects.toThrow('unauthorized');
+  });
+});
+
+describe('pushRates', () => {
+  it('posts to /ai/extension/push-rates with dates', async () => {
+    const apiClient = createMockApiClient();
+    const stubResponse: PushRatesResponse = { success: true, message: 'Rates pushed' };
+    vi.mocked(apiClient.post).mockResolvedValue({ data: stubResponse, status: 200, headers: new Headers() });
+    const client = createServerClient(apiClient);
+
+    await client.pushRates('2026-03-01', '2026-03-07');
+
+    expect(apiClient.post).toHaveBeenCalledWith('/ai/extension/push-rates', {
+      startDate: '2026-03-01',
+      endDate: '2026-03-07',
+    });
+  });
+
+  it('returns PushRatesResponse data', async () => {
+    const apiClient = createMockApiClient();
+    const stubResponse: PushRatesResponse = { success: true, message: 'Done' };
+    vi.mocked(apiClient.post).mockResolvedValue({ data: stubResponse, status: 200, headers: new Headers() });
+    const client = createServerClient(apiClient);
+
+    const result = await client.pushRates('2026-03-01', '2026-03-07');
+
+    expect(result).toEqual(stubResponse);
+  });
+
+  it('propagates API errors', async () => {
+    const apiClient = createMockApiClient();
+    vi.mocked(apiClient.post).mockRejectedValue(new Error('push failed'));
+    const client = createServerClient(apiClient);
+
+    await expect(client.pushRates('2026-03-01', '2026-03-07')).rejects.toThrow('push failed');
+  });
+});
+
+describe('parseGroupInquiry', () => {
+  it('posts to /group-quotes/parse-inquiry with emailText', async () => {
+    const apiClient = createMockApiClient();
+    const stubResult: ActionRunResult = { success: true, data: { guestName: 'John' } };
+    vi.mocked(apiClient.post).mockResolvedValue({ data: stubResult, status: 200, headers: new Headers() });
+    const client = createServerClient(apiClient);
+
+    await client.parseGroupInquiry('Dear hotel, we need 10 rooms...');
+
+    expect(apiClient.post).toHaveBeenCalledWith('/group-quotes/parse-inquiry', {
+      emailText: 'Dear hotel, we need 10 rooms...',
+    });
+  });
+
+  it('returns ActionRunResult data', async () => {
+    const apiClient = createMockApiClient();
+    const stubResult: ActionRunResult = { success: true, data: { roomCount: 10 } };
+    vi.mocked(apiClient.post).mockResolvedValue({ data: stubResult, status: 200, headers: new Headers() });
+    const client = createServerClient(apiClient);
+
+    const result = await client.parseGroupInquiry('We need rooms');
+
+    expect(result).toEqual(stubResult);
+  });
+
+  it('propagates API errors', async () => {
+    const apiClient = createMockApiClient();
+    vi.mocked(apiClient.post).mockRejectedValue(new Error('parse failed'));
+    const client = createServerClient(apiClient);
+
+    await expect(client.parseGroupInquiry('text')).rejects.toThrow('parse failed');
+  });
+});
+
+describe('generateGroupQuote', () => {
+  const stubParams: GenerateGroupQuoteParams = {
+    checkInDate: '2026-04-01',
+    checkOutDate: '2026-04-05',
+    roomCount: 10,
+    context: 'Corporate retreat',
+    guestName: 'Jane Doe',
+  };
+
+  it('posts to /group-quotes/generate with params', async () => {
+    const apiClient = createMockApiClient();
+    const stubResult: ActionRunResult = { success: true, data: { quoteId: 'q-123' } };
+    vi.mocked(apiClient.post).mockResolvedValue({ data: stubResult, status: 200, headers: new Headers() });
+    const client = createServerClient(apiClient);
+
+    await client.generateGroupQuote(stubParams);
+
+    expect(apiClient.post).toHaveBeenCalledWith('/group-quotes/generate', stubParams);
+  });
+
+  it('returns ActionRunResult data', async () => {
+    const apiClient = createMockApiClient();
+    const stubResult: ActionRunResult = { success: true, data: { total: 5000 } };
+    vi.mocked(apiClient.post).mockResolvedValue({ data: stubResult, status: 200, headers: new Headers() });
+    const client = createServerClient(apiClient);
+
+    const result = await client.generateGroupQuote(stubParams);
+
+    expect(result).toEqual(stubResult);
+  });
+
+  it('propagates API errors', async () => {
+    const apiClient = createMockApiClient();
+    vi.mocked(apiClient.post).mockRejectedValue(new Error('quote failed'));
+    const client = createServerClient(apiClient);
+
+    await expect(client.generateGroupQuote(stubParams)).rejects.toThrow('quote failed');
   });
 });

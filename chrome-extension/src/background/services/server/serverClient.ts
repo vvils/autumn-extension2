@@ -14,6 +14,8 @@ import type {
   IntegrationManifest,
   ActionRunRequest,
   ActionRunResult,
+  PushRatesResponse,
+  GenerateGroupQuoteParams,
 } from './types';
 import { ServerApiClient } from './apiClient';
 
@@ -167,6 +169,24 @@ export class ServerClient {
 
   async runIntegrationAction(request: ActionRunRequest): Promise<ActionRunResult> {
     const { data } = await this.apiClient.post<ActionRunResult>('/ai/extension/integrations/actions/run', request);
+    return data;
+  }
+
+  async pushRates(startDate: string, endDate: string): Promise<PushRatesResponse> {
+    const { data } = await this.apiClient.post<PushRatesResponse>('/ai/extension/push-rates', {
+      startDate,
+      endDate,
+    });
+    return data;
+  }
+
+  async parseGroupInquiry(emailText: string): Promise<ActionRunResult> {
+    const { data } = await this.apiClient.post<ActionRunResult>('/group-quotes/parse-inquiry', { emailText });
+    return data;
+  }
+
+  async generateGroupQuote(params: GenerateGroupQuoteParams): Promise<ActionRunResult> {
+    const { data } = await this.apiClient.post<ActionRunResult>('/group-quotes/generate', params);
     return data;
   }
 }

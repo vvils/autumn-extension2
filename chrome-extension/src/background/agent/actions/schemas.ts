@@ -235,6 +235,17 @@ export const runIntegrationActionSchema: ActionSchema = {
   }),
 };
 
+export const pushRatesToPmsActionSchema: ActionSchema = {
+  name: 'push_rates_to_pms',
+  description:
+    'Push AI-calculated room rates to the connected Property Management System (Mews, CloudBeds, or ResNexus) for a date range. The backend calculates optimal prices from competitor data and user rules, then updates the PMS.',
+  schema: z.object({
+    intent: z.string().default('').describe('purpose of this action'),
+    start_date: z.string().describe('Start date in YYYY-MM-DD format'),
+    end_date: z.string().describe('End date in YYYY-MM-DD format'),
+  }),
+};
+
 export const askUserActionSchema: ActionSchema = {
   name: 'ask_user',
   description:

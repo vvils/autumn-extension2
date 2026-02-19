@@ -51,8 +51,7 @@ const manifest = withOperaSidebar(
     manifest_version: 3,
     name: 'Autumn AI Co-Pilot',
     version: packageJson.version,
-    description:
-      'Automate web tasks with AI! Autumn AI Co-Pilot is a browser extension that lets you extract data, fill forms, and more.',
+    description: 'AI-powered browser automation for hospitality teams',
     host_permissions: ['<all_urls>'],
     permissions: [
       'storage',

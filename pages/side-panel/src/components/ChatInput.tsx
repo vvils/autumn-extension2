@@ -5,14 +5,22 @@ import type { SavedShortcut } from '@extension/storage';
 import { CostDisplay, type CostDisplayProps } from './CostDisplay';
 import ShortcutDropdown from './ShortcutDropdown';
 
+export interface ShortcutActions {
+  updateShortcut: (command: string, prompt: string) => void;
+  clearShortcut: () => void;
+}
+
 interface ChatInputProps {
-  onSendMessage: (text: string, displayText?: string) => void;
+  onSendMessage: (text: string, displayText?: string, shortcut?: { command: string; prompt: string }) => void;
   onStopTask: () => void;
   onMicClick?: () => void;
   isRecording?: boolean;
   disabled: boolean;
   showStopButton: boolean;
   setContent?: (setter: (text: string) => void) => void;
+  onEditShortcut?: (shortcut: { id: string; command: string; prompt: string }) => void;
+  onCreateShortcut?: () => void;
+  setShortcutActions?: (actions: ShortcutActions) => void;
   historicalSessionId?: string | null;
   onReplay?: (sessionId: string) => void;
   costData?: CostDisplayProps | null;
@@ -33,6 +41,9 @@ export default function ChatInput({
   disabled,
   showStopButton,
   setContent,
+  onEditShortcut,
+  onCreateShortcut,
+  setShortcutActions,
   historicalSessionId,
   onReplay,
   costData,
@@ -45,6 +56,7 @@ export default function ChatInput({
   const [selectedShortcutIndex, setSelectedShortcutIndex] = useState(0);
   const [shortcuts, setShortcuts] = useState<SavedShortcut[]>([]);
   const [selectedShortcut, setSelectedShortcut] = useState<SavedShortcut | null>(null);
+  const [editedPrompt, setEditedPrompt] = useState('');
 
   useEffect(() => {
     if (showShortcuts) {
@@ -57,7 +69,8 @@ export default function ChatInput({
     [shortcuts, shortcutQuery],
   );
 
-  const effectiveIndex = Math.min(selectedShortcutIndex, Math.max(0, filteredShortcuts.length - 1));
+  const maxDropdownIndex = onCreateShortcut ? filteredShortcuts.length : Math.max(0, filteredShortcuts.length - 1);
+  const effectiveIndex = Math.min(selectedShortcutIndex, maxDropdownIndex);
 
   const isSendButtonDisabled = useMemo(
     () => disabled || (text.trim() === '' && attachedFiles.length === 0 && !selectedShortcut),
@@ -94,20 +107,39 @@ export default function ChatInput({
   }, [setContent]);
 
   useEffect(() => {
+    if (setShortcutActions) {
+      setShortcutActions({
+        updateShortcut: (command: string, prompt: string) => {
+          setSelectedShortcut(prev => (prev ? { ...prev, command, prompt } : null));
+          setEditedPrompt(prompt);
+        },
+        clearShortcut: () => {
+          setSelectedShortcut(null);
+          setEditedPrompt('');
+        },
+      });
+    }
+  }, [setShortcutActions]);
+
+  useEffect(() => {
     resizeTextarea();
   }, [text, resizeTextarea]);
 
   const handleSubmit = useCallback(() => {
     if (selectedShortcut) {
-      const shortcutPrompt = selectedShortcut.prompt;
+      const promptToSend = editedPrompt || selectedShortcut.prompt;
       const trimmedText = text.trim();
-      const messageContent = trimmedText ? `${shortcutPrompt}\n\n${trimmedText}` : shortcutPrompt;
+      const messageContent = trimmedText ? `${promptToSend}\n\n${trimmedText}` : promptToSend;
       const displayContent = trimmedText
         ? `/${selectedShortcut.command} ${trimmedText}`
         : `/${selectedShortcut.command}`;
-      onSendMessage(messageContent, displayContent);
+      onSendMessage(messageContent, displayContent, {
+        command: selectedShortcut.command,
+        prompt: promptToSend,
+      });
       setText('');
       setSelectedShortcut(null);
+      setEditedPrompt('');
       setAttachedFiles([]);
       return;
     }
@@ -137,10 +169,17 @@ export default function ChatInput({
       setText('');
       setAttachedFiles([]);
     }
-  }, [text, attachedFiles, selectedShortcut, onSendMessage]);
+  }, [text, attachedFiles, selectedShortcut, editedPrompt, onSendMessage]);
+
+  const handleCreateShortcutFromDropdown = useCallback(() => {
+    setShowShortcuts(false);
+    setText('');
+    onCreateShortcut?.();
+  }, [onCreateShortcut]);
 
   const handleShortcutSelect = useCallback((shortcut: SavedShortcut) => {
     setSelectedShortcut(shortcut);
+    setEditedPrompt(shortcut.prompt);
     setText('');
     setShowShortcuts(false);
     textareaRef.current?.focus();
@@ -151,7 +190,7 @@ export default function ChatInput({
       if (showShortcuts) {
         if (e.key === 'ArrowDown') {
           e.preventDefault();
-          setSelectedShortcutIndex(prev => prev + 1);
+          setSelectedShortcutIndex(prev => Math.min(prev + 1, maxDropdownIndex));
           return;
         }
         if (e.key === 'ArrowUp') {
@@ -166,7 +205,9 @@ export default function ChatInput({
         }
         if (e.key === 'Enter' && !e.shiftKey) {
           e.preventDefault();
-          if (filteredShortcuts.length > 0) {
+          if (onCreateShortcut && effectiveIndex === filteredShortcuts.length) {
+            handleCreateShortcutFromDropdown();
+          } else if (filteredShortcuts.length > 0) {
             handleShortcutSelect(filteredShortcuts[effectiveIndex]);
           } else {
             setShowShortcuts(false);
@@ -177,6 +218,7 @@ export default function ChatInput({
       if (e.key === 'Backspace' && selectedShortcut && text === '') {
         e.preventDefault();
         setSelectedShortcut(null);
+        setEditedPrompt('');
         return;
       }
       if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
@@ -184,7 +226,16 @@ export default function ChatInput({
         handleSubmit();
       }
     },
-    [handleSubmit, showShortcuts, filteredShortcuts, effectiveIndex, handleShortcutSelect, selectedShortcut, text],
+    [
+      handleSubmit,
+      showShortcuts,
+      filteredShortcuts,
+      effectiveIndex,
+      handleShortcutSelect,
+      selectedShortcut,
+      text,
+      handleCreateShortcutFromDropdown,
+    ],
   );
 
   const handleReplay = useCallback(() => {
@@ -282,13 +333,14 @@ export default function ChatInput({
   };
 
   return (
-    <div className="shrink-0 bg-white px-3 pb-3 pt-2">
+    <div className="shrink-0 bg-white px-3 pb-2 pt-1.5">
       <div
-        className={`relative rounded-2xl border border-gray-200 bg-white px-3.5 py-2.5 shadow-sm transition-all ${disabled ? '' : 'focus-within:border-accent/40 focus-within:ring-accent/20 focus-within:ring-2'}`}>
+        className={`relative rounded-3xl border border-gray-200 bg-white px-4 pb-2.5 pt-3.5 shadow-sm transition-all ${disabled ? '' : 'focus-within:border-accent/40 focus-within:ring-accent/20 focus-within:ring-2'}`}>
         {showShortcuts && (
           <ShortcutDropdown
             shortcuts={filteredShortcuts}
             onSelect={handleShortcutSelect}
+            onCreateShortcut={handleCreateShortcutFromDropdown}
             selectedIndex={effectiveIndex}
           />
         )}
@@ -313,19 +365,23 @@ export default function ChatInput({
 
         <div className="flex items-start gap-1.5">
           {selectedShortcut && (
-            <div className="bg-accent-soft text-accent-foreground shrink-0 rounded-md px-2 py-0.5 text-[13px] font-medium leading-6">
+            <button
+              type="button"
+              onClick={() => onEditShortcut?.(selectedShortcut)}
+              className="bg-accent-soft text-accent-foreground shrink-0 rounded-md px-2 py-0.5 text-[13px] font-medium leading-relaxed transition-colors hover:opacity-80">
               /{selectedShortcut.command}
-            </div>
+            </button>
           )}
           <textarea
             ref={textareaRef}
             value={text}
             onChange={handleTextChange}
             onKeyDown={handleKeyDown}
+            onBlur={() => setShowShortcuts(false)}
             disabled={disabled}
             aria-disabled={disabled}
             rows={1}
-            className={`max-h-[200px] min-h-[24px] w-full resize-none bg-transparent text-[13px] leading-6 text-gray-900 outline-none placeholder:text-gray-400 ${disabled ? 'cursor-not-allowed opacity-50' : ''}`}
+            className={`max-h-[200px] min-h-[24px] w-full resize-none bg-transparent text-[13px] leading-relaxed text-gray-900 outline-none placeholder:text-gray-400 ${disabled ? 'cursor-not-allowed opacity-50' : ''}`}
             placeholder={
               selectedShortcut
                 ? 'Add additional context (optional)...'
@@ -337,7 +393,7 @@ export default function ChatInput({
           />
         </div>
 
-        <div className="mt-1 flex items-center justify-between">
+        <div className="mt-2 flex items-center justify-between">
           <div className="flex items-center gap-1">
             <button
               type="button"
@@ -392,7 +448,7 @@ export default function ChatInput({
           </div>
         </div>
       </div>
-      <p className="mt-2 text-center text-[10px] text-gray-300">AI may produce inaccurate information</p>
+      <p className="mt-1.5 text-center text-[11px] text-gray-400/80">AI may produce inaccurate information</p>
     </div>
   );
 }

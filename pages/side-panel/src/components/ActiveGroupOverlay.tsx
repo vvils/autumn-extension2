@@ -10,8 +10,8 @@ export function ActiveGroupOverlay({ onGoBack }: ActiveGroupOverlayProps) {
       <div className="mb-4 rounded-full bg-blue-50 p-4">
         <MonitorPlay size={28} className="text-blue-500" />
       </div>
-      <h2 className="mb-2 text-lg font-semibold text-gray-900">Autumn AI is active in this tab group</h2>
-      <p className="mb-6 text-sm text-gray-500">Autumn AI can browse across sites and handle multi-tab tasks.</p>
+      <h2 className="mb-2 text-lg font-semibold text-gray-900">Autumn is active in this tab group</h2>
+      <p className="mb-6 text-sm text-gray-500">Autumn can browse across sites and handle multi-tab tasks.</p>
       <button
         type="button"
         onClick={onGoBack}

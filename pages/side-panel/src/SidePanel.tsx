@@ -44,6 +44,8 @@ import ThinkingWidget from './components/ThinkingWidget';
 import { ActiveGroupOverlay } from './components/ActiveGroupOverlay';
 import { AuthOverlay } from './components/AuthOverlay';
 import { SlidePanel } from './components/SlidePanel';
+import { ShortcutEditorModal } from './components/ShortcutEditorModal';
+import type { ShortcutActions } from './components/ChatInput';
 import { EventType, type AgentEvent, ExecutionState } from './types/event';
 import { useThinkingState } from './hooks/useThinkingState';
 import { useTaskTimer } from './hooks/useTaskTimer';
@@ -178,6 +180,13 @@ const SidePanel = () => {
     estimatedCostUsd: number;
   } | null>(null);
   const [showCostEstimate, setShowCostEstimate] = useState(true);
+  const [shortcutEditorData, setShortcutEditorData] = useState<{
+    command: string;
+    prompt: string;
+    id?: string;
+    source: 'input' | 'message' | 'create';
+  } | null>(null);
+  const [existingCommands, setExistingCommands] = useState<string[]>([]);
   const sessionIdRef = useRef<string | null>(null);
   const isReplayingRef = useRef<boolean>(false);
   const plannerStreamingRef = useRef(false);
@@ -186,6 +195,7 @@ const SidePanel = () => {
   const heartbeatIntervalRef = useRef<number | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const setInputTextRef = useRef<((text: string) => void) | null>(null);
+  const shortcutActionsRef = useRef<ShortcutActions | null>(null);
   const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
   const widgetApplyCallbacksRef = useRef<Map<string, { resolve: (r: { success: boolean; error?: string }) => void }>>(
     new Map(),
@@ -964,7 +974,11 @@ const SidePanel = () => {
     }
   };
 
-  const handleSendMessage = async (text: string, displayText?: string) => {
+  const handleSendMessage = async (
+    text: string,
+    displayText?: string,
+    shortcutMeta?: { command: string; prompt: string },
+  ) => {
     console.log('handleSendMessage', text);
 
     let trimmedText = text.trim();
@@ -976,6 +990,7 @@ const SidePanel = () => {
       const shortcut = await shortcutSettingsStore.getShortcutByCommand(commandName);
       if (shortcut) {
         displayText = displayText || trimmedText;
+        shortcutMeta = shortcutMeta || { command: commandName, prompt: shortcut.prompt };
         trimmedText = shortcut.prompt;
       }
     }
@@ -1022,10 +1037,11 @@ const SidePanel = () => {
         sessionIdRef.current = sessionId;
       }
 
-      const userMessage = {
+      const userMessage: Message = {
         actor: Actors.USER,
         content: displayText || text,
         timestamp: Date.now(),
+        ...(shortcutMeta && { shortcut: shortcutMeta }),
       };
 
       appendMessage(userMessage, sessionIdRef.current);
@@ -1200,6 +1216,65 @@ const SidePanel = () => {
     setIsRecording(true);
   };
 
+  const handleEditShortcutFromInput = useCallback((shortcut: { id: string; command: string; prompt: string }) => {
+    setShortcutEditorData({ ...shortcut, source: 'input' });
+  }, []);
+
+  const handleCreateShortcut = useCallback(() => {
+    setShortcutEditorData({ command: '', prompt: '', source: 'create' });
+  }, []);
+
+  useEffect(() => {
+    if (shortcutEditorData) {
+      shortcutSettingsStore.getSettings().then(s => setExistingCommands(s.shortcuts.map(sc => sc.command)));
+    }
+  }, [shortcutEditorData]);
+
+  const handleShortcutClickFromMessage = useCallback(async (shortcut: { command: string; prompt: string }) => {
+    const stored = await shortcutSettingsStore.getShortcutByCommand(shortcut.command);
+    setShortcutEditorData({
+      command: shortcut.command,
+      prompt: stored?.prompt ?? shortcut.prompt,
+      id: stored?.id,
+      source: 'message',
+    });
+  }, []);
+
+  const handleShortcutEditorSave = useCallback(
+    async (command: string, prompt: string) => {
+      if (shortcutEditorData?.source === 'create') {
+        await shortcutSettingsStore.addShortcut(command, prompt);
+      } else if (shortcutEditorData?.id) {
+        await shortcutSettingsStore.updateShortcut(shortcutEditorData.id, { command, prompt });
+      } else {
+        const stored = await shortcutSettingsStore.getShortcutByCommand(shortcutEditorData?.command ?? '');
+        if (stored) {
+          await shortcutSettingsStore.updateShortcut(stored.id, { command, prompt });
+        }
+      }
+      if (shortcutEditorData?.source === 'input') {
+        shortcutActionsRef.current?.updateShortcut(command, prompt);
+      }
+      setShortcutEditorData(null);
+    },
+    [shortcutEditorData],
+  );
+
+  const handleShortcutEditorDelete = useCallback(async () => {
+    if (shortcutEditorData?.id) {
+      await shortcutSettingsStore.deleteShortcut(shortcutEditorData.id);
+    } else {
+      const stored = await shortcutSettingsStore.getShortcutByCommand(shortcutEditorData?.command ?? '');
+      if (stored) {
+        await shortcutSettingsStore.deleteShortcut(stored.id);
+      }
+    }
+    if (shortcutEditorData?.source === 'input') {
+      shortcutActionsRef.current?.clearShortcut();
+    }
+    setShortcutEditorData(null);
+  }, [shortcutEditorData]);
+
   const renderChatInput = () => (
     <ChatInput
       onSendMessage={handleSendMessage}
@@ -1210,6 +1285,11 @@ const SidePanel = () => {
       showStopButton={showStopButton}
       setContent={setter => {
         setInputTextRef.current = setter;
+      }}
+      onEditShortcut={handleEditShortcutFromInput}
+      onCreateShortcut={handleCreateShortcut}
+      setShortcutActions={actions => {
+        shortcutActionsRef.current = actions;
       }}
       historicalSessionId={isHistoricalSession && replayEnabled ? currentSessionId : null}
       onReplay={handleReplay}
@@ -1282,7 +1362,7 @@ const SidePanel = () => {
       )}
 
       {hasConfiguredModels === true && (
-        <>
+        <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col overflow-hidden">
           {messages.length === 0 ? (
             <div className="flex flex-1 flex-col overflow-hidden">
               <div className="flex flex-1 flex-col items-center justify-center px-5">
@@ -1320,6 +1400,7 @@ const SidePanel = () => {
                   isStreaming={isStreamingPlanner || isStreamingSynthesizer}
                   onWidgetApply={handleWidgetApply}
                   onWidgetRespond={handlePermissionResponse}
+                  onShortcutClick={handleShortcutClickFromMessage}
                 />
                 <div ref={messagesEndRef} />
               </div>
@@ -1327,8 +1408,17 @@ const SidePanel = () => {
               {renderChatInput()}
             </>
           )}
-        </>
+        </div>
       )}
+
+      <ShortcutEditorModal
+        open={!!shortcutEditorData}
+        onClose={() => setShortcutEditorData(null)}
+        shortcut={shortcutEditorData?.source === 'create' ? null : shortcutEditorData}
+        onSave={handleShortcutEditorSave}
+        onDelete={handleShortcutEditorDelete}
+        existingCommands={existingCommands}
+      />
 
       {isAuthenticated === false && <AuthOverlay />}
 
