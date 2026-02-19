@@ -2,18 +2,20 @@ import { useState } from 'react';
 import '@src/Options.css';
 import { Button } from '@extension/ui';
 import { withErrorBoundary, withSuspense } from '@extension/shared';
-import { FiSettings, FiShield, FiTrendingUp, FiServer, FiLink } from 'react-icons/fi';
+import { FiSettings, FiShield, FiTrendingUp, FiServer, FiLink, FiZap } from 'react-icons/fi';
 import { GeneralSettings } from './components/GeneralSettings';
 import { FirewallSettings } from './components/FirewallSettings';
 import { AnalyticsSettings } from './components/AnalyticsSettings';
 import { ServerSettings } from './components/ServerSettings';
 import { IntegrationSettings } from './components/IntegrationSettings';
+import { ShortcutSettings } from './components/ShortcutSettings';
 
-type TabTypes = 'general' | 'firewall' | 'analytics' | 'server' | 'integrations';
+type TabTypes = 'general' | 'firewall' | 'analytics' | 'server' | 'integrations' | 'shortcuts';
 
 const TABS: { id: TabTypes; icon: React.ComponentType<{ className?: string }>; label: string }[] = [
   { id: 'server', icon: FiServer, label: 'Server' },
   { id: 'integrations', icon: FiLink, label: 'Integrations' },
+  { id: 'shortcuts', icon: FiZap, label: 'Shortcuts' },
   { id: 'general', icon: FiSettings, label: 'General' },
   { id: 'firewall', icon: FiShield, label: 'Firewall' },
   { id: 'analytics', icon: FiTrendingUp, label: 'Analytics' },
@@ -35,6 +37,8 @@ const Options = () => {
         return <ServerSettings isDarkMode={isDarkMode} />;
       case 'integrations':
         return <IntegrationSettings isDarkMode={isDarkMode} />;
+      case 'shortcuts':
+        return <ShortcutSettings isDarkMode={isDarkMode} />;
       default:
         return null;
     }

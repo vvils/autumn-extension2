@@ -9,12 +9,24 @@ export interface ConnectedAccount {
   createdAt: number;
 }
 
+export interface ManifestProp {
+  name: string;
+  type: string;
+  required: boolean;
+  label?: string;
+  description?: string;
+  default?: unknown;
+  options?: string[];
+  min?: number;
+  max?: number;
+}
+
 export interface CuratedAction {
   key: string;
   name: string;
   description: string;
   appSlug: string;
-  requiredProps: string[];
+  props: ManifestProp[];
 }
 
 export interface IntegrationSettingsConfig {

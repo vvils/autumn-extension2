@@ -107,7 +107,6 @@ IMPORTANT — Integration routing rules:
   Example next_steps: "I'll search your Gmail for unread emails."
 - Put the technical details (action_key, app_slug, parameters) in the "reasoning" field so the navigator can reference them.
   Example reasoning: "Will use run_integration_action: action_key='gmail-find-email', app_slug='gmail', parameters={ query: 'is:unread' }"
-- Integration actions may accept optional parameters beyond those listed. For search/list actions, include a reasonable result limit (e.g. maxResults).
 - Only fall back to browser automation if no connected integration covers the task.
 `
     : ''

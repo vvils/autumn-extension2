@@ -103,10 +103,22 @@ Examples:
 > Severity: Medium.
 ```
 
+## Plan Mode Behavior
+
+If you are currently in **plan mode**, you MUST work within the plan mode workflow:
+
+1. **Do all exploration and analysis** as described above (sequential thinking, codebase exploration, pattern/architecture/gap analysis).
+2. **Write your proposed document edits into the plan file** — describe exactly what you will change in the plan document: which sections to add, modify, rewrite, or annotate with hazards. Include the full text of additions and rewrites so the user can review them.
+3. **Call `ExitPlanMode`** to present your proposed edits for approval.
+4. **Only after approval**, apply the edits to the plan document.
+
+You are planning **edits to the document itself** — never plan the implementation of what the document describes. Your output in plan mode is a set of proposed document changes, not an implementation plan.
+
 ## CRITICAL RULES
 
 - **Only edit the plan document** — Do NOT edit any source code files
 - **Do NOT implement anything** — Your job is to improve the plan, not write code
+- **Do NOT plan implementation** — You are analyzing and improving a document, not planning how to build what it describes
 - **Do NOT delete original plan content** unless you are replacing it with something better (correcting a pattern deviation, rewriting a step for clarity, etc.)
 - **Be specific** — Reference actual files, patterns, and function names from the codebase
 - **Write as much as needed** — There is no length limit. A thorough, complete plan is the goal. If filling a gap requires 20 lines, write 20 lines. Do not summarize when detail is needed.

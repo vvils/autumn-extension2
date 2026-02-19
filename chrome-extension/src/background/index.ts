@@ -9,6 +9,7 @@ import {
   serverSettingsStore,
   integrationSettingsStore,
   type CuratedAction,
+  type ManifestProp,
 } from '@extension/storage';
 import BrowserContext from './browser/context';
 import { Executor } from './agent/executor';
@@ -598,6 +599,17 @@ chrome.runtime.onConnect.addListener(port => {
   }
 });
 
+function formatProp(p: ManifestProp): string {
+  let s = `${p.name} (${p.type}`;
+  if (p.label && p.label !== p.name) s += `, "${p.label}"`;
+  if (p.options?.length) s += `, enum: [${p.options.join(', ')}]`;
+  if (p.default !== undefined) s += `, default: ${p.default}`;
+  if (p.min !== undefined) s += `, min: ${p.min}`;
+  if (p.max !== undefined) s += `, max: ${p.max}`;
+  s += ')';
+  return s;
+}
+
 async function setupExecutor(taskId: string, task: string, browserContext: BrowserContext) {
   const providers = await llmProviderStore.getAllProviders();
   // if no providers, need to display the options page
@@ -660,8 +672,14 @@ async function setupExecutor(taskId: string, task: string, browserContext: Brows
       lines.push(`- ${account.appName}:`);
       const appActions = integrationSettings.availableActions.filter(a => a.appSlug === account.appSlug);
       for (const action of appActions) {
-        const params = (action.requiredProps ?? []).join(', ');
-        lines.push(`  - ${action.key}: ${action.description} (params: ${params})`);
+        const allProps = action.props ?? [];
+        const required = allProps.filter(p => p.required).map(formatProp);
+        const optional = allProps.filter(p => !p.required).map(formatProp);
+        const parts: string[] = [];
+        if (required.length) parts.push(`required: ${required.join(', ')}`);
+        if (optional.length) parts.push(`optional: ${optional.join(', ')}`);
+        const paramStr = parts.length ? ` | ${parts.join('; ')}` : '';
+        lines.push(`  - ${action.key}: ${action.description}${paramStr}`);
       }
     }
     if (lines.length > 0) {

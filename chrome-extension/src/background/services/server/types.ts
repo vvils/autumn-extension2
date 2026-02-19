@@ -1,4 +1,4 @@
-import type { ProviderConfig } from '@extension/storage';
+import type { ManifestProp, ProviderConfig } from '@extension/storage';
 
 export interface ServerApiClientConfig {
   baseUrl: string;
@@ -130,7 +130,7 @@ export interface IntegrationManifest {
         key: string;
         name: string;
         description: string;
-        requiredProps: string[];
+        props: ManifestProp[];
       }>;
     }
   >;

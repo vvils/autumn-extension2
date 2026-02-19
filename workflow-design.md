@@ -2,7 +2,7 @@
 
 ## Context
 
-The browser extension has a working AI copilot (planner → navigator step loop) and Pipedream integration (Gmail, Slack, Google Sheets). Two new end-to-end workflows need design: OTA Price Parity and Group Bookings via Email. The Gmail manifest actions (find, get, send) are already added. This document details the full implementation path for each workflow.
+The browser extension has a working AI copilot (planner → navigator step loop) and Pipedream integration (Gmail). Two new end-to-end workflows need design: OTA Price Parity and Group Bookings via Email. The Gmail manifest currently includes two curated actions: `gmail-find-email` and `gmail-send-email` (defined in `CURATED_INTEGRATIONS` in `pipedream.service.ts`). `gmail-get-email` is NOT yet added and must be added for Workflow 2. This document details the full implementation path for each workflow.
 
 ---
 
@@ -55,7 +55,7 @@ Integration actions are registered as the `run_integration_action` navigator act
 1. On startup/auth, fetches `getConnectedAccounts()` and `getIntegrationManifest()`
 2. Builds a text string of connected capabilities (app name + action keys + descriptions + params)
 3. Passes to `Executor` → `PlannerPrompt` (as `CONNECTED INTEGRATIONS` section) and `ActionBuilder`
-4. Planner prompt instructs: "ALWAYS prefer integration actions over browser automation" (in the `CONNECTED INTEGRATIONS` section of `buildPlannerSystemPrompt()`)
+4. Planner prompt instructs: "When a task can be fulfilled by a connected integration action, ALWAYS prefer it over browser automation." (in the `CONNECTED INTEGRATIONS` section of `buildPlannerSystemPrompt()`)
 
 ### Domain Query + Escalation (`Executor.executeDomainQuery()`)
 
@@ -117,29 +117,146 @@ When `task_type === 'domain_query'`, the executor streams SSE from `POST /ai/ext
 4. **PlannerAgent validates completion** (runs every `planningInterval` steps):
    - Confirms done=true, sets `final_answer` with formatted report
 
-5. **If rate adjustment needed** (future iteration):
-   - Option A (PMS API): Requires new backend endpoint exposing the PMS rate update capability. The backend already has `PmsFactory` at `shared/providers/pms/pms.factory.ts` supporting Mews, CloudBeds, and ResNexus. The `PmsProvider` interface exposes `updateRatePricing(accessToken, rates[])` and `updateRates({priceUpdates, rateId, accessToken, timezone})`. The Mews provider (`mews.provider.ts`) implements these via the Mews `rates/updatePrice` API with timezone conversion and 1000-item chunking. A new navigator action would call a backend endpoint that delegates to `PmsFactory.getProvider().updateRates()` — the factory is backend-internal and not directly exposed via API today.
-   - Option B (Browser): Navigator automates Mews/PMS extranet
-   - Deferred — not part of initial implementation
+5. **If rate adjustment needed** (user confirms via `ask_user`):
 
-### Backend Changes Needed: NONE
+   **Step 5** — Navigator presents options via `ask_user`:
+   ```
+   Rate Parity Report — Fri Feb 20:
+   ✓ Booking.com: $189 (matches Direct)
+   ✗ Expedia: $175 (−$14, 7.4% below Direct)
+   ✓ Hotels.com: $189 (matches Direct)
 
-All required capabilities exist:
-- `query_hotel_data` action → `POST /ai/extension/query` (returns rates, floors, ceilings, occupancy)
-- Hotel context manifest provides hotel name, room types, currency
-- `search_google`, `cache_content`, `done` actions are all registered
+   Your Autumn-recommended rate is $189. Would you like me to push your current rates to your PMS to ensure they're in sync?
+   ```
+
+   **Step 6** — User: "Yes, push my rates"
+
+   **Step 7** — Navigator executes `push_rates_to_pms` action:
+   ```json
+   { "startDate": "2026-02-20", "endDate": "2026-02-22" }
+   ```
+   → Calls `serverClient.pushRatesToPms({ startDate, endDate })`
+   → Endpoint: `POST /ai/extension/push-rates`
+   → Backend calls `usersService.updatePmsPrices(userId, { startDate, endDate } as SyncBookingsDto)` which:
+     a. Fetches user's PMS credentials (`UserPms` entity: accessToken, pms type, propertyID)
+     b. Checks `shouldPushPrices` gate (returns error if disabled)
+     c. Calculates all room type prices using AI suggestions + floor/ceiling constraints
+     d. Pushes to PMS via `PmsFactory(userPms.pms).getProvider().updateRates()`
+     e. Returns success/failure with details
+
+   > **[HAZARD]** The `shouldPushPrices` flag on `UserPms` is a hard gate. If the user hasn't enabled price pushing (via the "Go Live" flow in the frontend), the endpoint will return a clear error. The navigator should present this to the user: "Price pushing is not enabled for your account. Please enable it in your Autumn dashboard Settings before I can push rates." Severity: Medium.
+
+   > **[HAZARD]** `updatePmsPrices()` has silent failure conditions: returns without error if PMS credentials are missing, if `shouldPushPrices` is false, or if all calculated prices are zero. The new endpoint must check these conditions explicitly and return descriptive errors instead of silent success. See `users.service.ts:12190-12367` for the three silent exit paths. Severity: High.
+
+   **Step 8** — Navigator calls `done` with confirmation:
+   ```
+   ✓ Rates pushed to your PMS for Feb 20–22.
+   All room types updated with Autumn-recommended pricing.
+   ```
+
+### Backend Changes Needed
+
+1. **New endpoint** on `ExtensionController` (`src/modules/ai/controllers/extension.controller.ts`):
+
+   `POST /ai/extension/push-rates` — JWT-protected, takes `{ startDate, endDate }`, delegates to `UsersService.updatePmsPrices()`.
+
+   **Why a new endpoint instead of using existing `POST :id/pms/sync/rates/grouped`:**
+   - The existing endpoint uses `:id` as a URL path param; the extension uses JWT-based auth where userId comes from the token
+   - The existing endpoint returns 202 immediately (async); the extension needs to know if the push succeeded
+   - Consistent API surface: all extension endpoints live under `/ai/extension/*`
+
+   **Implementation follows the `ExtensionController` pattern:**
+   ```typescript
+   @Post('push-rates')
+   @UseGuards(JwtAuthGuard)
+   @ApiBearerAuth()
+   async pushRates(@Body() dto: PushRatesDto, @Req() req) {
+     const userId = this.requireUserId(req);
+     // Validate PMS is connected and push is enabled BEFORE calling updatePmsPrices
+     // Return { success, message, details } synchronously
+   }
+   ```
+
+   **DTO:** `PushRatesDto` with `@IsString() startDate` and `@IsString() endDate` fields.
+
+   **Pre-flight checks** (to avoid `updatePmsPrices` silent failures):
+   - Verify `UserPms` exists and `isActive`
+   - Verify `shouldPushPrices === true`
+   - Return descriptive error if either check fails
+
+2. **Inject `UsersService`** into `ExtensionController`:
+   - `UsersService` is already exported from `UsersModule`
+   - `AiModule` already imports `UsersModule`
+   - Just add `private readonly usersService: UsersService` to the constructor
+
+   > **[HAZARD]** The `ExtensionController` currently only injects `ChatOrchestratorService`. Adding `UsersService` is safe because `AiModule` already imports `UsersModule`. However, `UsersService` is a large service — only use it for this specific method call. Severity: Low.
+
+### Backend Files to Modify
+
+| File | Changes |
+|---|---|
+| `src/modules/ai/controllers/extension.controller.ts` | Add `UsersService` injection + `POST push-rates` endpoint |
+| `src/modules/ai/controllers/extension.controller.ts` | Add `PushRatesDto` class (or create separate DTO file) |
 
 ### Extension Changes Needed
 
 1. **Planner prompt enhancement** (`prompts/templates/planner.ts`):
-   - Add rate parity workflow hints in a **new `serverAvailable`-gated section** (NOT inside `connectedIntegrations`). Rate parity uses `query_hotel_data` (requires `serverClient`) and `search_google` (always available) — it does NOT require connected integrations. If placed inside `connectedIntegrations`, the hints disappear when a user has `serverAvailable=true` but no Pipedream integrations connected.
-   - Placement: after the responsibilities section, before `CONNECTED INTEGRATIONS`, gated on `serverAvailable`
-   - Include example: "For rate parity, first query_hotel_data for current rates, then search Google for OTA prices"
-   - Include fallback guidance: "If Google hotel card not found, navigate to individual OTA sites"
+   - Add `# WORKFLOW HINTS` section gated on `serverAvailable` (placed AFTER the responsibilities section, BEFORE `CONNECTED INTEGRATIONS`)
+   - Content:
+     ```
+     # WORKFLOW HINTS:
+     - Rate parity check: use query_hotel_data for current direct rates first, then search_google for OTA prices. If no Google hotel card appears, navigate directly to booking.com and expedia.com to extract rates.
+     - Rate push to PMS: after finding rate discrepancies, use ask_user to confirm, then push_rates_to_pms with the relevant date range. If push fails due to "price pushing not enabled", inform the user they need to enable it in their Autumn dashboard.
+     ```
 
-2. **No new actions needed** — all exist:
-   - `query_hotel_data` (registered in `if (this.serverClient)` block of `buildDefaultActions()`)
-   - `search_google`, `go_to_url`, `cache_content`, `done` (registered unconditionally in `buildDefaultActions()`)
+2. **New navigator action** `push_rates_to_pms` (in `actions/builder.ts` and `actions/schemas.ts`):
+
+   Follows the `queryHotelData` pattern: registered in the `if (this.serverClient)` block of `buildDefaultActions()`, with closure-captured `serverClient` and `context` locals.
+
+   a. **Schema** (`schemas.ts`):
+   ```typescript
+   export const pushRatesToPmsActionSchema: ActionSchema = {
+     name: 'push_rates_to_pms',
+     description: 'Push Autumn-recommended rates to the hotel PMS for a date range. Use after rate parity check reveals discrepancies.',
+     schema: z.object({
+       intent: z.string().default('').describe('purpose of this action'),
+       startDate: z.string().describe('Start date (YYYY-MM-DD)'),
+       endDate: z.string().describe('End date (YYYY-MM-DD)'),
+     }),
+   };
+   ```
+
+   b. **Handler** (in `builder.ts`, inside `if (this.serverClient)` block, after `queryHotelData`):
+   ```
+   const intent = params.intent || 'Pushing rates to PMS...';
+   context.emitEvent(Actors.NAVIGATOR, ExecutionState.ACT_START, intent);
+   const result = await serverClient.pushRatesToPms({ startDate: params.startDate, endDate: params.endDate });
+   // check result.success, build extractedContent summary
+   context.emitEvent(Actors.NAVIGATOR, ExecutionState.ACT_OK, 'Rates pushed to PMS');
+   ```
+   Error path follows the `queryHotelData` pattern with ACT_FAIL.
+
+   c. **ServerClient method** (`serverClient.ts`):
+   ```typescript
+   async pushRatesToPms(params: PushRatesRequest): Promise<PushRatesResult> {
+     const { data } = await this.apiClient.post<PushRatesResult>('/ai/extension/push-rates', params);
+     return data;
+   }
+   ```
+
+   d. **Types** (`types.ts`):
+   ```typescript
+   export interface PushRatesRequest {
+     startDate: string;
+     endDate: string;
+   }
+
+   export interface PushRatesResult {
+     success: boolean;
+     message: string;
+     error?: string;
+   }
+   ```
 
 ### Relevant Backend Capabilities (Already Exist)
 
@@ -148,7 +265,7 @@ All required capabilities exist:
 | Current rates by date | `query_hotel_data` → `POST /ai/extension/query` | Floors, ceilings, AI prices, occupancy |
 | Room type rates | `usersService.fetchDayMetrics()` | Per-room-type daily pricing |
 | Competitor rates | `getPricingConfig` | Rate shop data if configured |
-| Push rates to PMS | `PmsFactory` → `PmsProvider.updateRates()` | API-based rate updates via Mews/CloudBeds/ResNexus (future — not exposed via API yet, see `shared/providers/pms/`) |
+| Push rates to PMS | `POST /ai/extension/push-rates` (NEW) → `UsersService.updatePmsPrices()` | Calculates AI prices + floor/ceiling, pushes to Mews/CloudBeds/ResNexus via `PmsFactory` |
 | Hotel context | `GET /ai/extension/context` | Hotel name, timezone, currency, room types |
 
 ---
@@ -279,10 +396,24 @@ All required capabilities exist:
     ```
     → Email sent via user's Gmail account
 
-### Backend Changes Needed: NONE
+### Backend Changes Needed
 
-All required backend capabilities already exist:
-- `gmail-find-email` / `gmail-get-email` / `gmail-send-email` — in Pipedream manifest
+1. **Add `gmail-get-email` to `CURATED_INTEGRATIONS`** (in `shared/providers/pipedream.service.ts`):
+
+   The manifest currently only curates `gmail-send-email` and `gmail-find-email`. Workflow 2 requires `gmail-get-email` to retrieve full email body text by message ID.
+
+   Add to the `gmail.actions` array:
+   ```typescript
+   {
+     key: 'gmail-get-email',
+     name: 'Get Email',
+     description: 'Get the full content of an email by message ID',
+     params: ['message_id'],
+   },
+   ```
+
+All other required backend capabilities already exist:
+- `gmail-find-email` / `gmail-send-email` — in Pipedream manifest
 - `POST /group-quotes/parse-inquiry` — parses raw email text with AI
 - `POST /group-quotes/generate` — generates full quote with allocation, pricing, email draft
 - `POST /ai/extension/integrations/actions/run` — executes Pipedream actions
@@ -291,19 +422,88 @@ All required backend capabilities already exist:
 
 1. **New navigator actions** (in `actions/builder.ts` and `actions/schemas.ts`):
 
-   Both actions follow the `queryHotelData` pattern: registered in the `if (this.serverClient)` block of `buildDefaultActions()`, with closure-captured locals (`const serverClient = this.serverClient; const context = this.context;`). Neither action includes an `intent` field — matching the `queryHotelData` and `runIntegrationAction` convention where server-calling actions omit `intent`.
+   Both actions follow the `queryHotelData` pattern: registered in the `if (this.serverClient)` block of `buildDefaultActions()`, with closure-captured locals (`const serverClient = this.serverClient; const context = this.context;`). Both actions include an `intent` field — matching the universal pattern where all action schemas (except `done` and `ask_user`) include `intent: z.string().default('').describe('purpose of this action')` as the first field.
+
+   > **[HAZARD — Handler params type]** The handler's `params` type must include `intent?: string` as an optional field:
+   > ```typescript
+   > async (params: { intent?: string; emailText: string }) => { ... }
+   > async (params: { intent?: string; checkInDate: string; checkOutDate: string; roomCount: number; context?: string; guestName?: string }) => { ... }
+   > ```
 
    a. `parse_group_inquiry`:
-   - Schema: `{ emailText: z.string().describe('Full text of the group booking inquiry email') }`
+   - Schema: `{ intent: z.string().default('').describe('purpose of this action'), emailText: z.string().describe('Full text of the group booking inquiry email') }`
    - Handler: `serverClient.parseGroupInquiry(params.emailText)`
    - Conditionally registered when `serverClient` exists
+   - **Event emission pattern** (matches `queryHotelData` at builder.ts:737-768):
+     ```
+     const intent = params.intent || 'Parsing group inquiry...';
+     context.emitEvent(Actors.NAVIGATOR, ExecutionState.ACT_START, intent);
+     const result = await serverClient.parseGroupInquiry(params.emailText);
+     // ... check result.success, build extractedContent summary
+     context.emitEvent(Actors.NAVIGATOR, ExecutionState.ACT_OK, 'Group inquiry parsed');
+     ```
+   - **Error path** (matches `runIntegrationAction` pattern):
+     ```
+     if (!result.success) {
+       context.emitEvent(Actors.NAVIGATOR, ExecutionState.ACT_FAIL, result.error ?? 'Failed to parse inquiry');
+       return new ActionResult({ error: result.error ?? 'Failed to parse inquiry', includeInMemory: true });
+     }
+     ```
    - **Response formatting:** The handler checks `result.success`, then iterates the per-field confidence objects in `result.data` to build a human-readable summary with confidence indicators. Example `extractedContent`: `"Parsed inquiry: checkIn=2026-06-12 (high), checkOut=2026-06-15 (high), roomCount=25 (medium), contact=Sarah (sarah@weddings.com). Low-confidence fields should be confirmed with the user."` Note: eventType and specialRequirements are NOT in the parse response — those are handled by the allocation AI when generating the quote via the `context` parameter.
 
    b. `generate_group_quote`:
-   - Schema: `{ checkInDate: z.string().describe('...'), checkOutDate: z.string().describe('...'), roomCount: z.number().describe('...'), context: z.string().optional().describe('...'), guestName: z.string().optional().describe('...') }`
+   - Schema: `{ intent: z.string().default('').describe('purpose of this action'), checkInDate: z.string().describe('...'), checkOutDate: z.string().describe('...'), roomCount: z.number().describe('...'), context: z.string().optional().describe('...'), guestName: z.string().optional().describe('...') }`
    - Handler: `serverClient.generateGroupQuote(params)`
    - Conditionally registered when `serverClient` exists
+   - **Event emission pattern** (matches `queryHotelData` at builder.ts:737-768):
+     ```
+     const intent = params.intent || 'Generating group quote...';
+     context.emitEvent(Actors.NAVIGATOR, ExecutionState.ACT_START, intent);
+     const result = await serverClient.generateGroupQuote(params);
+     // ... check result.success, build condensed extractedContent
+     context.emitEvent(Actors.NAVIGATOR, ExecutionState.ACT_OK, 'Group quote generated');
+     ```
+     Error handling follows the same try/catch with `ACT_FAIL` pattern.
+   - **Error path** (matches `runIntegrationAction` pattern):
+     ```
+     if (!result.success) {
+       context.emitEvent(Actors.NAVIGATOR, ExecutionState.ACT_FAIL, result.error ?? 'Failed to generate quote');
+       return new ActionResult({ error: result.error ?? 'Failed to generate quote', includeInMemory: true });
+     }
+     ```
    - **Response summarization:** The full response (allocation + metrics + email draft) can exceed 4000+ characters. The handler should build a condensed `extractedContent` string containing: key metrics (room count, ADR, total revenue, occupancy impact) + truncated email preview (first 500 chars + "..."). The full email draft should be included as a note instructing the navigator to cache it via `cache_content` for later retrieval when sending via `gmail-send-email`.
+
+   **Registration position in `builder.ts`:**
+
+   The two `if` blocks at the end of `buildDefaultActions()` are **separate blocks** (not nested):
+   ```
+   if (this.serverClient) {         // Lines 737-768
+     // queryHotelData
+   }
+   if (this.serverClient && this.connectedIntegrations) {  // Lines 770-815
+     // runIntegrationAction
+   }
+   ```
+
+   New actions go inside the FIRST block, after `actions.push(queryHotelData)`:
+   ```
+   if (this.serverClient) {
+     const serverClient = this.serverClient;
+     const context = this.context;
+     // ... queryHotelData (existing)
+     actions.push(queryHotelData);
+
+     // NEW: parse_group_inquiry
+     const parseGroupInquiry = new Action(async (params: { ... }) => { ... }, parseGroupInquiryActionSchema);
+     actions.push(parseGroupInquiry);
+
+     // NEW: generate_group_quote
+     const generateGroupQuote = new Action(async (params: { ... }) => { ... }, generateGroupQuoteActionSchema);
+     actions.push(generateGroupQuote);
+   }
+   ```
+
+   Note: The closure-captured `serverClient` and `context` locals are already declared at the top of the block for `queryHotelData`. The new handlers reuse these same locals — no need to redeclare them.
 
 2. **Increase integration result truncation limit** (in `run_integration_action` handler in `builder.ts`):
    - Extract to a **module-level** named constant at the top of `builder.ts`: `const INTEGRATION_RESULT_MAX_LENGTH = 8000;` (module-level so it can be reused by other action handlers if needed)
@@ -337,6 +537,16 @@ All required backend capabilities already exist:
 
    Both follow the existing direct-unwrap pattern (Pattern 1). The backend wraps responses in `{ success, data }` — matching `ActionRunResult`. The action handlers in builder.ts check `result.success` before accessing `result.data`.
 
+   New type imports in `serverClient.ts` must use `import type` per the codebase's `@typescript-eslint/consistent-type-imports` ESLint rule. Add to the existing type import block:
+   ```typescript
+   import type {
+     // ... existing imports
+     ParseGroupInquiryResult,
+     GenerateGroupQuoteRequest,
+     GenerateGroupQuoteResult,
+   } from './types';
+   ```
+
    These are **required**, not optional. Every backend API call in the agent system goes through a `ServerClient` method (e.g., `queryData()`, `runIntegrationAction()`). Direct `apiClient.post()` calls from action handlers would bypass any future middleware (auth refresh, error mapping, retry logic).
 
 5. **Type definitions** (in `services/server/types.ts`):
@@ -366,6 +576,7 @@ All required backend capabilities already exist:
    export interface ParseGroupInquiryResult {
      success: boolean;
      data: ParsedInquiryData;
+     error?: string;
    }
 
    // Generate quote types — matches backend generate-quote.dto.ts
@@ -384,6 +595,7 @@ All required backend capabilities already exist:
        metrics: Record<string, unknown>;
        emailDraft: string;
      };
+     error?: string;
    }
    ```
 
@@ -433,12 +645,12 @@ AI room allocation (with context):
 └── Falls back to cheapest-first if no context or AI fails
 ```
 
-### PMS Factory Architecture (Backend — For Future Rate Push)
+### PMS Factory Architecture (Backend — Rate Push)
 
 The backend PMS integration layer at `shared/providers/pms/` uses a factory pattern:
 
 ```
-PmsFactory(pmsType: PmsType) → PmsProvider interface
+PmsFactory(pms: PmsType) → PmsProvider interface
 ├── MewsProvider    (mews.provider.ts)
 ├── CloudBedsProvider (cloudbeds.provider.ts)
 └── ResNexusProvider  (resnexus.provider.ts)
@@ -459,7 +671,7 @@ PmsFactory(pmsType: PmsType) → PmsProvider interface
 
 **User PMS entity** (`user-pms.entity.ts`): Stores `userId`, `pms` (PmsType), `accessToken`, `apiKey`, `propertyID`, `shouldPushPrices` flag.
 
-This is backend-internal infrastructure. A future rate push feature would need a new backend API endpoint (e.g., `POST /ai/extension/push-rates`) that authenticates the extension user, looks up their PMS credentials, and delegates to `PmsFactory.getProvider().updateRates()`.
+This is backend-internal infrastructure. The `POST /ai/extension/push-rates` endpoint authenticates the extension user, looks up their PMS credentials, and delegates to `UsersService.updatePmsPrices()` which uses `PmsFactory.getProvider().updateRates()`.
 
 ---
 
@@ -467,9 +679,9 @@ This is backend-internal infrastructure. A future rate push feature would need a
 
 | Component | OTA Price Parity | Group Bookings |
 |---|---|---|
-| Backend | Nothing | Nothing (all endpoints exist) |
+| Backend | `POST /ai/extension/push-rates` endpoint | Add `gmail-get-email` to `CURATED_INTEGRATIONS` |
 | Pipedream manifest | Nothing | Done (find/get/send added) |
-| Extension: new actions | None needed | `parse_group_inquiry`, `generate_group_quote` |
+| Extension: new actions | `push_rates_to_pms` | `parse_group_inquiry`, `generate_group_quote` |
 | Extension: action limit | Increase truncation 2000→8000 | Increase truncation 2000→8000 |
 | Extension: planner prompt | Scraping + fallback awareness | Gmail routing + multi-step workflow |
 | Extension: navigator | Google price scraping (LLM-driven) | Not needed (integration actions) |
@@ -479,27 +691,23 @@ This is backend-internal infrastructure. A future rate push feature would need a
 
 | File | Changes |
 |---|---|
-| `chrome-extension/src/background/services/server/types.ts` | Add `ParsedInquiryField`, `ParsedContactInfo`, `ParsedInquiryData`, `ParseGroupInquiryResult`, `GenerateGroupQuoteRequest`, `GenerateGroupQuoteResult` interfaces |
-| `chrome-extension/src/background/services/server/serverClient.ts` | Add `parseGroupInquiry()` and `generateGroupQuote()` convenience methods |
-| `chrome-extension/src/background/agent/actions/schemas.ts` | Add `parseGroupInquiryActionSchema`, `generateGroupQuoteActionSchema` |
-| `chrome-extension/src/background/agent/actions/builder.ts` | Import new schemas; register new actions inside `if (this.serverClient)` block after `queryHotelData`; extract truncation limit to `INTEGRATION_RESULT_MAX_LENGTH = 8000` |
-| `chrome-extension/src/background/agent/prompts/templates/planner.ts` | Add `serverAvailable`-gated `# WORKFLOW HINTS` section for rate parity (after responsibilities, before integrations); append group booking hints inside the `connectedIntegrations` conditional block (after existing routing rules) |
-| `chrome-extension/src/background/agent/prompts/__tests__/planner.test.ts` | Add tests: (1) rate parity hints present when `serverAvailable=true`, (2) rate parity hints NOT present when `serverAvailable=false`, (3) group booking hints present when `connectedIntegrations` is non-empty, (4) group booking hints NOT present when `connectedIntegrations` is absent |
-| `chrome-extension/src/background/services/server/__tests__/serverClient.test.ts` | Add tests for `parseGroupInquiry` and `generateGroupQuote` methods |
+| `autumn-backend/src/shared/providers/pipedream.service.ts` | Add `gmail-get-email` action to `CURATED_INTEGRATIONS` (key, name, description, params: `['message_id']`) |
+| `autumn-backend/src/modules/ai/controllers/extension.controller.ts` | Add `UsersService` injection, `PushRatesDto`, `POST push-rates` endpoint with pre-flight PMS checks |
+| `chrome-extension/src/background/services/server/types.ts` | Add `PushRatesRequest`, `PushRatesResult`, `ParsedInquiryField`, `ParsedContactInfo`, `ParsedInquiryData`, `ParseGroupInquiryResult`, `GenerateGroupQuoteRequest`, `GenerateGroupQuoteResult` interfaces |
+| `chrome-extension/src/background/services/server/serverClient.ts` | Add `pushRatesToPms()`, `parseGroupInquiry()`, and `generateGroupQuote()` convenience methods |
+| `chrome-extension/src/background/agent/actions/schemas.ts` | Add `pushRatesToPmsActionSchema`, `parseGroupInquiryActionSchema`, `generateGroupQuoteActionSchema` |
+| `chrome-extension/src/background/agent/actions/builder.ts` | Add `pushRatesToPmsActionSchema`, `parseGroupInquiryActionSchema`, and `generateGroupQuoteActionSchema` to the existing import from `'./schemas'` (which already imports `queryHotelDataActionSchema` and `runIntegrationActionSchema`); register new actions inside `if (this.serverClient)` block after `queryHotelData`; extract truncation limit to `INTEGRATION_RESULT_MAX_LENGTH = 8000` |
+| `chrome-extension/src/background/agent/prompts/templates/planner.ts` | Add `serverAvailable`-gated `# WORKFLOW HINTS` section for rate parity + rate push (after responsibilities, before integrations); append group booking hints inside the `connectedIntegrations` conditional block (after existing routing rules) |
+| `chrome-extension/src/background/agent/prompts/__tests__/planner.test.ts` | Add tests: (1) rate parity hints present when `serverAvailable=true`, (2) rate parity hints NOT present when `serverAvailable=false`, (3) group booking hints present when `connectedIntegrations` is non-empty, (4) group booking hints NOT present when `connectedIntegrations` is absent. Note: The existing planner prompt tests only cover `serverAvailable` and `hotelCapabilities` options. There are zero tests for `connectedIntegrations` conditional sections (the CONNECTED INTEGRATIONS block, modified sign-in clauses, and task completion integration-priority sub-bullets). The group booking tests (cases 3 and 4) fill this existing coverage gap. |
+| `chrome-extension/src/background/services/server/__tests__/serverClient.test.ts` | Add tests for `pushRatesToPms`, `parseGroupInquiry`, and `generateGroupQuote` methods |
 
 ### Implementation Order
 
-1. **Types** (`types.ts`) — Add request/response interfaces (no dependencies)
-2. **ServerClient** (`serverClient.ts`) — Add convenience methods (depends on types)
-3. **Schemas** (`schemas.ts`) — Add new action schemas (no dependencies)
-4. **Builder** (`builder.ts`) — Import schemas, register actions, update truncation limit (depends on schemas + serverClient)
-5. **Planner Prompt** (`planner.ts`) — Add workflow hints (independent)
-6. **Tests** — Update planner and serverClient tests (depends on all above)
-7. **Verify** — `pnpm -F chrome-extension type-check && pnpm -F chrome-extension test && pnpm build`
-
-### Verification
-
-1. `pnpm -F chrome-extension type-check` — types compile
-2. `pnpm -F chrome-extension test` — existing + new tests pass
-3. `pnpm build` — full build succeeds
-4. Manual test: load extension, connect to backend with hotel context, test both workflows end-to-end
+1. **Backend endpoint** (`extension.controller.ts`) — Add `POST /ai/extension/push-rates` with pre-flight checks (depends on nothing)
+2. **Types** (`types.ts`) — Add request/response interfaces including `PushRatesRequest`, `PushRatesResult` (no dependencies)
+3. **ServerClient** (`serverClient.ts`) — Add `pushRatesToPms()` convenience method (depends on types)
+4. **Schemas** (`schemas.ts`) — Add new action schemas including `pushRatesToPmsActionSchema` (no dependencies)
+5. **Builder** (`builder.ts`) — Import schemas, register all new actions, update truncation limit (depends on schemas + serverClient)
+6. **Planner Prompt** (`planner.ts`) — Add workflow hints including rate push guidance (independent)
+7. **Tests** — Update planner and serverClient tests (depends on all above)
+8. **Verify** — `pnpm -F chrome-extension type-check && pnpm -F chrome-extension test && pnpm build`; backend: manual test of `POST /ai/extension/push-rates`

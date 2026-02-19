@@ -8,6 +8,7 @@ import {
   agentModelStore,
   generalSettingsStore,
   serverSettingsStore,
+  shortcutSettingsStore,
   mergeWidgetIntoMessages,
 } from '@extension/storage';
 
@@ -966,9 +967,18 @@ const SidePanel = () => {
   const handleSendMessage = async (text: string, displayText?: string) => {
     console.log('handleSendMessage', text);
 
-    const trimmedText = text.trim();
+    let trimmedText = text.trim();
 
     if (!trimmedText) return;
+
+    if (trimmedText.startsWith('/')) {
+      const commandName = trimmedText.slice(1).split(/\s/)[0];
+      const shortcut = await shortcutSettingsStore.getShortcutByCommand(commandName);
+      if (shortcut) {
+        displayText = displayText || trimmedText;
+        trimmedText = shortcut.prompt;
+      }
+    }
 
     if (trimmedText.startsWith('/')) {
       const wasHandled = await handleCommand(trimmedText);

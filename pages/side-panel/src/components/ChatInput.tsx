@@ -1,6 +1,9 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { Mic, Paperclip, ArrowUp, Square, Play, X } from 'lucide-react';
+import { shortcutSettingsStore } from '@extension/storage';
+import type { SavedShortcut } from '@extension/storage';
 import { CostDisplay, type CostDisplayProps } from './CostDisplay';
+import ShortcutDropdown from './ShortcutDropdown';
 
 interface ChatInputProps {
   onSendMessage: (text: string, displayText?: string) => void;
@@ -37,9 +40,28 @@ export default function ChatInput({
 }: ChatInputProps) {
   const [text, setText] = useState('');
   const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([]);
+  const [showShortcuts, setShowShortcuts] = useState(false);
+  const [shortcutQuery, setShortcutQuery] = useState('');
+  const [selectedShortcutIndex, setSelectedShortcutIndex] = useState(0);
+  const [shortcuts, setShortcuts] = useState<SavedShortcut[]>([]);
+  const [selectedShortcut, setSelectedShortcut] = useState<SavedShortcut | null>(null);
+
+  useEffect(() => {
+    if (showShortcuts) {
+      shortcutSettingsStore.getSettings().then(s => setShortcuts(s.shortcuts));
+    }
+  }, [showShortcuts]);
+
+  const filteredShortcuts = useMemo(
+    () => shortcuts.filter(s => s.command.toLowerCase().includes(shortcutQuery.toLowerCase())),
+    [shortcuts, shortcutQuery],
+  );
+
+  const effectiveIndex = Math.min(selectedShortcutIndex, Math.max(0, filteredShortcuts.length - 1));
+
   const isSendButtonDisabled = useMemo(
-    () => disabled || (text.trim() === '' && attachedFiles.length === 0),
-    [disabled, text, attachedFiles],
+    () => disabled || (text.trim() === '' && attachedFiles.length === 0 && !selectedShortcut),
+    [disabled, text, attachedFiles, selectedShortcut],
   );
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -53,8 +75,16 @@ export default function ChatInput({
   }, []);
 
   const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setText(e.target.value);
+    const value = e.target.value;
+    setText(value);
     resizeTextarea();
+    if (value.startsWith('/')) {
+      setShowShortcuts(true);
+      setShortcutQuery(value.slice(1));
+      setSelectedShortcutIndex(0);
+    } else {
+      setShowShortcuts(false);
+    }
   };
 
   useEffect(() => {
@@ -68,6 +98,20 @@ export default function ChatInput({
   }, [text, resizeTextarea]);
 
   const handleSubmit = useCallback(() => {
+    if (selectedShortcut) {
+      const shortcutPrompt = selectedShortcut.prompt;
+      const trimmedText = text.trim();
+      const messageContent = trimmedText ? `${shortcutPrompt}\n\n${trimmedText}` : shortcutPrompt;
+      const displayContent = trimmedText
+        ? `/${selectedShortcut.command} ${trimmedText}`
+        : `/${selectedShortcut.command}`;
+      onSendMessage(messageContent, displayContent);
+      setText('');
+      setSelectedShortcut(null);
+      setAttachedFiles([]);
+      return;
+    }
+
     const trimmedText = text.trim();
 
     if (trimmedText || attachedFiles.length > 0) {
@@ -93,16 +137,54 @@ export default function ChatInput({
       setText('');
       setAttachedFiles([]);
     }
-  }, [text, attachedFiles, onSendMessage]);
+  }, [text, attachedFiles, selectedShortcut, onSendMessage]);
+
+  const handleShortcutSelect = useCallback((shortcut: SavedShortcut) => {
+    setSelectedShortcut(shortcut);
+    setText('');
+    setShowShortcuts(false);
+    textareaRef.current?.focus();
+  }, []);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
+      if (showShortcuts) {
+        if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          setSelectedShortcutIndex(prev => prev + 1);
+          return;
+        }
+        if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          setSelectedShortcutIndex(prev => Math.max(0, prev - 1));
+          return;
+        }
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          setShowShortcuts(false);
+          return;
+        }
+        if (e.key === 'Enter' && !e.shiftKey) {
+          e.preventDefault();
+          if (filteredShortcuts.length > 0) {
+            handleShortcutSelect(filteredShortcuts[effectiveIndex]);
+          } else {
+            setShowShortcuts(false);
+          }
+          return;
+        }
+      }
+      if (e.key === 'Backspace' && selectedShortcut && text === '') {
+        e.preventDefault();
+        setSelectedShortcut(null);
+        return;
+      }
       if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
         e.preventDefault();
         handleSubmit();
       }
     },
-    [handleSubmit],
+    [handleSubmit, showShortcuts, filteredShortcuts, effectiveIndex, handleShortcutSelect, selectedShortcut, text],
   );
 
   const handleReplay = useCallback(() => {
@@ -202,7 +284,14 @@ export default function ChatInput({
   return (
     <div className="shrink-0 bg-white px-3 pb-3 pt-2">
       <div
-        className={`rounded-2xl border border-gray-200 bg-white px-3.5 py-2.5 shadow-sm transition-all ${disabled ? '' : 'focus-within:border-accent/40 focus-within:ring-accent/20 focus-within:ring-2'}`}>
+        className={`relative rounded-2xl border border-gray-200 bg-white px-3.5 py-2.5 shadow-sm transition-all ${disabled ? '' : 'focus-within:border-accent/40 focus-within:ring-accent/20 focus-within:ring-2'}`}>
+        {showShortcuts && (
+          <ShortcutDropdown
+            shortcuts={filteredShortcuts}
+            onSelect={handleShortcutSelect}
+            selectedIndex={effectiveIndex}
+          />
+        )}
         {attachedFiles.length > 0 && (
           <div className="mb-2 flex flex-wrap gap-1.5">
             {attachedFiles.map((file, index) => (
@@ -222,18 +311,31 @@ export default function ChatInput({
           </div>
         )}
 
-        <textarea
-          ref={textareaRef}
-          value={text}
-          onChange={handleTextChange}
-          onKeyDown={handleKeyDown}
-          disabled={disabled}
-          aria-disabled={disabled}
-          rows={1}
-          className={`max-h-[200px] min-h-[24px] w-full resize-none bg-transparent text-[13px] leading-6 text-gray-900 outline-none placeholder:text-gray-400 ${disabled ? 'cursor-not-allowed opacity-50' : ''}`}
-          placeholder={attachedFiles.length > 0 ? 'Add a message (optional)...' : 'What can I help you with?'}
-          aria-label="Message input"
-        />
+        <div className="flex items-start gap-1.5">
+          {selectedShortcut && (
+            <div className="bg-accent-soft text-accent-foreground shrink-0 rounded-md px-2 py-0.5 text-[13px] font-medium leading-6">
+              /{selectedShortcut.command}
+            </div>
+          )}
+          <textarea
+            ref={textareaRef}
+            value={text}
+            onChange={handleTextChange}
+            onKeyDown={handleKeyDown}
+            disabled={disabled}
+            aria-disabled={disabled}
+            rows={1}
+            className={`max-h-[200px] min-h-[24px] w-full resize-none bg-transparent text-[13px] leading-6 text-gray-900 outline-none placeholder:text-gray-400 ${disabled ? 'cursor-not-allowed opacity-50' : ''}`}
+            placeholder={
+              selectedShortcut
+                ? 'Add additional context (optional)...'
+                : attachedFiles.length > 0
+                  ? 'Add a message (optional)...'
+                  : 'What can I help you with?'
+            }
+            aria-label="Message input"
+          />
+        </div>
 
         <div className="mt-1 flex items-center justify-between">
           <div className="flex items-center gap-1">

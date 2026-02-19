@@ -6,3 +6,4 @@ export * from './firewall';
 export * from './analyticsSettings';
 export * from './serverSettings';
 export * from './integrationSettings';
+export * from './shortcutSettings';

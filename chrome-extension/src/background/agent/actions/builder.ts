@@ -794,8 +794,11 @@ export class ActionBuilder {
             }
             const raw = JSON.stringify(result.data);
             const extractedContent = raw.length > 2000 ? raw.slice(0, 2000) + '... (truncated)' : raw;
-            const preview = raw.length > 300 ? raw.slice(0, 300) + '...' : raw;
-            context.emitEvent(Actors.NAVIGATOR, ExecutionState.ACT_OK, `Integration result: ${preview}`);
+            context.emitEvent(
+              Actors.NAVIGATOR,
+              ExecutionState.ACT_OK,
+              `Integration result: ${params.action_key} completed`,
+            );
             return new ActionResult({ extractedContent, includeInMemory: true });
           } catch (error) {
             const errorMsg = error instanceof Error ? error.message : String(error);
