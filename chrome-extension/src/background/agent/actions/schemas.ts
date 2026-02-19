@@ -219,6 +219,7 @@ export const queryHotelDataActionSchema: ActionSchema = {
   description:
     "Query the hotel's internal data system for performance metrics, pricing, bookings, competitors, seasonal settings, and documentation.",
   schema: z.object({
+    intent: z.string().default('').describe('purpose of this action'),
     query: z.string().describe('Natural language query about hotel data'),
   }),
 };
@@ -227,8 +228,32 @@ export const runIntegrationActionSchema: ActionSchema = {
   name: 'run_integration_action',
   description: 'Execute an action on a connected third-party service (e.g. Slack, Gmail, Google Sheets)',
   schema: z.object({
+    intent: z.string().default('').describe('purpose of this action'),
     action_key: z.string().describe('the action key from the available integrations list'),
     app_slug: z.string().describe('the app slug for the target service'),
     parameters: z.record(z.unknown()).describe('parameters required by the action'),
+  }),
+};
+
+export const askUserActionSchema: ActionSchema = {
+  name: 'ask_user',
+  description:
+    'Pause and ask the user a question when you need their input, confirmation, or a decision before proceeding. Include context to help them decide.',
+  schema: z.object({
+    question: z.string().describe('Clear, concise question for the user'),
+    context: z
+      .string()
+      .optional()
+      .describe('Markdown-formatted supporting data (lists, summaries, comparisons) to help the user decide'),
+    options: z
+      .array(
+        z.object({
+          label: z.string().describe('Button label'),
+          value: z.string().describe('Value returned if selected'),
+        }),
+      )
+      .min(2)
+      .optional()
+      .describe('Array of {label, value} objects as predefined choices (min 2). Omit for free-text only.'),
   }),
 };

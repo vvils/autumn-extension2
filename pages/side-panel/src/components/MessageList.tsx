@@ -4,15 +4,21 @@ import { ACTOR_PROFILES } from '../types/message';
 import { memo } from 'react';
 import MarkdownContent from './MarkdownContent';
 import WidgetRenderer from './widgets/WidgetRenderer';
-import type { WidgetPayload, WidgetApplyFn } from './widgets/types';
+import type { WidgetPayload, WidgetApplyFn, WidgetRespondFn } from './widgets/types';
 
 interface MessageListProps {
   messages: Message[];
   isStreaming?: boolean;
   onWidgetApply?: WidgetApplyFn;
+  onWidgetRespond?: WidgetRespondFn;
 }
 
-export default memo(function MessageList({ messages, isStreaming = false, onWidgetApply }: MessageListProps) {
+export default memo(function MessageList({
+  messages,
+  isStreaming = false,
+  onWidgetApply,
+  onWidgetRespond,
+}: MessageListProps) {
   return (
     <div className="max-w-full space-y-4">
       {messages.map((message, index) => (
@@ -22,6 +28,7 @@ export default memo(function MessageList({ messages, isStreaming = false, onWidg
           isSameActor={index > 0 ? messages[index - 1].actor === message.actor : false}
           isStreaming={isStreaming && index === messages.length - 1}
           onWidgetApply={onWidgetApply}
+          onWidgetRespond={onWidgetRespond}
         />
       ))}
     </div>
@@ -33,9 +40,16 @@ interface MessageBlockProps {
   isSameActor: boolean;
   isStreaming?: boolean;
   onWidgetApply?: WidgetApplyFn;
+  onWidgetRespond?: WidgetRespondFn;
 }
 
-function MessageBlock({ message, isSameActor, isStreaming = false, onWidgetApply }: MessageBlockProps) {
+function MessageBlock({
+  message,
+  isSameActor,
+  isStreaming = false,
+  onWidgetApply,
+  onWidgetRespond,
+}: MessageBlockProps) {
   if (!message.actor) {
     console.error('No actor found');
     return <div />;
@@ -65,7 +79,12 @@ function MessageBlock({ message, isSameActor, isStreaming = false, onWidgetApply
       {message.widgets && message.widgets.length > 0 && (
         <div className="mt-2 space-y-2">
           {message.widgets.map(w => (
-            <WidgetRenderer key={w.widgetId} widget={w as WidgetPayload} onApply={onWidgetApply} />
+            <WidgetRenderer
+              key={w.widgetId}
+              widget={w as WidgetPayload}
+              onApply={onWidgetApply}
+              onRespond={onWidgetRespond}
+            />
           ))}
         </div>
       )}

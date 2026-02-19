@@ -135,6 +135,20 @@ const WORKFLOW_PROMPTS = [
     icon: '📊',
     prompt: 'How does my performance next week look?',
   },
+  {
+    id: 'check-email-bookings',
+    name: 'Check Email Bookings',
+    description: 'Find group booking requests in email',
+    icon: '📧',
+    prompt: 'Check my email for group booking requests',
+  },
+  {
+    id: 'navigate-wikipedia',
+    name: 'Wikipedia Lookup',
+    description: 'Navigate to Wikipedia and ask what to search',
+    icon: '🌐',
+    prompt: 'Navigate to wikipedia.org. Before doing anything else, ask me what topic I want to look up.',
+  },
 ] as const;
 
 const SidePanel = () => {
@@ -338,6 +352,27 @@ const SidePanel = () => {
     }
   }, []);
 
+  const handlePermissionResponse = useCallback(
+    (widgetId: string, response: string) => {
+      console.log('[ask_user] sending permission_response', { widgetId, response, hasPort: !!portRef.current });
+      portRef.current?.postMessage({ type: 'permission_response', widgetId, response });
+      setMessages(prev =>
+        prev.map(msg => ({
+          ...msg,
+          widgets: msg.widgets?.map(w =>
+            w.widgetId === widgetId ? { ...w, data: { ...w.data, answered: true, response } } : w,
+          ),
+        })),
+      );
+      persistMessage({
+        actor: 'navigator_widget_response',
+        content: JSON.stringify({ widgetId, response }),
+        timestamp: Date.now(),
+      });
+    },
+    [persistMessage],
+  );
+
   const handleTaskState = useCallback(
     (event: AgentEvent) => {
       const { actor, state, timestamp, data } = event;
@@ -463,11 +498,22 @@ const SidePanel = () => {
               }
               break;
             case ExecutionState.ACT_OK:
-              skip = !isReplayingRef.current;
+              skip = !isReplayingRef.current && !content?.startsWith('Integration result:');
               break;
             case ExecutionState.ACT_FAIL:
               skip = false;
               break;
+            case ExecutionState.WIDGET_EVENT: {
+              try {
+                const widgetData = JSON.parse(content || '{}');
+                if (!widgetData.widgetId || !widgetData.type) return;
+                setMessages(prev => [...prev, { actor: Actors.SYSTEM, content: '', timestamp, widgets: [widgetData] }]);
+                persistMessage({ actor: 'navigator_widget', content: content || '', timestamp });
+              } catch (err) {
+                console.error('Failed to parse navigator widget event:', err);
+              }
+              return;
+            }
             default:
               console.error('Invalid action', state);
               return;
@@ -630,6 +676,36 @@ const SidePanel = () => {
                 }
               } catch {
                 /* ignore malformed widget data */
+              }
+            } else if (m.role === 'navigator_widget') {
+              try {
+                const widgetData = JSON.parse(m.content);
+                mapped.push({
+                  actor: Actors.SYSTEM,
+                  content: '',
+                  timestamp: new Date(m.createdAt).getTime(),
+                  widgets: [widgetData],
+                });
+              } catch {
+                /* ignore malformed widget data */
+              }
+            } else if (m.role === 'navigator_widget_response') {
+              try {
+                const { widgetId, response } = JSON.parse(m.content);
+                for (let i = mapped.length - 1; i >= 0; i--) {
+                  const widgets = mapped[i].widgets;
+                  if (widgets?.some(w => w.widgetId === widgetId)) {
+                    mapped[i] = {
+                      ...mapped[i],
+                      widgets: widgets.map(w =>
+                        w.widgetId === widgetId ? { ...w, data: { ...w.data, answered: true, response } } : w,
+                      ),
+                    };
+                    break;
+                  }
+                }
+              } catch {
+                /* ignore malformed response data */
               }
             } else {
               mapped.push({
@@ -1233,6 +1309,7 @@ const SidePanel = () => {
                   messages={messages}
                   isStreaming={isStreamingPlanner || isStreamingSynthesizer}
                   onWidgetApply={handleWidgetApply}
+                  onWidgetRespond={handlePermissionResponse}
                 />
                 <div ref={messagesEndRef} />
               </div>

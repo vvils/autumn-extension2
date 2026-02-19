@@ -73,6 +73,7 @@ export class Executor {
     this.generalSettings = extraArgs?.generalSettings;
     this.tasks.push(task);
     this.navigatorPrompt = new NavigatorPrompt(context.options.maxActionsPerStep);
+    console.log('[Planner] connectedIntegrations:', extraArgs?.connectedIntegrations);
     this.plannerPrompt = new PlannerPrompt(
       !!this.serverClient,
       extraArgs?.hotelCapabilities,
@@ -451,6 +452,10 @@ export class Executor {
 
   async pause(): Promise<void> {
     this.context.pause();
+  }
+
+  resolveUserInput(response: string): void {
+    this.context.resolveUserInput(response);
   }
 
   async cleanup(): Promise<void> {

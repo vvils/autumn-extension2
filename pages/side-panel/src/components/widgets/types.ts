@@ -37,10 +37,24 @@ export interface SuggestionActionWidgetData {
   };
 }
 
-export type WidgetPayload = HotelMetricsWidgetData | SuggestionActionWidgetData;
+export interface PermissionWidgetData {
+  widgetId: string;
+  type: 'permission-request';
+  data: {
+    question: string;
+    context?: string;
+    options?: Array<{ label: string; value: string }>;
+    answered?: boolean;
+    response?: string;
+  };
+}
+
+export type WidgetPayload = HotelMetricsWidgetData | SuggestionActionWidgetData | PermissionWidgetData;
 
 export type WidgetApplyFn = (
   endpoint: string,
   method: string,
   payload: Record<string, unknown>,
 ) => Promise<{ success: boolean; error?: string }>;
+
+export type WidgetRespondFn = (widgetId: string, response: string) => void;

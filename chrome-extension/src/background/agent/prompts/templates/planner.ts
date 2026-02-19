@@ -46,7 +46,7 @@ export function buildPlannerSystemPrompt(options?: BuildPlannerSystemPromptOptio
     - Only suggest scrolling if the required content is confirmed to not be in the current view
     - Scrolling is your LAST resort unless you are explicitly required to do so by the task
     - NEVER suggest scrolling through the entire page, only scroll maximum ONE PAGE at a time.
-    - If sign in or credentials are required to complete the task, you should mark as done and ask user to sign in/fill credentials by themselves in final answer
+    - If sign in or credentials are required to complete the task${connectedIntegrations ? ' AND no connected integration can fulfill it' : ''}, you should mark as done and ask user to sign in/fill credentials by themselves in final answer
     - When you set done to true, you must:
       * Provide the final answer to the user's task in the "final_answer" field
       * Set "next_steps" to empty string (since the task is complete)
@@ -80,7 +80,7 @@ export function buildPlannerSystemPrompt(options?: BuildPlannerSystemPromptOptio
     - Only suggest scrolling if the required content is confirmed to not be in the current view
     - Scrolling is your LAST resort unless you are explicitly required to do so by the task
     - NEVER suggest scrolling through the entire page, only scroll maximum ONE PAGE at a time.
-    - If sign in or credentials are required to complete the task, you should mark as done and ask user to sign in/fill credentials by themselves in final answer
+    - If sign in or credentials are required to complete the task${connectedIntegrations ? ' AND no connected integration can fulfill it' : ''}, you should mark as done and ask user to sign in/fill credentials by themselves in final answer
     - When you set done to true, you must:
       * Provide the final answer to the user's task in the "final_answer" field
       * Set "next_steps" to empty string (since the task is complete)
@@ -103,8 +103,11 @@ IMPORTANT — Integration routing rules:
 - When a task can be fulfilled by a connected integration action, ALWAYS prefer it over browser automation.
   For example, "check my email" should use the gmail-find-email integration, NOT navigate to gmail.com.
 - Set task_type to "browser" (the navigator agent will execute the action via run_integration_action).
-- In "next_steps", explicitly name the integration action_key, app_slug, and required parameters so the navigator can execute it directly.
-  Example next_steps: "Use run_integration_action with action_key 'gmail-find-email', app_slug 'gmail', parameters: { query: 'is:unread' }"
+- Write "next_steps" as a brief, user-friendly description of what you plan to do.
+  Example next_steps: "I'll search your Gmail for unread emails."
+- Put the technical details (action_key, app_slug, parameters) in the "reasoning" field so the navigator can reference them.
+  Example reasoning: "Will use run_integration_action: action_key='gmail-find-email', app_slug='gmail', parameters={ query: 'is:unread' }"
+- Integration actions may accept optional parameters beyond those listed. For search/list actions, include a reasonable result limit (e.g. maxResults).
 - Only fall back to browser automation if no connected integration covers the task.
 `
     : ''
@@ -114,7 +117,13 @@ When determining if a task is "done":
 1. Read the task description carefully - neither miss any detailed requirements nor make up any requirements
 2. Verify all aspects of the task have been completed successfully
 3. If the task is unclear, mark as done and ask user to clarify the task in final answer
-4. If sign in or credentials are required to complete the task, you should:
+4. If sign in or credentials are required to complete the task, you should:${
+    connectedIntegrations
+      ? `
+  - FIRST check if a connected integration can fulfill the task without requiring sign-in. If yes, set done=false and route to the integration in next_steps.
+  - Only if NO connected integration applies:`
+      : ''
+  }
   - Mark as done
   - Ask the user to sign in/fill credentials by themselves in final answer
   - Don't provide instructions on how to sign in, just ask users to sign in and offer to help them after they sign in

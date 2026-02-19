@@ -29,7 +29,6 @@ const browserContext = new BrowserContext({});
 let currentExecutor: Executor | null = null;
 let serverClient: ServerClient | null = null;
 let cachedHotelCapabilities: string | undefined;
-let cachedIntegrationCapabilities: string | undefined;
 let currentPort: chrome.runtime.Port | null = null;
 const SIDE_PANEL_URL = chrome.runtime.getURL('side-panel/index.html');
 
@@ -159,7 +158,6 @@ async function initServerClient() {
   await autoPopulateServerUrls();
   serverClient = await ServerClient.create(serverSettingsStore);
   cachedHotelCapabilities = undefined;
-  cachedIntegrationCapabilities = undefined;
   if (serverClient) {
     logger.info('Server client initialized');
     try {
@@ -230,17 +228,6 @@ async function initServerClient() {
               lastSyncedAt: Date.now(),
             });
 
-            const connectedSlugs = new Set(accounts.map(a => a.app.nameSlug));
-            const lines: string[] = [];
-            for (const [appSlug, app] of Object.entries(manifest.apps)) {
-              if (!connectedSlugs.has(appSlug)) continue;
-              lines.push(`- ${app.name}:`);
-              for (const action of app.actions) {
-                const params = action.requiredProps.join(', ');
-                lines.push(`  - ${action.key}: ${action.description} (params: ${params})`);
-              }
-            }
-            cachedIntegrationCapabilities = lines.join('\n');
             logger.info(`Integration data loaded: ${accounts.length} accounts, ${flatActions.length} actions`);
           }
         } catch (error) {
@@ -567,6 +554,27 @@ chrome.runtime.onConnect.addListener(port => {
             break;
           }
 
+          case 'permission_response': {
+            console.log('[ask_user] permission_response received', {
+              hasExecutor: !!currentExecutor,
+              responseType: typeof message.response,
+              widgetId: message.widgetId,
+            });
+            if (currentExecutor && typeof message.response === 'string') {
+              currentExecutor.resolveUserInput(message.response);
+            } else {
+              console.warn('[ask_user] permission_response dropped', {
+                hasExecutor: !!currentExecutor,
+                responseType: typeof message.response,
+              });
+              port.postMessage({
+                type: 'error',
+                error: 'Response could not be delivered — the task may have ended. Please try again.',
+              });
+            }
+            break;
+          }
+
           default:
             return port.postMessage({
               type: 'error',
@@ -644,6 +652,23 @@ async function setupExecutor(taskId: string, task: string, browserContext: Brows
     displayHighlights: generalSettings.displayHighlights,
   });
 
+  let connectedIntegrations: string | undefined;
+  const integrationSettings = await integrationSettingsStore.getSettings();
+  if (integrationSettings.connectedAccounts.length > 0 && integrationSettings.availableActions.length > 0) {
+    const lines: string[] = [];
+    for (const account of integrationSettings.connectedAccounts) {
+      lines.push(`- ${account.appName}:`);
+      const appActions = integrationSettings.availableActions.filter(a => a.appSlug === account.appSlug);
+      for (const action of appActions) {
+        const params = (action.requiredProps ?? []).join(', ');
+        lines.push(`  - ${action.key}: ${action.description} (params: ${params})`);
+      }
+    }
+    if (lines.length > 0) {
+      connectedIntegrations = lines.join('\n');
+    }
+  }
+
   const executor = new Executor(task, taskId, browserContext, navigatorLLM, {
     plannerLLM: plannerLLM ?? navigatorLLM,
     agentOptions: {
@@ -657,7 +682,7 @@ async function setupExecutor(taskId: string, task: string, browserContext: Brows
     generalSettings: generalSettings,
     serverClient,
     hotelCapabilities: cachedHotelCapabilities,
-    connectedIntegrations: cachedIntegrationCapabilities,
+    connectedIntegrations,
   });
 
   return executor;

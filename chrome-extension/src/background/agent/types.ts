@@ -51,6 +51,7 @@ export class AgentContext {
   history: AgentStepHistory;
   finalAnswer: string | null;
   costTracker: CostTracker;
+  userInputResolve: ((value: string) => void) | null;
 
   constructor(
     taskId: string,
@@ -76,6 +77,7 @@ export class AgentContext {
     this.history = new AgentStepHistory();
     this.finalAnswer = null;
     this.costTracker = new CostTracker();
+    this.userInputResolve = null;
   }
 
   async emitEvent(actor: Actors, state: ExecutionState, eventDetails: string) {
@@ -104,6 +106,48 @@ export class AgentContext {
   async stop() {
     this.stopped = true;
     setTimeout(() => this.controller.abort(), 300);
+  }
+
+  waitForUserInput(): Promise<string> {
+    if (this.userInputResolve) {
+      this.userInputResolve('');
+      this.userInputResolve = null;
+    }
+
+    return new Promise((resolve, reject) => {
+      console.log('[ask_user] waitForUserInput: resolver set');
+
+      // Keep the service worker alive while waiting for user input.
+      // A pending Promise alone does not prevent MV3 service worker termination.
+      const keepAlive = setInterval(() => {
+        /* no-op tick to keep the event loop active */
+      }, 20_000);
+
+      const cleanup = () => clearInterval(keepAlive);
+
+      const onAbort = () => {
+        cleanup();
+        this.userInputResolve = null;
+        reject(new Error('Task cancelled while waiting for user input'));
+      };
+
+      this.userInputResolve = (value: string) => {
+        cleanup();
+        resolve(value);
+      };
+
+      if (this.controller.signal.aborted) {
+        onAbort();
+        return;
+      }
+      this.controller.signal.addEventListener('abort', onAbort, { once: true });
+    });
+  }
+
+  resolveUserInput(value: string): void {
+    console.log('[ask_user] resolveUserInput called', { value, hasResolver: !!this.userInputResolve });
+    this.userInputResolve?.(value);
+    this.userInputResolve = null;
   }
 }
 

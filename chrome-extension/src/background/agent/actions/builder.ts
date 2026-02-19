@@ -23,6 +23,7 @@ import {
   scrollToBottomActionSchema,
   queryHotelDataActionSchema,
   runIntegrationActionSchema,
+  askUserActionSchema,
 } from './schemas';
 import { z } from 'zod';
 import { createLogger } from '@src/background/log';
@@ -229,6 +230,30 @@ export class ActionBuilder {
       return new ActionResult({ extractedContent: msg, includeInMemory: true });
     }, waitActionSchema);
     actions.push(wait);
+
+    const askUser = new Action(async (input: z.infer<typeof askUserActionSchema.schema>) => {
+      this.context.emitEvent(Actors.NAVIGATOR, ExecutionState.ACT_START, 'Asking user for input');
+
+      const widgetData = {
+        widgetId: crypto.randomUUID(),
+        type: 'permission-request',
+        data: {
+          question: input.question,
+          context: input.context,
+          options: input.options,
+        },
+      };
+      await this.context.emitEvent(Actors.NAVIGATOR, ExecutionState.WIDGET_EVENT, JSON.stringify(widgetData));
+
+      const userResponse = await this.context.waitForUserInput();
+
+      this.context.emitEvent(Actors.NAVIGATOR, ExecutionState.ACT_OK, `User responded: ${userResponse}`);
+      return new ActionResult({
+        extractedContent: `User responded: ${userResponse}`,
+        includeInMemory: true,
+      });
+    }, askUserActionSchema);
+    actions.push(askUser);
 
     // Element Interaction Actions
     const clickElement = new Action(
@@ -712,9 +737,10 @@ export class ActionBuilder {
     if (this.serverClient) {
       const serverClient = this.serverClient;
       const context = this.context;
-      const queryHotelData = new Action(async (params: { query: string }) => {
+      const queryHotelData = new Action(async (params: { intent?: string; query: string }) => {
         try {
-          context.emitEvent(Actors.NAVIGATOR, ExecutionState.ACT_START, 'Querying hotel data...');
+          const intent = params.intent || 'Querying hotel data...';
+          context.emitEvent(Actors.NAVIGATOR, ExecutionState.ACT_START, intent);
           const result = await serverClient.queryData(params.query);
           if (result.escalation) {
             context.emitEvent(Actors.NAVIGATOR, ExecutionState.ACT_OK, 'Hotel data unavailable - needs browser');
@@ -745,9 +771,15 @@ export class ActionBuilder {
       const serverClient = this.serverClient;
       const context = this.context;
       const runIntegration = new Action(
-        async (params: { action_key: string; app_slug: string; parameters: Record<string, unknown> }) => {
+        async (params: {
+          intent?: string;
+          action_key: string;
+          app_slug: string;
+          parameters: Record<string, unknown>;
+        }) => {
           try {
-            context.emitEvent(Actors.NAVIGATOR, ExecutionState.ACT_START, 'Running integration action...');
+            const intent = params.intent || `Running ${params.app_slug}: ${params.action_key}`;
+            context.emitEvent(Actors.NAVIGATOR, ExecutionState.ACT_START, intent);
             const result = await serverClient.runIntegrationAction({
               actionKey: params.action_key,
               appSlug: params.app_slug,
@@ -762,7 +794,8 @@ export class ActionBuilder {
             }
             const raw = JSON.stringify(result.data);
             const extractedContent = raw.length > 2000 ? raw.slice(0, 2000) + '... (truncated)' : raw;
-            context.emitEvent(Actors.NAVIGATOR, ExecutionState.ACT_OK, 'Integration action completed');
+            const preview = raw.length > 300 ? raw.slice(0, 300) + '...' : raw;
+            context.emitEvent(Actors.NAVIGATOR, ExecutionState.ACT_OK, `Integration result: ${preview}`);
             return new ActionResult({ extractedContent, includeInMemory: true });
           } catch (error) {
             const errorMsg = error instanceof Error ? error.message : String(error);

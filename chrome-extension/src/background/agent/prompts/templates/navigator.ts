@@ -127,6 +127,12 @@ Common action sequences:
 
 - Plan is a json string wrapped by the <plan> tag
 - If a plan is provided, follow the instructions in the next_steps exactly first
+- When the plan's reasoning mentions a run_integration_action, use the action_key, app_slug, and parameters specified there.
 - If no plan is provided, just continue with the task
+
+13. User Input:
+
+- ask_user: Use when you need user input before proceeding. Include context with supporting data (formatted as markdown lists). Provide options as an array of {label, value} objects when choices are finite. Good for: confirming before making changes, choosing between strategies, approving drafts. Do NOT use for trivial confirmations.
+- ask_user should always be the only action in a step — do NOT combine it with other actions.
 </system_instructions>
 `;
