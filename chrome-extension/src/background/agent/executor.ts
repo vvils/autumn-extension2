@@ -271,6 +271,7 @@ export class Executor {
       const history = [...this.conversationMessages, { role: 'user', content: task }];
       let fullText = '';
       logger.info('Starting domain query');
+      this.context.emitEvent(Actors.SYNTHESIZER, ExecutionState.STEP_START, 'Synthesizing...');
 
       for await (const event of this.serverClient!.streamChat(history, undefined, abortController.signal)) {
         if (this.context.stopped) {

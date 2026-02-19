@@ -1,11 +1,16 @@
 import { ActionResult, type AgentContext } from '@src/background/agent/types';
 import {
   clickElementActionSchema,
+  doubleClickActionSchema,
+  tripleClickActionSchema,
   doneActionSchema,
   goBackActionSchema,
+  goForwardActionSchema,
   goToUrlActionSchema,
+  hoverElementActionSchema,
   inputTextActionSchema,
   openTabActionSchema,
+  refreshPageActionSchema,
   searchGoogleActionSchema,
   switchTabActionSchema,
   type ActionSchema,
@@ -24,6 +29,9 @@ import {
   queryHotelDataActionSchema,
   runIntegrationActionSchema,
   pushRatesToPmsActionSchema,
+  parseGroupInquiryActionSchema,
+  generateGroupQuoteActionSchema,
+  sendGroupQuoteEmailActionSchema,
   askUserActionSchema,
 } from './schemas';
 import { z } from 'zod';
@@ -32,8 +40,16 @@ import { ExecutionState, Actors } from '../event/types';
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import { wrapUntrustedContent } from '../messages/utils';
 import type { ServerClient } from '@src/background/services/server';
+import {
+  deriveEmailData,
+  renderEmailHtml,
+  DEFAULT_EMAIL_TEMPLATE,
+  type EmailTemplate,
+} from '@src/background/services/group-quotes';
 
 const logger = createLogger('Action');
+
+const INTEGRATION_RESULT_MAX_LENGTH = 8000;
 
 export class InvalidInputError extends Error {
   constructor(message: string) {
@@ -164,6 +180,8 @@ export class ActionBuilder {
 
   buildDefaultActions() {
     const actions = [];
+    let cachedQuoteEmailHtml: string | null = null;
+    let cachedQuoteSummary: string | null = null;
 
     const done = new Action(async (input: z.infer<typeof doneActionSchema.schema>) => {
       this.context.emitEvent(Actors.NAVIGATOR, ExecutionState.ACT_START, doneActionSchema.name);
@@ -221,6 +239,38 @@ export class ActionBuilder {
     }, goBackActionSchema);
     actions.push(goBack);
 
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const goForward = new Action(async (input: z.infer<typeof goForwardActionSchema.schema>) => {
+      const intent = input.intent || 'Navigating forward';
+      this.context.emitEvent(Actors.NAVIGATOR, ExecutionState.ACT_START, intent);
+
+      const page = await this.context.browserContext.getCurrentPage();
+      await page.goForward();
+      const msg = 'Navigated forward';
+      this.context.emitEvent(Actors.NAVIGATOR, ExecutionState.ACT_OK, msg);
+      return new ActionResult({
+        extractedContent: msg,
+        includeInMemory: true,
+      });
+    }, goForwardActionSchema);
+    actions.push(goForward);
+
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const refreshPage = new Action(async (input: z.infer<typeof refreshPageActionSchema.schema>) => {
+      const intent = input.intent || 'Refreshing page';
+      this.context.emitEvent(Actors.NAVIGATOR, ExecutionState.ACT_START, intent);
+
+      const page = await this.context.browserContext.getCurrentPage();
+      await page.refreshPage();
+      const msg = 'Page refreshed';
+      this.context.emitEvent(Actors.NAVIGATOR, ExecutionState.ACT_OK, msg);
+      return new ActionResult({
+        extractedContent: msg,
+        includeInMemory: true,
+      });
+    }, refreshPageActionSchema);
+    actions.push(refreshPage);
+
     const wait = new Action(async (input: z.infer<typeof waitActionSchema.schema>) => {
       const seconds = input.seconds || 3;
       const intent = input.intent || `Waiting for ${seconds} seconds`;
@@ -272,7 +322,7 @@ export class ActionBuilder {
 
         // Check if element is a file uploader
         if (page.isFileUploader(elementNode)) {
-          const msg = `Index ${input.index} - has an element which opens file upload dialog. To upload files please use a specific function to upload files`;
+          const msg = `Index ${input.index} - this element opens a file upload dialog. File upload is not supported — use ask_user to request the user upload the file manually.`;
           logger.info(msg);
           return new ActionResult({
             extractedContent: msg,
@@ -313,6 +363,99 @@ export class ActionBuilder {
       true,
     );
     actions.push(clickElement);
+
+    const doubleClick = new Action(
+      async (input: z.infer<typeof doubleClickActionSchema.schema>) => {
+        const intent = input.intent || `Double-click element with index ${input.index}`;
+        this.context.emitEvent(Actors.NAVIGATOR, ExecutionState.ACT_START, intent);
+
+        const page = await this.context.browserContext.getCurrentPage();
+        const state = await page.getState();
+
+        const elementNode = state?.selectorMap.get(input.index);
+        if (!elementNode) {
+          throw new Error(`Element with index ${input.index} does not exist - retry or use alternative actions`);
+        }
+
+        try {
+          await page.doubleClickElementNode(this.context.options.useVision, elementNode);
+          const msg = `Double-clicked element with index ${input.index}: ${elementNode.getAllTextTillNextClickableElement(2)}`;
+          this.context.emitEvent(Actors.NAVIGATOR, ExecutionState.ACT_OK, msg);
+          return new ActionResult({ extractedContent: msg, includeInMemory: true });
+        } catch (error) {
+          const msg = `Failed to double-click element with index ${input.index}`;
+          this.context.emitEvent(Actors.NAVIGATOR, ExecutionState.ACT_FAIL, msg);
+          return new ActionResult({
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      },
+      doubleClickActionSchema,
+      true,
+    );
+    actions.push(doubleClick);
+
+    const tripleClick = new Action(
+      async (input: z.infer<typeof tripleClickActionSchema.schema>) => {
+        const intent = input.intent || `Triple-click element with index ${input.index}`;
+        this.context.emitEvent(Actors.NAVIGATOR, ExecutionState.ACT_START, intent);
+
+        const page = await this.context.browserContext.getCurrentPage();
+        const state = await page.getState();
+
+        const elementNode = state?.selectorMap.get(input.index);
+        if (!elementNode) {
+          throw new Error(`Element with index ${input.index} does not exist - retry or use alternative actions`);
+        }
+
+        try {
+          await page.tripleClickElementNode(this.context.options.useVision, elementNode);
+          const msg = `Triple-clicked element with index ${input.index}: ${elementNode.getAllTextTillNextClickableElement(2)}`;
+          this.context.emitEvent(Actors.NAVIGATOR, ExecutionState.ACT_OK, msg);
+          return new ActionResult({ extractedContent: msg, includeInMemory: true });
+        } catch (error) {
+          const msg = `Failed to triple-click element with index ${input.index}`;
+          this.context.emitEvent(Actors.NAVIGATOR, ExecutionState.ACT_FAIL, msg);
+          return new ActionResult({
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      },
+      tripleClickActionSchema,
+      true,
+    );
+    actions.push(tripleClick);
+
+    const hoverElement = new Action(
+      async (input: z.infer<typeof hoverElementActionSchema.schema>) => {
+        const intent = input.intent || `Hover over element with index ${input.index}`;
+        this.context.emitEvent(Actors.NAVIGATOR, ExecutionState.ACT_START, intent);
+
+        const page = await this.context.browserContext.getCurrentPage();
+        const state = await page.getState();
+
+        const elementNode = state?.selectorMap.get(input.index);
+        if (!elementNode) {
+          throw new Error(`Element with index ${input.index} does not exist - retry or use alternative actions`);
+        }
+
+        try {
+          await page.hoverElementNode(this.context.options.useVision, elementNode);
+          const msg = `Hovered over element with index ${input.index}: ${elementNode.getAllTextTillNextClickableElement(2)}`;
+          this.context.emitEvent(Actors.NAVIGATOR, ExecutionState.ACT_OK, msg);
+          return new ActionResult({ extractedContent: msg, includeInMemory: true });
+        } catch (error) {
+          const msg = `Failed to hover over element with index ${input.index}`;
+          this.context.emitEvent(Actors.NAVIGATOR, ExecutionState.ACT_FAIL, msg);
+          return new ActionResult({
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      },
+      hoverElementActionSchema,
+      true,
+    );
+    actions.push(hoverElement);
 
     const inputText = new Action(
       async (input: z.infer<typeof inputTextActionSchema.schema>) => {
@@ -771,6 +914,28 @@ export class ActionBuilder {
         try {
           const intent = params.intent || `Pushing rates to PMS for ${params.start_date} to ${params.end_date}`;
           context.emitEvent(Actors.NAVIGATOR, ExecutionState.ACT_START, intent);
+
+          const widgetData = {
+            widgetId: crypto.randomUUID(),
+            type: 'permission-request',
+            data: {
+              question: `Push updated rates to PMS for ${params.start_date} to ${params.end_date}?`,
+              context:
+                'This will update room rates in your Property Management System. The backend calculates optimal prices from competitor data and your pricing rules.',
+              options: [
+                { label: 'Confirm', value: 'confirm' },
+                { label: 'Cancel', value: 'cancel' },
+              ],
+            },
+          };
+          await context.emitEvent(Actors.NAVIGATOR, ExecutionState.WIDGET_EVENT, JSON.stringify(widgetData));
+
+          const userResponse = await context.waitForUserInput();
+          if (userResponse.toLowerCase() !== 'confirm') {
+            context.emitEvent(Actors.NAVIGATOR, ExecutionState.ACT_OK, 'Rate push cancelled by user.');
+            return new ActionResult({ extractedContent: 'Rate push cancelled by user.', includeInMemory: true });
+          }
+
           const result = await serverClient.pushRates(params.start_date, params.end_date);
           if (!result.success) {
             context.emitEvent(Actors.NAVIGATOR, ExecutionState.ACT_FAIL, result.error ?? 'Failed to push rates');
@@ -793,6 +958,179 @@ export class ActionBuilder {
         }
       }, pushRatesToPmsActionSchema);
       actions.push(pushRates);
+
+      const parseGroupInquiry = new Action(async (params: { intent?: string; email_text: string }) => {
+        try {
+          const intent = params.intent || 'Parsing group booking inquiry...';
+          context.emitEvent(Actors.NAVIGATOR, ExecutionState.ACT_START, intent);
+          const result = await serverClient.parseGroupInquiry(params.email_text);
+          if (!result.success) {
+            context.emitEvent(Actors.NAVIGATOR, ExecutionState.ACT_FAIL, result.error ?? 'Failed to parse inquiry');
+            return new ActionResult({ error: result.error ?? 'Failed to parse inquiry', includeInMemory: true });
+          }
+          context.emitEvent(Actors.NAVIGATOR, ExecutionState.ACT_OK, 'Group inquiry parsed');
+          return new ActionResult({ extractedContent: JSON.stringify(result.data), includeInMemory: true });
+        } catch (error) {
+          const errorMsg = error instanceof Error ? error.message : String(error);
+          context.emitEvent(Actors.NAVIGATOR, ExecutionState.ACT_FAIL, errorMsg);
+          return new ActionResult({
+            extractedContent: `[Parse group inquiry failed: ${errorMsg}]`,
+            error: errorMsg,
+            includeInMemory: true,
+          });
+        }
+      }, parseGroupInquiryActionSchema);
+      actions.push(parseGroupInquiry);
+
+      const generateGroupQuote = new Action(
+        async (params: {
+          intent?: string;
+          check_in_date: string;
+          check_out_date: string;
+          room_count: number;
+          context?: string;
+          guest_name?: string;
+          discount_percent?: number;
+        }) => {
+          try {
+            const intent = params.intent || 'Generating group booking quote...';
+            context.emitEvent(Actors.NAVIGATOR, ExecutionState.ACT_START, intent);
+
+            const [settingsResult, quoteResult] = await Promise.all([
+              serverClient.getGroupQuoteSettings(),
+              serverClient.generateGroupQuote({
+                checkInDate: params.check_in_date,
+                checkOutDate: params.check_out_date,
+                roomCount: params.room_count,
+                context: params.context,
+                guestName: params.guest_name,
+                discountPercent: params.discount_percent,
+              }),
+            ]);
+
+            if (!quoteResult.success) {
+              context.emitEvent(
+                Actors.NAVIGATOR,
+                ExecutionState.ACT_FAIL,
+                quoteResult.error ?? 'Failed to generate quote',
+              );
+              return new ActionResult({
+                error: quoteResult.error ?? 'Failed to generate quote',
+                includeInMemory: true,
+              });
+            }
+
+            const data = quoteResult.data as {
+              allocation: Array<{
+                date: string;
+                rooms: Array<{ roomType: string; count: number; rate: number; originalRate: number }>;
+              }>;
+              metrics: {
+                totalRevenue: number;
+                groupADR: number;
+                discountPercent: number;
+                totalRoomNights?: number;
+                occupancyBefore: number;
+                occupancyAfter: number;
+              };
+              emailDraft: {
+                template?: { greeting: string; introduction: string; closing: string; signature: string };
+                subject?: string;
+                text: string;
+              };
+            };
+
+            if (!data.allocation || !data.metrics || !data.emailDraft) {
+              context.emitEvent(Actors.NAVIGATOR, ExecutionState.ACT_FAIL, 'Invalid quote response structure');
+              return new ActionResult({
+                error: 'Invalid quote response structure',
+                includeInMemory: true,
+              });
+            }
+
+            const hotelInfo = settingsResult?.data?.hotelInfo ?? {
+              hotelName: '',
+              contactName: '',
+              contactEmail: '',
+              contactPhone: '',
+            };
+            const template: EmailTemplate =
+              data.emailDraft.template ?? settingsResult?.data?.emailTemplate ?? DEFAULT_EMAIL_TEMPLATE;
+
+            const emailData = deriveEmailData(
+              data.allocation,
+              {
+                totalRevenue: data.metrics.totalRevenue,
+                groupADR: data.metrics.groupADR,
+                discountPercent: data.metrics.discountPercent,
+                totalRoomNights: data.metrics.totalRoomNights,
+              },
+              hotelInfo,
+              {
+                guestName: params.guest_name,
+                checkInDate: params.check_in_date,
+                checkOutDate: params.check_out_date,
+              },
+            );
+            const emailHtml = renderEmailHtml(template, emailData);
+
+            cachedQuoteEmailHtml = emailHtml;
+
+            const summary = [
+              `Quote generated:`,
+              `- Total Revenue: $${data.metrics.totalRevenue}`,
+              `- Group ADR: $${data.metrics.groupADR}/night`,
+              `- Discount: ${data.metrics.discountPercent}%`,
+              `- Occupancy: ${data.metrics.occupancyBefore}% → ${data.metrics.occupancyAfter}%`,
+              `- Email Subject: ${data.emailDraft.subject ?? 'Group Booking Quote'}`,
+            ].join('\n');
+
+            cachedQuoteSummary = summary;
+
+            const widgetData = {
+              widgetId: crypto.randomUUID(),
+              type: 'permission-request',
+              data: {
+                question: 'Review the generated group booking quote:',
+                context: summary,
+                htmlContent: emailHtml,
+                options: [
+                  { label: 'Looks good', value: 'approve' },
+                  { label: 'Cancel', value: 'cancel' },
+                ],
+              },
+            };
+            await context.emitEvent(Actors.NAVIGATOR, ExecutionState.WIDGET_EVENT, JSON.stringify(widgetData));
+
+            const userResponse = await context.waitForUserInput();
+            if (userResponse.toLowerCase() !== 'approve') {
+              cachedQuoteEmailHtml = null;
+              cachedQuoteSummary = null;
+              context.emitEvent(Actors.NAVIGATOR, ExecutionState.ACT_OK, 'Quote cancelled by user');
+              return new ActionResult({
+                extractedContent: 'User cancelled the generated quote.',
+                includeInMemory: true,
+              });
+            }
+
+            context.emitEvent(Actors.NAVIGATOR, ExecutionState.ACT_OK, 'Group quote approved');
+            return new ActionResult({
+              extractedContent: `${summary}\n\nUser approved the quote (HTML email preview was shown). Proceed directly to send_group_quote_email — do NOT use ask_user again.`,
+              includeInMemory: true,
+            });
+          } catch (error) {
+            const errorMsg = error instanceof Error ? error.message : String(error);
+            context.emitEvent(Actors.NAVIGATOR, ExecutionState.ACT_FAIL, errorMsg);
+            return new ActionResult({
+              extractedContent: `[Generate group quote failed: ${errorMsg}]`,
+              error: errorMsg,
+              includeInMemory: true,
+            });
+          }
+        },
+        generateGroupQuoteActionSchema,
+      );
+      actions.push(generateGroupQuote);
     }
 
     if (this.serverClient && this.connectedIntegrations) {
@@ -808,11 +1146,14 @@ export class ActionBuilder {
           try {
             const intent = params.intent || `Running ${params.app_slug}: ${params.action_key}`;
             context.emitEvent(Actors.NAVIGATOR, ExecutionState.ACT_START, intent);
-            const result = await serverClient.runIntegrationAction({
+            const request = {
               actionKey: params.action_key,
               appSlug: params.app_slug,
               parameters: params.parameters,
-            });
+            };
+            console.log('[Integration] Request:', JSON.stringify(request, null, 2));
+            const result = await serverClient.runIntegrationAction(request);
+            console.log('[Integration] Response:', JSON.stringify(result, null, 2));
             if (!result.success) {
               context.emitEvent(Actors.NAVIGATOR, ExecutionState.ACT_FAIL, result.error ?? 'Integration action failed');
               return new ActionResult({
@@ -821,7 +1162,10 @@ export class ActionBuilder {
               });
             }
             const raw = JSON.stringify(result.data);
-            const extractedContent = raw.length > 2000 ? raw.slice(0, 2000) + '... (truncated)' : raw;
+            const extractedContent =
+              raw.length > INTEGRATION_RESULT_MAX_LENGTH
+                ? raw.slice(0, INTEGRATION_RESULT_MAX_LENGTH) + '... (truncated)'
+                : raw;
             context.emitEvent(
               Actors.NAVIGATOR,
               ExecutionState.ACT_OK,
@@ -844,6 +1188,68 @@ export class ActionBuilder {
         },
       );
       actions.push(runIntegration);
+
+      const sendGroupQuoteEmail = new Action(async (params: { intent?: string; to: string[]; subject: string }) => {
+        try {
+          if (!cachedQuoteEmailHtml) {
+            context.emitEvent(Actors.NAVIGATOR, ExecutionState.ACT_FAIL, 'No quote email to send');
+            return new ActionResult({
+              error: 'No quote email has been generated yet. Use generate_group_quote first.',
+              includeInMemory: true,
+            });
+          }
+
+          const intent = params.intent || `Sending group quote email to ${params.to.join(', ')}`;
+          context.emitEvent(Actors.NAVIGATOR, ExecutionState.ACT_START, intent);
+
+          const widgetData = {
+            widgetId: crypto.randomUUID(),
+            type: 'permission-request',
+            data: {
+              question: `Send the group booking quote email?`,
+              context: `**To:** ${params.to.join(', ')}\n**Subject:** ${params.subject}\n\n${cachedQuoteSummary ?? ''}`,
+              htmlContent: cachedQuoteEmailHtml,
+              options: [
+                { label: 'Send', value: 'confirm' },
+                { label: 'Cancel', value: 'cancel' },
+              ],
+            },
+          };
+          await context.emitEvent(Actors.NAVIGATOR, ExecutionState.WIDGET_EVENT, JSON.stringify(widgetData));
+
+          const userResponse = await context.waitForUserInput();
+          if (userResponse.toLowerCase() !== 'confirm') {
+            context.emitEvent(Actors.NAVIGATOR, ExecutionState.ACT_OK, 'Email send cancelled by user.');
+            return new ActionResult({ extractedContent: 'Email send cancelled by user.', includeInMemory: true });
+          }
+
+          const result = await serverClient.runIntegrationAction({
+            actionKey: 'gmail-send-email',
+            appSlug: 'gmail',
+            parameters: { to: params.to, subject: params.subject, body: cachedQuoteEmailHtml, bodyType: 'html' },
+          });
+
+          if (!result.success) {
+            context.emitEvent(Actors.NAVIGATOR, ExecutionState.ACT_FAIL, result.error ?? 'Failed to send email');
+            return new ActionResult({ error: result.error ?? 'Failed to send email', includeInMemory: true });
+          }
+
+          cachedQuoteEmailHtml = null;
+          cachedQuoteSummary = null;
+          const msg = `Quote email sent to ${params.to.join(', ')}.`;
+          context.emitEvent(Actors.NAVIGATOR, ExecutionState.ACT_OK, msg);
+          return new ActionResult({ extractedContent: msg, includeInMemory: true });
+        } catch (error) {
+          const errorMsg = error instanceof Error ? error.message : String(error);
+          context.emitEvent(Actors.NAVIGATOR, ExecutionState.ACT_FAIL, errorMsg);
+          return new ActionResult({
+            extractedContent: `[Send group quote email failed: ${errorMsg}]`,
+            error: errorMsg,
+            includeInMemory: true,
+          });
+        }
+      }, sendGroupQuoteEmailActionSchema);
+      actions.push(sendGroupQuoteEmail);
     }
 
     return actions;

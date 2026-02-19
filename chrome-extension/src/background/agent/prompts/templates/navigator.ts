@@ -132,7 +132,7 @@ Common action sequences:
 
 13. User Input:
 
-- ask_user: Use when you need user input before proceeding. Include context with supporting data (formatted as markdown lists). Provide options as an array of {label, value} objects when choices are finite. Good for: confirming before making changes, choosing between strategies, approving drafts. Do NOT use for trivial confirmations.
+- ask_user: Use when you need user input before proceeding. Format context with rich markdown: **bold** for labels, markdown tables for structured data (dates, counts, amounts), --- to separate sections, and bullet lists for multiple items. Provide options as an array of {label, value} objects when choices are finite. Good for: confirming before making changes, choosing between strategies, approving drafts. Do NOT use for trivial confirmations.
 - ask_user should always be the only action in a step — do NOT combine it with other actions.
 </system_instructions>
 `;

@@ -10,6 +10,7 @@ import type {
   PushRatesResponse,
   ActionRunResult,
   GenerateGroupQuoteParams,
+  GroupQuoteSettingsResponse,
 } from '../types';
 
 function createMockApiClient() {
@@ -453,6 +454,52 @@ describe('parseGroupInquiry', () => {
     const client = createServerClient(apiClient);
 
     await expect(client.parseGroupInquiry('text')).rejects.toThrow('parse failed');
+  });
+});
+
+describe('getGroupQuoteSettings', () => {
+  const stubSettings: GroupQuoteSettingsResponse = {
+    success: true,
+    data: {
+      hotelInfo: {
+        hotelName: 'Test Hotel',
+        contactName: 'Jane',
+        contactEmail: 'jane@test.com',
+        contactPhone: '555-0000',
+      },
+      discountTiers: [{ maxOccupancy: 80, discountPercent: 20 }],
+      emailTemplate: { greeting: 'Dear [Guest Name],', introduction: 'Welcome', closing: 'Best,', signature: 'Staff' },
+    },
+  };
+
+  it('GETs from /group-quotes/settings', async () => {
+    const apiClient = createMockApiClient();
+    vi.mocked(apiClient.get).mockResolvedValue({ data: stubSettings, status: 200, headers: new Headers() });
+    const client = createServerClient(apiClient);
+
+    await client.getGroupQuoteSettings();
+
+    expect(apiClient.get).toHaveBeenCalledWith('/group-quotes/settings');
+  });
+
+  it('returns settings data', async () => {
+    const apiClient = createMockApiClient();
+    vi.mocked(apiClient.get).mockResolvedValue({ data: stubSettings, status: 200, headers: new Headers() });
+    const client = createServerClient(apiClient);
+
+    const result = await client.getGroupQuoteSettings();
+
+    expect(result).toEqual(stubSettings);
+  });
+
+  it('returns null on API error', async () => {
+    const apiClient = createMockApiClient();
+    vi.mocked(apiClient.get).mockRejectedValue(new Error('network error'));
+    const client = createServerClient(apiClient);
+
+    const result = await client.getGroupQuoteSettings();
+
+    expect(result).toBeNull();
   });
 });
 

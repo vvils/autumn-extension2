@@ -1431,6 +1431,69 @@ export default class Page {
     }
   }
 
+  async hoverElementNode(useVision: boolean, elementNode: DOMElementNode): Promise<void> {
+    if (!this._puppeteerPage) {
+      throw new Error('Puppeteer is not connected');
+    }
+
+    try {
+      const element = await this.locateElement(elementNode);
+      if (!element) {
+        throw new Error(`Element: ${elementNode} not found`);
+      }
+
+      await this._scrollIntoViewIfNeeded(element);
+      await element.hover();
+      await this.waitForPageAndFramesLoad();
+    } catch (error) {
+      throw new Error(
+        `Failed to hover element: ${elementNode}. Error: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+
+  async doubleClickElementNode(useVision: boolean, elementNode: DOMElementNode): Promise<void> {
+    if (!this._puppeteerPage) {
+      throw new Error('Puppeteer is not connected');
+    }
+
+    try {
+      const element = await this.locateElement(elementNode);
+      if (!element) {
+        throw new Error(`Element: ${elementNode} not found`);
+      }
+
+      await this._scrollIntoViewIfNeeded(element);
+      await element.click({ count: 2 });
+      await this._checkAndHandleNavigation();
+    } catch (error) {
+      throw new Error(
+        `Failed to double-click element: ${elementNode}. Error: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+
+  async tripleClickElementNode(useVision: boolean, elementNode: DOMElementNode): Promise<void> {
+    if (!this._puppeteerPage) {
+      throw new Error('Puppeteer is not connected');
+    }
+
+    try {
+      const element = await this.locateElement(elementNode);
+      if (!element) {
+        throw new Error(`Element: ${elementNode} not found`);
+      }
+
+      await this._scrollIntoViewIfNeeded(element);
+      await element.click({ count: 3 });
+      await this._checkAndHandleNavigation();
+    } catch (error) {
+      throw new Error(
+        `Failed to triple-click element: ${elementNode}. Error: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+
   getSelectorMap(): Map<number, DOMElementNode> {
     // If there is no cached state, return an empty map
     if (this._cachedState === null) {

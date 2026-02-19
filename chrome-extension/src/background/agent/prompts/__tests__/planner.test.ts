@@ -84,6 +84,12 @@ describe('workflow hints', () => {
     const prompt = buildPlannerSystemPrompt();
     expect(prompt).not.toContain('WORKFLOW HINTS');
   });
+
+  it('includes OTA workflow ask_user guard', () => {
+    const prompt = buildPlannerSystemPrompt({ serverAvailable: true });
+    expect(prompt).toContain('ask_user');
+    expect(prompt).toContain('NOT complete until step 4');
+  });
 });
 
 describe('connected integrations', () => {
@@ -96,6 +102,9 @@ describe('connected integrations', () => {
     const prompt = buildPlannerSystemPrompt({ connectedIntegrations: 'gmail: find-email, send-email' });
     expect(prompt).toContain('parse_group_inquiry');
     expect(prompt).toContain('generate_group_quote');
+    expect(prompt).toContain('send_group_quote_email');
+    expect(prompt).toContain('NOT complete until step 8');
+    expect(prompt).toContain('discount');
   });
 
   it('does not include integrations section when omitted', () => {

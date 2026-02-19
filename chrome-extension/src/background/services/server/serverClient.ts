@@ -16,6 +16,7 @@ import type {
   ActionRunResult,
   PushRatesResponse,
   GenerateGroupQuoteParams,
+  GroupQuoteSettingsResponse,
 } from './types';
 import { ServerApiClient } from './apiClient';
 
@@ -188,5 +189,14 @@ export class ServerClient {
   async generateGroupQuote(params: GenerateGroupQuoteParams): Promise<ActionRunResult> {
     const { data } = await this.apiClient.post<ActionRunResult>('/group-quotes/generate', params);
     return data;
+  }
+
+  async getGroupQuoteSettings(): Promise<GroupQuoteSettingsResponse | null> {
+    try {
+      const { data } = await this.apiClient.get<GroupQuoteSettingsResponse>('/group-quotes/settings');
+      return data;
+    } catch {
+      return null;
+    }
   }
 }

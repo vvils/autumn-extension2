@@ -9,7 +9,7 @@ interface PermissionWidgetProps {
 }
 
 export default memo(function PermissionWidget({ widget, onRespond }: PermissionWidgetProps) {
-  const { question, context, options, answered: initialAnswered, response: initialResponse } = widget.data;
+  const { question, context, htmlContent, options, answered: initialAnswered, response: initialResponse } = widget.data;
   const [answered, setAnswered] = useState(initialAnswered ?? false);
   const [textValue, setTextValue] = useState('');
   const displayedResponse = initialResponse ?? '';
@@ -47,10 +47,10 @@ export default memo(function PermissionWidget({ widget, onRespond }: PermissionW
 
   if (answered) {
     return (
-      <div className="rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3">
+      <div className="rounded-2xl border border-emerald-100 bg-emerald-50/50 px-4 py-3">
         <p className="text-[13px] font-medium text-gray-500">{question}</p>
-        <div className="mt-2 flex items-center gap-2">
-          <span className="flex size-5 items-center justify-center rounded-full bg-emerald-50">
+        <div className="mt-1.5 flex items-center gap-2">
+          <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-emerald-100">
             <Check size={12} className="text-emerald-600" />
           </span>
           <span className="text-[12px] font-medium text-emerald-700">{displayedResponse}</span>
@@ -60,12 +60,18 @@ export default memo(function PermissionWidget({ widget, onRespond }: PermissionW
   }
 
   return (
-    <div className="rounded-2xl border border-accent-light bg-white p-4 shadow-[0_2px_12px_rgba(61,130,143,0.10)]">
-      <p className="mb-1.5 text-[13px] font-semibold text-gray-900">{question}</p>
+    <div className="rounded-2xl border border-accent-light/60 bg-accent-soft/40 p-4 shadow-sm">
+      <p className="mb-2 text-[13px] font-semibold text-gray-800">{question}</p>
 
       {context && (
-        <div className="mb-3 rounded-lg bg-accent-soft px-3 py-2 text-[12px] text-gray-600">
+        <div className="mb-3 rounded-xl bg-white/70 px-3 py-2 text-[12px] text-gray-600">
           <MarkdownContent content={context} />
+        </div>
+      )}
+
+      {htmlContent && (
+        <div className="mb-3 overflow-hidden rounded-xl border border-gray-200/60">
+          <iframe srcDoc={htmlContent} sandbox="" title="Email preview" className="h-[400px] w-full" />
         </div>
       )}
 
@@ -76,13 +82,13 @@ export default memo(function PermissionWidget({ widget, onRespond }: PermissionW
               key={opt.value}
               type="button"
               onClick={() => handleOptionClick(opt.value)}
-              className="rounded-full border border-accent-light bg-accent-soft px-3.5 py-1.5 text-[12px] font-medium text-accent-foreground transition-colors hover:border-accent-muted hover:bg-accent-light">
+              className="rounded-full border border-accent-light bg-white px-3.5 py-1.5 text-[12px] font-medium text-accent-foreground shadow-sm transition-all hover:border-accent-muted hover:bg-accent-light hover:shadow-none active:scale-[0.97]">
               {opt.label}
             </button>
           ))}
         </div>
       ) : (
-        <div className="rounded-xl border border-gray-200 transition-shadow focus-within:border-accent/40 focus-within:ring-2 focus-within:ring-accent/20">
+        <div className="rounded-xl border border-accent-light/50 bg-white transition-shadow focus-within:border-accent/40 focus-within:ring-2 focus-within:ring-accent/15">
           <div className="flex items-end gap-1.5 p-1.5">
             <textarea
               value={textValue}

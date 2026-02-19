@@ -43,6 +43,7 @@ export interface PermissionWidgetData {
   data: {
     question: string;
     context?: string;
+    htmlContent?: string;
     options?: Array<{ label: string; value: string }>;
     answered?: boolean;
     response?: string;

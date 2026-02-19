@@ -30,6 +30,7 @@ const ACTOR_LABELS: Partial<Record<Actors, string>> = {
   [Actors.PLANNER]: 'Planner',
   [Actors.NAVIGATOR]: 'Navigator',
   [Actors.VALIDATOR]: 'Validator',
+  [Actors.SYNTHESIZER]: 'Synthesizer',
 };
 
 const ICON_PATTERNS: [RegExp, LucideIcon][] = [
@@ -73,7 +74,7 @@ export default function ThinkingWidget({ state }: ThinkingWidgetProps) {
           <Brain size={14} className="shrink-0 text-gray-400" />
         )}
         <span className="flex-1 font-medium">
-          {actorLabel} is thinking
+          {actorLabel} is working
           {state.stepInfo && (
             <span className="ml-1 font-normal text-gray-400">
               ({state.stepInfo.step}/{state.stepInfo.maxSteps})

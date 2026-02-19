@@ -160,4 +160,14 @@ export interface GenerateGroupQuoteParams {
   roomCount: number;
   context?: string;
   guestName?: string;
+  discountPercent?: number;
+}
+
+export interface GroupQuoteSettingsResponse {
+  success: boolean;
+  data: {
+    hotelInfo: { hotelName: string; contactName: string; contactEmail: string; contactPhone: string } | null;
+    discountTiers: Array<{ maxOccupancy: number; discountPercent: number }>;
+    emailTemplate: { greeting: string; introduction: string; closing: string; signature: string };
+  };
 }

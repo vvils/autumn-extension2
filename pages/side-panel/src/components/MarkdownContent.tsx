@@ -1,5 +1,6 @@
 import type { Components } from 'react-markdown';
 import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { memo } from 'react';
 
 const components: Components = {
@@ -24,9 +25,46 @@ const components: Components = {
       {children}
     </a>
   ),
+  h2: ({ children }) => <h2 className="mb-2 mt-3 text-[15px] font-semibold first:mt-0">{children}</h2>,
+  h3: ({ children }) => <h3 className="mb-1.5 mt-2.5 text-[14px] font-semibold first:mt-0">{children}</h3>,
+  h4: ({ children }) => <h4 className="mb-1 mt-2 text-[13px] font-semibold first:mt-0">{children}</h4>,
+  hr: () => <hr className="my-3 border-gray-200" />,
+  table: ({ children }) => (
+    <div className="my-2 overflow-x-auto rounded-lg border border-gray-200 last:mb-0">
+      <table className="min-w-full text-[12px]">{children}</table>
+    </div>
+  ),
+  thead: ({ children }) => <thead className="bg-gray-50">{children}</thead>,
+  tbody: ({ children }) => <tbody className="divide-y divide-gray-100">{children}</tbody>,
+  tr: ({ children }) => <tr>{children}</tr>,
+  th: ({ children }) => (
+    <th className="whitespace-nowrap px-2.5 py-1.5 text-left font-semibold text-gray-700">{children}</th>
+  ),
+  td: ({ children }) => <td className="px-2.5 py-1.5 text-gray-600">{children}</td>,
 };
 
-const ALLOWED_ELEMENTS = ['p', 'strong', 'em', 'code', 'pre', 'ul', 'ol', 'li', 'a', 'br'];
+const ALLOWED_ELEMENTS = [
+  'p',
+  'strong',
+  'em',
+  'code',
+  'pre',
+  'ul',
+  'ol',
+  'li',
+  'a',
+  'br',
+  'h2',
+  'h3',
+  'h4',
+  'hr',
+  'table',
+  'thead',
+  'tbody',
+  'tr',
+  'th',
+  'td',
+];
 
 interface MarkdownContentProps {
   content: string;
@@ -34,7 +72,11 @@ interface MarkdownContentProps {
 
 export default memo(function MarkdownContent({ content }: MarkdownContentProps) {
   return (
-    <ReactMarkdown allowedElements={ALLOWED_ELEMENTS} unwrapDisallowed components={components}>
+    <ReactMarkdown
+      remarkPlugins={[remarkGfm]}
+      allowedElements={ALLOWED_ELEMENTS}
+      unwrapDisallowed
+      components={components}>
       {content}
     </ReactMarkdown>
   );

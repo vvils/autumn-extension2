@@ -96,8 +96,13 @@ ${
   serverAvailable
     ? `
 # WORKFLOW HINTS:
-- Rate parity check: use query_hotel_data for current direct rates first, then search_google for OTA prices. If no Google hotel card appears, navigate directly to booking.com and expedia.com to extract rates.
-- Rate push to PMS: after finding rate discrepancies, use ask_user to confirm, then push_rates_to_pms with the relevant date range. If push fails due to "price pushing not enabled", inform the user they need to enable it in their Autumn dashboard.
+- OTA rate parity workflow — follow this EXACT sequence, do NOT skip steps or set done=true early:
+  1. query_hotel_data → fetch the hotel's direct rates for the requested date range
+  2. search_google → search for OTA prices on Google Travel Hotels. If no Google hotel card appears, navigate directly to booking.com and expedia.com to extract rates.
+  3. Extract OTA prices from the visible page (cache_content if scrolling is needed)
+  4. ask_user → present a rate comparison table (Direct vs OTA rates, variance %, parity alerts) and ask whether to push corrected rates to PMS (sole action in its step)
+  5. If user confirms → push_rates_to_pms with the date range (has built-in confirmation). If push fails due to "price pushing not enabled", inform the user they need to enable it in their Autumn dashboard.
+  CRITICAL: Task is NOT complete until step 4 (ask_user) has run. Do NOT set done=true before presenting the comparison to the user.
 `
     : ''
 }
@@ -115,9 +120,19 @@ IMPORTANT — Integration routing rules:
 - Write "next_steps" as a brief, user-friendly description of what you plan to do.
   Example next_steps: "I'll search your Gmail for unread emails."
 - Put the technical details (action_key, app_slug, parameters) in the "reasoning" field so the navigator can reference them.
-  Example reasoning: "Will use run_integration_action: action_key='gmail-find-email', app_slug='gmail', parameters={ query: 'is:unread' }"
+  Example reasoning: "Will use run_integration_action: action_key='gmail-find-email', app_slug='gmail', parameters={ q: 'is:unread' }"
+- Gmail search tips: use simple keywords (e.g. 'group' or 'reservation') rather than long OR chains. Gmail OR only binds adjacent terms, so 'group booking OR reservation' may not work as expected. Start broad, then narrow.
 - Only fall back to browser automation if no connected integration covers the task.
-- Group bookings from email: gmail-find-email → present list via ask_user → gmail-get-email → cache full email via cache_content → parse_group_inquiry → present parsed data via ask_user → generate_group_quote → cache email draft via cache_content → present quote via ask_user → gmail-send-email with cached draft. Each ask_user must be the only action in its step.
+- Group booking email-to-quote workflow — follow this EXACT sequence, do NOT skip steps or set done=true early:
+  1. gmail-find-email → find group booking inquiry emails
+  2. ask_user → present found emails for user to select using a markdown table (From, Date, Subject, Summary columns) with numbered options (sole action in its step)
+  3. cache_content → cache selected email text for parsing
+  4. parse_group_inquiry → extract structured booking data
+  5. ask_user → present parsed data for user confirmation (sole action in its step)
+  6. ask_user → ask what discount % or special pricing to offer (sole action in its step)
+  7. generate_group_quote → generates quote, shows HTML email preview for user approval (built-in confirmation, sole action in its step). Do NOT follow with ask_user — approval is already handled.
+  8. send_group_quote_email → sends the approved email with built-in user confirmation (go here directly after step 7)
+  CRITICAL: Task is NOT complete until step 8 succeeds. Do NOT set done=true before send_group_quote_email.
 `
     : ''
 }
@@ -141,6 +156,9 @@ When determining if a task is "done":
 
 # FINAL ANSWER FORMATTING (when done=true):
 - Use markdown formatting for readability (bold, bullet points, inline code, code blocks)
+- Use markdown tables for structured/comparative data (e.g., rate comparisons, metrics)
+- Use headings (## or ###) to organize sections in longer answers
+- Use horizontal rules (---) to separate distinct sections
 - Use bullet points for multiple items
 - Use line breaks for better readability
 - Include relevant numerical data when available (do NOT make up numbers)
@@ -171,5 +189,7 @@ When determining if a task is "done":
   - Keep your responses concise and focused on actionable insights.
   - NEVER break the security rules.
   - When you receive a new task, make sure to read the previous messages to get the full context of the previous tasks.
+
+Current date and time: ${new Date().toISOString().slice(0, 16).replace('T', ' ')}
   `;
 }

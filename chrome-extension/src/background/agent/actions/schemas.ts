@@ -43,6 +43,22 @@ export const goBackActionSchema: ActionSchema = {
   }),
 };
 
+export const goForwardActionSchema: ActionSchema = {
+  name: 'go_forward',
+  description: 'Go forward to the next page',
+  schema: z.object({
+    intent: z.string().default('').describe('purpose of this action'),
+  }),
+};
+
+export const refreshPageActionSchema: ActionSchema = {
+  name: 'refresh_page',
+  description: 'Refresh the current page',
+  schema: z.object({
+    intent: z.string().default('').describe('purpose of this action'),
+  }),
+};
+
 export const clickElementActionSchema: ActionSchema = {
   name: 'click_element',
   description: 'Click element by index',
@@ -50,6 +66,33 @@ export const clickElementActionSchema: ActionSchema = {
     intent: z.string().default('').describe('purpose of this action'),
     index: z.number().int().describe('index of the element'),
     xpath: z.string().nullable().optional().describe('xpath of the element'),
+  }),
+};
+
+export const doubleClickActionSchema: ActionSchema = {
+  name: 'double_click',
+  description: 'Double-click element by index',
+  schema: z.object({
+    intent: z.string().default('').describe('purpose of this action'),
+    index: z.number().int().describe('index of the element'),
+  }),
+};
+
+export const tripleClickActionSchema: ActionSchema = {
+  name: 'triple_click',
+  description: 'Triple-click element by index to select all text in it',
+  schema: z.object({
+    intent: z.string().default('').describe('purpose of this action'),
+    index: z.number().int().describe('index of the element'),
+  }),
+};
+
+export const hoverElementActionSchema: ActionSchema = {
+  name: 'hover_element',
+  description: 'Hover over element by index to reveal tooltips, dropdowns, or hidden content',
+  schema: z.object({
+    intent: z.string().default('').describe('purpose of this action'),
+    index: z.number().int().describe('index of the element'),
   }),
 };
 
@@ -246,6 +289,42 @@ export const pushRatesToPmsActionSchema: ActionSchema = {
   }),
 };
 
+export const parseGroupInquiryActionSchema: ActionSchema = {
+  name: 'parse_group_inquiry',
+  description:
+    'Parse a group booking inquiry email to extract structured data (dates, room count, contact info) with confidence scores.',
+  schema: z.object({
+    intent: z.string().default('').describe('purpose of this action'),
+    email_text: z.string().describe('Full text of the group booking inquiry email'),
+  }),
+};
+
+export const generateGroupQuoteActionSchema: ActionSchema = {
+  name: 'generate_group_quote',
+  description:
+    'Generate a group booking quote with real room rates, AI room allocation, and an HTML email draft ready to send via gmail-send-email.',
+  schema: z.object({
+    intent: z.string().default('').describe('purpose of this action'),
+    check_in_date: z.string().describe('Check-in date in YYYY-MM-DD format'),
+    check_out_date: z.string().describe('Check-out date in YYYY-MM-DD format'),
+    room_count: z.number().int().describe('Number of rooms requested'),
+    context: z.string().optional().describe('Original email text for AI room allocation'),
+    guest_name: z.string().optional().describe('Name of the guest or contact person'),
+    discount_percent: z.number().optional().describe('Discount percentage override (e.g. 15 for 15% off)'),
+  }),
+};
+
+export const sendGroupQuoteEmailActionSchema: ActionSchema = {
+  name: 'send_group_quote_email',
+  description:
+    'Send the most recently generated group booking quote email via Gmail. Presents a confirmation dialog before sending.',
+  schema: z.object({
+    intent: z.string().default('').describe('purpose of this action'),
+    to: z.array(z.string()).describe('Recipient email address(es)'),
+    subject: z.string().describe('Email subject line'),
+  }),
+};
+
 export const askUserActionSchema: ActionSchema = {
   name: 'ask_user',
   description:
@@ -255,7 +334,9 @@ export const askUserActionSchema: ActionSchema = {
     context: z
       .string()
       .optional()
-      .describe('Markdown-formatted supporting data (lists, summaries, comparisons) to help the user decide'),
+      .describe(
+        'Markdown-formatted context to help the user decide. Use **bold labels**, markdown tables for structured data, --- dividers between sections, and bullet lists for multiple items.',
+      ),
     options: z
       .array(
         z.object({

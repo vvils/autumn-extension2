@@ -384,7 +384,7 @@ export default function ChatInput({
             className={`max-h-[200px] min-h-[24px] w-full resize-none bg-transparent text-[13px] leading-relaxed text-gray-900 outline-none placeholder:text-gray-400 ${disabled ? 'cursor-not-allowed opacity-50' : ''}`}
             placeholder={
               selectedShortcut
-                ? 'Add additional context (optional)...'
+                ? ''
                 : attachedFiles.length > 0
                   ? 'Add a message (optional)...'
                   : 'What can I help you with?'
