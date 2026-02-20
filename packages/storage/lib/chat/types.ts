@@ -13,6 +13,7 @@ export interface Message {
   timestamp: number; // Unix timestamp in milliseconds
   widgets?: Array<{ widgetId: string; type: string; data: Record<string, unknown> }>;
   shortcut?: { command: string; prompt: string };
+  shortcuts?: Array<{ command: string; prompt: string }>;
 }
 
 export interface ChatMessage extends Message {

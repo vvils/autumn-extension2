@@ -132,6 +132,7 @@ IMPORTANT — Integration routing rules:
   GOOD: \`q: "group"\`, \`q: "reservation"\`, \`q: "block"\`, \`q: "inquiry"\`
   BAD:  \`q: "group booking OR group reservation OR block rooms"\`
   Start with the single most relevant keyword; you can run a second search with a different keyword if results are insufficient.
+- **Gmail send-email bodyType:** When composing HTML email content, set bodyType: "html". Default is plaintext.
 - Only fall back to browser automation if no connected integration covers the task.
 - Group booking email-to-quote workflow — follow this EXACT sequence, do NOT skip steps or set done=true early:
   1. gmail-find-email → find group booking inquiry emails. Use a SINGLE broad keyword for q (e.g. q: "group"), NOT a multi-word OR query.

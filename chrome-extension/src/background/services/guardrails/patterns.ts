@@ -87,20 +87,6 @@ export const SECURITY_PATTERNS: SecurityPattern[] = [
     description: 'XML injection attempt',
     replacement: '',
   },
-
-  // Sensitive data patterns (basic)
-  {
-    pattern: /\b\d{3}-\d{2}-\d{4}\b/g, // SSN pattern
-    type: ThreatType.SENSITIVE_DATA,
-    description: 'Potential SSN detected',
-    replacement: '[REDACTED_SSN]',
-  },
-  {
-    pattern: /\b(?:\d{4}[\s-]?){3}\d{4}\b/g, // Credit card pattern
-    type: ThreatType.SENSITIVE_DATA,
-    description: 'Potential credit card number',
-    replacement: '[REDACTED_CC]',
-  },
 ];
 
 /**
@@ -108,18 +94,6 @@ export const SECURITY_PATTERNS: SecurityPattern[] = [
  * These are kept separate to allow for configurable security levels
  */
 export const STRICT_PATTERNS: SecurityPattern[] = [
-  {
-    pattern: /\b(password|pwd|passwd|api[\s_-]*key|secret|token)\s*[:=]\s*["']?[\w-]+["']?/gi,
-    type: ThreatType.SENSITIVE_DATA,
-    description: 'Credential detected',
-    replacement: '[REDACTED_CREDENTIAL]',
-  },
-  {
-    pattern: /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/g, // Email
-    type: ThreatType.SENSITIVE_DATA,
-    description: 'Email address detected',
-    replacement: '[EMAIL]',
-  },
   {
     pattern: /\b(bypass|circumvent|avoid|skip)[\s\-_]*(security|safety|filter|check)/gi,
     type: ThreatType.PROMPT_INJECTION,

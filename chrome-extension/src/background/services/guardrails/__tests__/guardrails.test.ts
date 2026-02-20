@@ -43,16 +43,16 @@ describe('Security Guardrails - Sanitizer', () => {
 });
 
 describe('Security Guardrails - Strictness options', () => {
-  it('detects credentials only in strict mode', () => {
-    const input = 'api key: abc123';
+  it('detects security bypass only in strict mode', () => {
+    const input = 'bypass security check';
     const looseThreats = guardrails.detectThreats(input, { strict: false });
     const strictThreats = guardrails.detectThreats(input, { strict: true });
-    expect(looseThreats).not.toContain(ThreatType.SENSITIVE_DATA);
-    expect(strictThreats).toContain(ThreatType.SENSITIVE_DATA);
+    expect(looseThreats).not.toContain(ThreatType.PROMPT_INJECTION);
+    expect(strictThreats).toContain(ThreatType.PROMPT_INJECTION);
   });
 
   it('sanitizeStrict equals sanitize with strict option', () => {
-    const input = 'api key: abc123';
+    const input = 'bypass security check';
     const a = guardrails.sanitizeStrict(input);
     const b = guardrails.sanitize(input, { strict: true });
     expect(a.sanitized).toBe(b.sanitized);
@@ -85,12 +85,12 @@ describe('Messages utils integration', () => {
 });
 
 describe('Sensitive data and prompt injection coverage', () => {
-  it('redacts SSN and CC patterns', () => {
+  it('passes SSN and CC patterns through without redaction', () => {
     const input = 'SSN: 123-45-6789\nCard: 4111-1111-1111-1111';
     const res = sanitizeContent(input, false);
-    expect(res.sanitized).toContain('[REDACTED_SSN]');
-    expect(res.sanitized).toContain('[REDACTED_CC]');
-    expect(res.threats).toContain(ThreatType.SENSITIVE_DATA);
+    expect(res.sanitized).toContain('123-45-6789');
+    expect(res.sanitized).toContain('4111-1111-1111-1111');
+    expect(res.threats).not.toContain(ThreatType.SENSITIVE_DATA);
   });
 
   it('removes fake nano tag mentions and system prompt references', () => {
@@ -118,10 +118,12 @@ describe('Validate and minimal sanitizer behavior', () => {
     expect(res.sanitized).toBe(input);
   });
 
-  it('validate is valid in non-strict mode for non-critical threats (email)', () => {
+  it('passes email addresses through without redaction', () => {
     const input = 'Contact: test@example.com';
-    const res = guardrails.validate(input, { strict: false });
-    expect(res.isValid).toBe(true);
+    const loose = guardrails.validate(input, { strict: false });
+    const strict = guardrails.validate(input, { strict: true });
+    expect(loose.isValid).toBe(true);
+    expect(strict.isValid).toBe(true);
   });
 
   it('cleanEmptyTags removes stray empty tags', () => {

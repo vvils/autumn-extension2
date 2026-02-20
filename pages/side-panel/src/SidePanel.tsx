@@ -272,10 +272,8 @@ const SidePanel = () => {
   }, [checkModelConfiguration, loadGeneralSettings]);
 
   const requestAuthDetection = useCallback(() => {
-    if (isAuthenticated === false) {
-      portRef.current?.postMessage({ type: 'detect_auth', clientUrl: CLIENT_URL });
-    }
-  }, [isAuthenticated]);
+    chrome.runtime.sendMessage({ type: 'detect_auth', clientUrl: CLIENT_URL }).catch(() => {});
+  }, []);
 
   useEffect(() => {
     requestAuthDetection();
@@ -791,6 +789,9 @@ const SidePanel = () => {
         widgetApplyCallbacksRef.current.clear();
         setInputEnabled(true);
         setShowStopButton(false);
+        setTimeout(() => {
+          setupConnection();
+        }, 1000);
       });
 
       if (heartbeatIntervalRef.current) {
@@ -1000,7 +1001,7 @@ const SidePanel = () => {
   const handleSendMessage = async (
     text: string,
     displayText?: string,
-    shortcutMeta?: { command: string; prompt: string },
+    shortcutsMeta?: Array<{ command: string; prompt: string }>,
   ) => {
     console.log('handleSendMessage', text);
 
@@ -1013,7 +1014,7 @@ const SidePanel = () => {
       const shortcut = await shortcutSettingsStore.getShortcutByCommand(commandName);
       if (shortcut) {
         displayText = displayText || trimmedText;
-        shortcutMeta = shortcutMeta || { command: commandName, prompt: shortcut.prompt };
+        shortcutsMeta = shortcutsMeta || [{ command: commandName, prompt: shortcut.prompt }];
         trimmedText = shortcut.prompt;
       }
     }
@@ -1064,7 +1065,7 @@ const SidePanel = () => {
         actor: Actors.USER,
         content: displayText || text,
         timestamp: Date.now(),
-        ...(shortcutMeta && { shortcut: shortcutMeta }),
+        ...(shortcutsMeta && { shortcuts: shortcutsMeta }),
       };
 
       appendMessage(userMessage, sessionIdRef.current);

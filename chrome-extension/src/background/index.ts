@@ -268,6 +268,26 @@ const reinitOnAuthChange = () => {
 listenForWebAppAuth(serverSettingsStore, reinitOnAuthChange);
 watchTabsForAuth(serverSettingsStore, reinitOnAuthChange);
 
+chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+  if (message?.type !== 'detect_auth') return;
+  (async () => {
+    if (message.clientUrl) {
+      const settings = await serverSettingsStore.getSettings();
+      if (!settings.clientUrl) {
+        await serverSettingsStore.updateSettings({ clientUrl: message.clientUrl });
+      }
+    }
+    const found = await detectTokenFromTabs(serverSettingsStore);
+    if (found) {
+      initServerClient().catch(error => {
+        logger.error('Failed to reinit after detect_auth:', error);
+      });
+    }
+  })();
+  sendResponse({ received: true });
+  return true;
+});
+
 // Setup connection listener for long-lived connections (e.g., side panel)
 chrome.runtime.onConnect.addListener(port => {
   if (port.name === 'side-panel-connection') {

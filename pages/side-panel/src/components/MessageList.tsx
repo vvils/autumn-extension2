@@ -40,33 +40,47 @@ export default memo(function MessageList({
 
 function InlineShortcutContent({
   content,
-  shortcut,
+  shortcuts,
   onClick,
 }: {
   content: string;
-  shortcut: { command: string; prompt: string };
+  shortcuts: Array<{ command: string; prompt: string }>;
   onClick?: (shortcut: { command: string; prompt: string }) => void;
 }) {
-  const commandToken = `/${shortcut.command}`;
-  const idx = content.indexOf(commandToken);
+  const parts: Array<string | { shortcut: { command: string; prompt: string } }> = [];
+  let remaining = content;
 
-  if (idx < 0) {
+  for (const shortcut of shortcuts) {
+    const token = `/${shortcut.command}`;
+    const idx = remaining.indexOf(token);
+    if (idx >= 0) {
+      if (idx > 0) parts.push(remaining.slice(0, idx));
+      parts.push({ shortcut });
+      remaining = remaining.slice(idx + token.length);
+    }
+  }
+
+  if (remaining) parts.push(remaining);
+
+  if (parts.length === 0) {
     return (
       <>
-        <ShortcutChipButton shortcut={shortcut} onClick={onClick} />
-        {content.trim() && ` ${content.trim()}`}
+        {shortcuts.map(s => (
+          <ShortcutChipButton key={s.command} shortcut={s} onClick={onClick} />
+        ))}
       </>
     );
   }
 
-  const before = content.slice(0, idx);
-  const after = content.slice(idx + commandToken.length);
-
   return (
     <>
-      {before}
-      <ShortcutChipButton shortcut={shortcut} onClick={onClick} />
-      {after}
+      {parts.map((part, i) =>
+        typeof part === 'string' ? (
+          <span key={i}>{part}</span>
+        ) : (
+          <ShortcutChipButton key={part.shortcut.command} shortcut={part.shortcut} onClick={onClick} />
+        ),
+      )}
     </>
   );
 }
@@ -113,13 +127,13 @@ function MessageBlock({
   const isUser = message.actor === Actors.USER;
 
   if (isUser) {
-    const { shortcut } = message;
+    const shortcuts = message.shortcuts ?? (message.shortcut ? [message.shortcut] : []);
 
     return (
       <div className="flex animate-fade-in justify-end">
-        <div className="max-w-[85%] whitespace-pre-wrap break-words rounded-2xl rounded-br-md bg-accent px-3.5 py-2.5 text-[13px] leading-relaxed text-white">
-          {shortcut ? (
-            <InlineShortcutContent content={message.content} shortcut={shortcut} onClick={onShortcutClick} />
+        <div className="max-w-[85%] whitespace-pre-wrap break-words rounded-2xl rounded-br-md bg-gray-900 px-3.5 py-2.5 text-[13px] leading-relaxed text-white">
+          {shortcuts.length > 0 ? (
+            <InlineShortcutContent content={message.content} shortcuts={shortcuts} onClick={onShortcutClick} />
           ) : (
             message.content
           )}

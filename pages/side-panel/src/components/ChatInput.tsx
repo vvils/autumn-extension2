@@ -11,7 +11,7 @@ export interface ShortcutActions {
 }
 
 interface ChatInputProps {
-  onSendMessage: (text: string, displayText?: string, shortcut?: { command: string; prompt: string }) => void;
+  onSendMessage: (text: string, displayText?: string, shortcuts?: Array<{ command: string; prompt: string }>) => void;
   onStopTask: () => void;
   onMicClick?: () => void;
   isRecording?: boolean;
@@ -344,10 +344,7 @@ export default function ChatInput({
       const plainText = el ? getPlainText(el).trim() : '';
       const messageContent = plainText ? `${promptToSend}\n\n${plainText}` : promptToSend;
       const displayContent = plainText ? `/${selectedShortcut.command} ${plainText}` : `/${selectedShortcut.command}`;
-      onSendMessage(messageContent, displayContent, {
-        command: selectedShortcut.command,
-        prompt: promptToSend,
-      });
+      onSendMessage(messageContent, displayContent, [{ command: selectedShortcut.command, prompt: promptToSend }]);
       if (el) clearEditable(el);
       setSelectedShortcut(null);
       setEditedPrompt('');
@@ -365,16 +362,20 @@ export default function ChatInput({
     const plainText = getPlainText(el).trim();
 
     if (chips.length > 0) {
-      const chipShortcut = chipDataRef.current.get(chips[0].command);
-      if (chipShortcut) {
-        const promptToSend = chipShortcut.prompt;
-        const commandPattern = `/${chipShortcut.command}`;
-        const userText = plainText.replace(commandPattern, '').trim();
-        const messageContent = userText ? `${promptToSend}\n\n${userText}` : promptToSend;
-        onSendMessage(messageContent, plainText, {
-          command: chipShortcut.command,
-          prompt: promptToSend,
-        });
+      const resolvedShortcuts: Array<{ command: string; prompt: string }> = [];
+      let messageContent = plainText;
+
+      for (const chip of chips) {
+        const chipShortcut = chipDataRef.current.get(chip.command);
+        if (!chipShortcut) continue;
+        resolvedShortcuts.push({ command: chipShortcut.command, prompt: chipShortcut.prompt });
+        messageContent = messageContent.replace(`/${chipShortcut.command}`, '').trim();
+      }
+
+      if (resolvedShortcuts.length > 0) {
+        const prompts = resolvedShortcuts.map(s => s.prompt).join('\n\n');
+        const finalContent = messageContent ? `${prompts}\n\n${messageContent}` : prompts;
+        onSendMessage(finalContent, plainText, resolvedShortcuts);
         clearEditable(el);
         setAttachedFiles([]);
         setHasContent(false);
@@ -426,11 +427,27 @@ export default function ChatInput({
       const el = editableRef.current;
       if (!el) return;
 
+      let adjustedSlashIndex = slashTriggerIndex;
+
+      // If a standalone shortcut already exists, convert it to an inline chip
+      if (selectedShortcut) {
+        const existingChip = createChipSpan(selectedShortcut.command);
+        el.insertBefore(existingChip, el.firstChild);
+        chipDataRef.current.set(selectedShortcut.command, {
+          id: selectedShortcut.id,
+          command: selectedShortcut.command,
+          prompt: selectedShortcut.prompt,
+        });
+        adjustedSlashIndex += selectedShortcut.command.length + 1;
+        setSelectedShortcut(null);
+        setEditedPrompt('');
+      }
+
       const plainText = getPlainText(el);
-      const beforeSlash = plainText.slice(0, slashTriggerIndex);
+      const beforeSlash = plainText.slice(0, adjustedSlashIndex);
       const hasTextAround =
         beforeSlash.trim().length > 0 ||
-        plainText.slice(slashTriggerIndex + 1 + shortcutQuery.length).trim().length > 0;
+        plainText.slice(adjustedSlashIndex + 1 + shortcutQuery.length).trim().length > 0;
 
       chipDataRef.current.set(shortcut.command, {
         id: shortcut.id,
@@ -439,8 +456,7 @@ export default function ChatInput({
       });
 
       if (hasTextAround) {
-        // Inline chip: insert chip span at the cursor position
-        const cursorPos = slashTriggerIndex + 1 + shortcutQuery.length;
+        const cursorPos = adjustedSlashIndex + 1 + shortcutQuery.length;
         insertChipInEditable(el, cursorPos, shortcutQuery.length, shortcut.command);
         setShowShortcuts(false);
         setSlashTriggerIndex(null);
@@ -448,7 +464,6 @@ export default function ChatInput({
         resizeInput();
         el.focus();
       } else {
-        // Standalone: external chip (same as before)
         setSelectedShortcut(shortcut);
         setEditedPrompt(shortcut.prompt);
         clearEditable(el);
@@ -459,7 +474,7 @@ export default function ChatInput({
         requestAnimationFrame(() => el.focus());
       }
     },
-    [slashTriggerIndex, shortcutQuery, updateHasContent, resizeInput],
+    [slashTriggerIndex, shortcutQuery, selectedShortcut, updateHasContent, resizeInput],
   );
 
   const handleKeyDown = useCallback(
