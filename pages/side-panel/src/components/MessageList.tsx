@@ -23,22 +23,17 @@ export default memo(function MessageList({
 }: MessageListProps) {
   return (
     <div className="max-w-full space-y-4">
-      {messages.map((message, index) => {
-        if (message.actor === Actors.PLANNER && messages[index + 1]?.actor === Actors.SYNTHESIZER) {
-          return null;
-        }
-        return (
-          <MessageBlock
-            key={`${message.actor}-${index}`}
-            message={message}
-            isSameActor={index > 0 ? messages[index - 1].actor === message.actor : false}
-            isStreaming={isStreaming && index === messages.length - 1}
-            onWidgetApply={onWidgetApply}
-            onWidgetRespond={onWidgetRespond}
-            onShortcutClick={onShortcutClick}
-          />
-        );
-      })}
+      {messages.map((message, index) => (
+        <MessageBlock
+          key={`${message.actor}-${index}`}
+          message={message}
+          isSameActor={index > 0 ? messages[index - 1].actor === message.actor : false}
+          isStreaming={isStreaming && index === messages.length - 1}
+          onWidgetApply={onWidgetApply}
+          onWidgetRespond={onWidgetRespond}
+          onShortcutClick={onShortcutClick}
+        />
+      ))}
     </div>
   );
 });

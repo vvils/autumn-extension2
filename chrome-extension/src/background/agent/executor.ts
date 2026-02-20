@@ -139,6 +139,7 @@ export class Executor {
   async execute(): Promise<void> {
     logger.info(`🚀 Executing task: ${this.tasks[this.tasks.length - 1]}`);
     const context = this.context;
+    context.reset();
     context.nSteps = 0;
     const allowedMaxSteps = this.context.options.maxSteps;
     const task = this.tasks[this.tasks.length - 1];

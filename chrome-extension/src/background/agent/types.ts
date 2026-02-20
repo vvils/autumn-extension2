@@ -108,6 +108,15 @@ export class AgentContext {
     setTimeout(() => this.controller.abort(), 300);
   }
 
+  reset(): void {
+    this.stopped = false;
+    this.paused = false;
+    this.controller = new AbortController();
+    this.consecutiveFailures = 0;
+    this.stateMessageAdded = false;
+    this.finalAnswer = null;
+  }
+
   waitForUserInput(): Promise<string> {
     if (this.userInputResolve) {
       this.userInputResolve('');

@@ -131,7 +131,7 @@ export function ShortcutEditorModal({
           </div>
         </div>
 
-        <div className="flex-1 space-y-4 overflow-y-auto px-4 pb-4">
+        <div className="flex-1 space-y-4 overflow-y-auto px-4 pb-[20px]">
           <div>
             <label className="mb-1.5 block text-[13px] font-medium text-gray-700">Name</label>
             <div className="flex items-center">
@@ -158,7 +158,7 @@ export function ShortcutEditorModal({
             <textarea
               value={editPrompt}
               onChange={e => setEditPrompt(e.target.value)}
-              rows={6}
+              rows={8}
               placeholder="The prompt text that will be sent..."
               className="w-full resize-none rounded-lg border border-gray-200 px-3 py-2 text-[13px] leading-relaxed text-gray-900 outline-none focus:border-accent/40 focus:ring-2 focus:ring-accent/20"
             />

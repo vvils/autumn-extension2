@@ -218,24 +218,17 @@ export default function ChatInput({
 
       const beforeSlash = text.slice(0, slashTriggerIndex);
       const afterQuery = text.slice(slashTriggerIndex + 1 + shortcutQuery.length);
-      const isStandaloneCommand = !beforeSlash && !afterQuery;
 
-      if (isStandaloneCommand) {
-        setSelectedShortcut(shortcut);
-        setEditedPrompt(shortcut.prompt);
-        setText('');
-      } else {
-        const expanded = beforeSlash + shortcut.prompt + afterQuery;
-        setText(expanded);
-        const cursorPos = beforeSlash.length + shortcut.prompt.length;
-        requestAnimationFrame(() => {
-          textareaRef.current?.setSelectionRange(cursorPos, cursorPos);
-        });
-      }
-
+      setSelectedShortcut(shortcut);
+      setEditedPrompt(shortcut.prompt);
+      setText(beforeSlash + afterQuery);
       setShowShortcuts(false);
       setSlashTriggerIndex(null);
-      textareaRef.current?.focus();
+      const cursorPos = beforeSlash.length;
+      requestAnimationFrame(() => {
+        textareaRef.current?.focus();
+        textareaRef.current?.setSelectionRange(cursorPos, cursorPos);
+      });
     },
     [slashTriggerIndex, text, shortcutQuery],
   );
@@ -433,7 +426,10 @@ export default function ChatInput({
             value={text}
             onChange={handleTextChange}
             onKeyDown={handleKeyDown}
-            onKeyUp={recheckShortcutContext}
+            onKeyUp={e => {
+              if (e.key === 'ArrowUp' || e.key === 'ArrowDown' || e.key === 'Escape') return;
+              recheckShortcutContext();
+            }}
             onClick={recheckShortcutContext}
             onBlur={() => {
               setShowShortcuts(false);

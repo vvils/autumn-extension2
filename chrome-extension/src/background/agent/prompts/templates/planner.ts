@@ -125,10 +125,16 @@ IMPORTANT — Integration routing rules:
   Example next_steps: "I'll search your Gmail for unread emails."
 - Put the technical details (action_key, app_slug, parameters) in the "reasoning" field so the navigator can reference them.
   Example reasoning: "Will use run_integration_action: action_key='gmail-find-email', app_slug='gmail', parameters={ q: 'is:unread' }"
-- Gmail search tips: use simple keywords (e.g. 'group' or 'reservation') rather than long OR chains. Gmail OR only binds adjacent terms, so 'group booking OR reservation' may not work as expected. Start broad, then narrow.
+- **Gmail search query rules (CRITICAL — read before setting the q parameter):**
+  Gmail's OR operator binds single adjacent terms, NOT multi-word phrases.
+  For example, \`q: "group booking OR group reservation"\` does NOT search for "group booking" or "group reservation" — it searches for "group" AND ("booking" OR "group") AND "reservation", returning almost nothing.
+  ALWAYS use 1–2 broad keywords. NEVER use long OR chains or multi-word phrases.
+  GOOD: \`q: "group"\`, \`q: "reservation"\`, \`q: "block"\`, \`q: "inquiry"\`
+  BAD:  \`q: "group booking OR group reservation OR block rooms"\`
+  Start with the single most relevant keyword; you can run a second search with a different keyword if results are insufficient.
 - Only fall back to browser automation if no connected integration covers the task.
 - Group booking email-to-quote workflow — follow this EXACT sequence, do NOT skip steps or set done=true early:
-  1. gmail-find-email → find group booking inquiry emails
+  1. gmail-find-email → find group booking inquiry emails. Use a SINGLE broad keyword for q (e.g. q: "group"), NOT a multi-word OR query.
   2. Use your "ask_user" response field to present found emails for user to select using a markdown table (From, Date, Subject, Summary columns) with numbered options.
   3. cache_content → cache selected email text for parsing
   4. parse_group_inquiry → extract structured booking data
