@@ -38,6 +38,56 @@ export default memo(function MessageList({
   );
 });
 
+function InlineShortcutContent({
+  content,
+  shortcut,
+  onClick,
+}: {
+  content: string;
+  shortcut: { command: string; prompt: string };
+  onClick?: (shortcut: { command: string; prompt: string }) => void;
+}) {
+  const commandToken = `/${shortcut.command}`;
+  const idx = content.indexOf(commandToken);
+
+  if (idx < 0) {
+    return (
+      <>
+        <ShortcutChipButton shortcut={shortcut} onClick={onClick} />
+        {content.trim() && ` ${content.trim()}`}
+      </>
+    );
+  }
+
+  const before = content.slice(0, idx);
+  const after = content.slice(idx + commandToken.length);
+
+  return (
+    <>
+      {before}
+      <ShortcutChipButton shortcut={shortcut} onClick={onClick} />
+      {after}
+    </>
+  );
+}
+
+function ShortcutChipButton({
+  shortcut,
+  onClick,
+}: {
+  shortcut: { command: string; prompt: string };
+  onClick?: (shortcut: { command: string; prompt: string }) => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={() => onClick?.(shortcut)}
+      className="inline rounded-md bg-white/20 px-1.5 py-0.5 font-medium transition-colors hover:bg-white/30">
+      /{shortcut.command}
+    </button>
+  );
+}
+
 interface MessageBlockProps {
   message: Message;
   isSameActor: boolean;
@@ -64,21 +114,12 @@ function MessageBlock({
 
   if (isUser) {
     const { shortcut } = message;
-    const additionalText = shortcut ? message.content.replace(`/${shortcut.command}`, '').trim() : null;
 
     return (
       <div className="flex animate-fade-in justify-end">
         <div className="max-w-[85%] whitespace-pre-wrap break-words rounded-2xl rounded-br-md bg-accent px-3.5 py-2.5 text-[13px] leading-relaxed text-white">
           {shortcut ? (
-            <>
-              <button
-                type="button"
-                onClick={() => onShortcutClick?.(shortcut)}
-                className="inline rounded-md bg-white/20 px-1.5 py-0.5 font-medium transition-colors hover:bg-white/30">
-                /{shortcut.command}
-              </button>
-              {additionalText && ` ${additionalText}`}
-            </>
+            <InlineShortcutContent content={message.content} shortcut={shortcut} onClick={onShortcutClick} />
           ) : (
             message.content
           )}

@@ -225,7 +225,7 @@ export default class Page {
   }
 
   async removeHighlight(): Promise<void> {
-    if (this._config.displayHighlights && this._validWebPage) {
+    if (this._validWebPage) {
       await _removeHighlights(this._tabId);
     }
   }
