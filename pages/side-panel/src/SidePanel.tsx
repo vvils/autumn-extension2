@@ -955,11 +955,6 @@ const SidePanel = () => {
       if (wasHandled) return;
     }
 
-    if (isHistoricalSession) {
-      console.log('Cannot send messages in historical sessions');
-      return;
-    }
-
     try {
       const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
       const tabId = tabs[0]?.id;
@@ -977,19 +972,21 @@ const SidePanel = () => {
         if (!portRef.current) {
           throw new Error('No connection available');
         }
-        const titleText = displayText || text;
-        const response = await portRpc(
-          portRef.current,
-          'create_session',
-          { title: titleText.substring(0, 50) + (titleText.length > 50 ? '...' : '') },
-          'session_created',
-        );
-        const newSession = response.session;
-        console.log('newSession', newSession);
+        if (!currentSessionId) {
+          const titleText = displayText || text;
+          const response = await portRpc(
+            portRef.current,
+            'create_session',
+            { title: titleText.substring(0, 50) + (titleText.length > 50 ? '...' : '') },
+            'session_created',
+          );
+          const newSession = response.session;
+          console.log('newSession', newSession);
 
-        const sessionId = newSession.id;
-        setCurrentSessionId(sessionId);
-        sessionIdRef.current = sessionId;
+          const sessionId = newSession.id;
+          setCurrentSessionId(sessionId);
+          sessionIdRef.current = sessionId;
+        }
       }
 
       const userMessage: Message = {
@@ -1204,7 +1201,7 @@ const SidePanel = () => {
       onStopTask={handleStopTask}
       onMicClick={handleMicClick}
       isRecording={isRecording}
-      disabled={!inputEnabled || isHistoricalSession}
+      disabled={!inputEnabled}
       showStopButton={showStopButton}
       setContent={setter => {
         setInputTextRef.current = setter;

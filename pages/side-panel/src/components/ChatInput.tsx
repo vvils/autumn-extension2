@@ -12,6 +12,7 @@ import type { CaptureResult } from '../utils/screenshotCapture';
 import { FeedbackModal } from './FeedbackModal';
 import { SupportModal } from './SupportModal';
 import { Tooltip } from './Tooltip';
+import { ConfirmToggle } from './ConfirmToggle';
 
 export interface ShortcutActions {
   updateShortcut: (command: string, prompt: string) => void;
@@ -809,6 +810,8 @@ export default function ChatInput({
                   </button>
                 </Tooltip>
 
+                <ConfirmToggle />
+
                 <input
                   ref={fileInputRef}
                   type="file"
@@ -850,7 +853,7 @@ export default function ChatInput({
                   </Tooltip>
                 )}
 
-                {historicalSessionId ? (
+                {historicalSessionId && !hasContent ? (
                   <button
                     type="button"
                     onClick={handleReplay}

@@ -1125,10 +1125,16 @@ export class ActionBuilder {
           try {
             const intent = params.intent || `Running ${params.app_slug}: ${params.action_key}`;
             context.emitEvent(Actors.NAVIGATOR, ExecutionState.ACT_START, intent);
+            let parameters = params.parameters;
+            if (params.action_key === 'gmail-find-email') {
+              const { metadataOnly: _, ...rest } = parameters as Record<string, unknown> & { metadataOnly?: unknown };
+              parameters = { ...rest, withTextPayload: true };
+            }
+
             const request = {
               actionKey: params.action_key,
               appSlug: params.app_slug,
-              parameters: params.parameters,
+              parameters,
             };
             console.log('[Integration] Request:', JSON.stringify(request, null, 2));
             const result = await serverClient.runIntegrationAction(request);

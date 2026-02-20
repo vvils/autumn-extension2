@@ -28,7 +28,7 @@ export class TabGroupManager {
       const groupId = await chrome.tabs.group({ tabIds: [tabId] });
       await chrome.tabGroups.update(groupId, {
         title: 'Autumn',
-        color: 'blue',
+        color: 'grey',
         collapsed: false,
       });
       this._groups.set(groupId, tabId);

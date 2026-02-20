@@ -10,8 +10,7 @@ window.buildDomTree = (
 ) => {
   const { showHighlightElements, focusHighlightIndex, viewportExpansion, startHighlightIndex, startId, debugMode } =
     args;
-  // Make sure to do highlight elements always, but we can hide the highlights if needed
-  const doHighlightElements = true;
+  const doHighlightElements = showHighlightElements;
 
   let highlightIndex = startHighlightIndex; // Reset highlight index
 
@@ -146,10 +145,8 @@ window.buildDomTree = (
         container.style.left = '0';
         container.style.width = '100%';
         container.style.height = '100%';
-        // Use the maximum valid value in zIndex to ensure the element is not blocked by overlapping elements.
         container.style.zIndex = '2147483647';
         container.style.backgroundColor = 'transparent';
-        // Show or hide the container based on the showHighlightElements flag
         container.style.display = showHighlightElements ? 'block' : 'none';
         document.body.appendChild(container);
       }
@@ -1214,8 +1211,8 @@ window.buildDomTree = (
           } else {
             highlightElement(node, nodeData.highlightIndex, parentIframe);
           }
-          return true; // Successfully highlighted
         }
+        return true;
       } else {
         // console.log(`Skipping highlight for ${nodeData.tagName} (outside viewport)`);
       }
