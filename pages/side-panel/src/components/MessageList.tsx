@@ -131,7 +131,7 @@ function MessageBlock({
 
     return (
       <div className="flex animate-fade-in justify-end">
-        <div className="max-w-[85%] whitespace-pre-wrap break-words rounded-2xl rounded-br-md bg-gray-900 px-3.5 py-2.5 text-[13px] leading-relaxed text-white">
+        <div className="max-w-[85%] whitespace-pre-wrap break-words rounded-2xl rounded-br-md bg-black px-3.5 py-2.5 text-[13px] leading-relaxed text-white">
           {shortcuts.length > 0 ? (
             <InlineShortcutContent content={message.content} shortcuts={shortcuts} onClick={onShortcutClick} />
           ) : (
@@ -147,9 +147,9 @@ function MessageBlock({
       {!isSameActor && actor && (
         <div className="mb-1 text-[11px] font-medium uppercase tracking-wide text-gray-400">{actor.name}</div>
       )}
-      <div className="break-words text-[13px] leading-relaxed text-gray-900">
+      <div className="break-words text-[13px] leading-relaxed text-black">
         <MarkdownContent content={message.content} />
-        {isStreaming && <span className="ml-0.5 inline-block animate-pulse text-accent">|</span>}
+        {isStreaming && <span className="ml-0.5 inline-block animate-pulse text-blue-500">|</span>}
       </div>
       {message.widgets && message.widgets.length > 0 && (
         <div className="mt-2 space-y-2">

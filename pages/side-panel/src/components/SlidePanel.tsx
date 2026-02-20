@@ -26,7 +26,7 @@ export function SlidePanel({ open, onClose, title, side = 'right', children }: S
   const isRight = side === 'right';
   const translateOpen = 'translate-x-0';
   const translateClosed = isRight ? 'translate-x-full' : '-translate-x-full';
-  const rounded = isRight ? 'rounded-l-2xl' : 'rounded-r-2xl';
+  const rounded = isRight ? 'rounded-l-[20px]' : 'rounded-r-[20px]';
   const position = isRight ? 'right-0' : 'left-0';
 
   return (
@@ -36,13 +36,13 @@ export function SlidePanel({ open, onClose, title, side = 'right', children }: S
       {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */}
       <div className="absolute inset-0 bg-black/30 backdrop-blur-[2px]" onClick={onClose} />
       <div
-        className={`absolute top-0 ${position} flex size-full max-w-sm flex-col bg-white shadow-2xl duration-200 ease-out ${rounded} transition-transform ${open ? translateOpen : translateClosed}`}>
-        <div className="flex shrink-0 items-center justify-between px-4 py-3">
+        className={`absolute top-0 ${position} flex size-full max-w-sm flex-col bg-white shadow-[0_4px_20px_rgba(0,0,0,0.08),0_1px_3px_rgba(0,0,0,0.06)] duration-200 ease-out ${rounded} transition-transform ${open ? translateOpen : translateClosed}`}>
+        <div className="flex shrink-0 items-center justify-between px-5 py-4">
           <h2 className="text-[15px] font-semibold text-gray-900">{title}</h2>
           <button
             type="button"
             onClick={onClose}
-            className="rounded-md p-1.5 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
+            className="rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
             aria-label="Close">
             <X size={16} />
           </button>

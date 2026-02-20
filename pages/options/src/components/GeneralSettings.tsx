@@ -8,40 +8,33 @@ export const GeneralSettings = ({ isDarkMode = false }: GeneralSettingsProps) =>
   const [settings, setSettings] = useState<GeneralSettingsConfig>(DEFAULT_GENERAL_SETTINGS);
 
   useEffect(() => {
-    // Load initial settings
     generalSettingsStore.getSettings().then(setSettings);
   }, []);
 
   const updateSetting = async <K extends keyof GeneralSettingsConfig>(key: K, value: GeneralSettingsConfig[K]) => {
-    // Optimistically update the local state for responsiveness
     setSettings(prevSettings => ({ ...prevSettings, [key]: value }));
-
-    // Call the store to update the setting
     await generalSettingsStore.updateSettings({ [key]: value } as Partial<GeneralSettingsConfig>);
-
-    // After the store update (which might have side effects, e.g., useVision affecting displayHighlights),
-    // fetch the latest settings from the store and update the local state again to ensure UI consistency.
     const latestSettings = await generalSettingsStore.getSettings();
     setSettings(latestSettings);
   };
 
+  const cardClass = `rounded-[20px] bg-white p-6 text-left shadow-[inset_0_1px_1px_#fff,inset_-1px_-1px_1px_#fff,0_0_0_transparent] hover:shadow-[inset_0_1px_1px_#fff,inset_-1px_-1px_1px_#fff,0_4px_12px_rgba(0,0,0,0.08)] transition-shadow duration-500 ease-out`;
+  const headingClass = `mb-4 text-left text-lg font-medium text-black`;
+  const labelClass = `text-[14px] font-medium text-black`;
+  const descClass = `text-[13px] text-black/50`;
+  const inputClass = `w-20 rounded-lg border-0 bg-[#f4f4f4] px-3 py-2 text-[14px] text-black outline-none focus:ring-2 focus:ring-black/20`;
+  const toggleClass = `peer h-6 w-11 rounded-full ${isDarkMode ? 'bg-slate-600' : 'bg-gray-200'} after:absolute after:left-[2px] after:top-[2px] after:size-5 after:rounded-full after:border after:border-gray-300 after:bg-white after:transition-all after:content-[''] peer-checked:bg-accent peer-checked:after:translate-x-full peer-checked:after:border-white peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-black/20`;
+
   return (
     <section className="space-y-6">
-      <div
-        className={`rounded-lg border ${isDarkMode ? 'border-slate-700 bg-slate-800' : 'border-gray-200 bg-white'} p-6 text-left shadow-sm`}>
-        <h2 className={`mb-4 text-left text-xl font-semibold ${isDarkMode ? 'text-gray-200' : 'text-gray-800'}`}>
-          {'General'}
-        </h2>
+      <div className={cardClass}>
+        <h2 className={headingClass}>{'General'}</h2>
 
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <h3 className={`text-base font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
-                {'Max Steps per Task'}
-              </h3>
-              <p className={`text-sm font-normal ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                {'Step limit per task'}
-              </p>
+              <h3 className={labelClass}>{'Max Steps per Task'}</h3>
+              <p className={descClass}>{'Step limit per task'}</p>
             </div>
             <label htmlFor="maxSteps" className="sr-only">
               {'Max Steps per Task'}
@@ -53,18 +46,14 @@ export const GeneralSettings = ({ isDarkMode = false }: GeneralSettingsProps) =>
               max={50}
               value={settings.maxSteps}
               onChange={e => updateSetting('maxSteps', Number.parseInt(e.target.value, 10))}
-              className={`w-20 rounded-md border ${isDarkMode ? 'border-slate-600 bg-slate-700 text-gray-200' : 'border-gray-300 bg-white text-gray-700'} px-3 py-2`}
+              className={inputClass}
             />
           </div>
 
           <div className="flex items-center justify-between">
             <div>
-              <h3 className={`text-base font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
-                {'Max Actions per Step'}
-              </h3>
-              <p className={`text-sm font-normal ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                {'Action limit per step'}
-              </p>
+              <h3 className={labelClass}>{'Max Actions per Step'}</h3>
+              <p className={descClass}>{'Action limit per step'}</p>
             </div>
             <label htmlFor="maxActionsPerStep" className="sr-only">
               {'Max Actions per Step'}
@@ -76,18 +65,14 @@ export const GeneralSettings = ({ isDarkMode = false }: GeneralSettingsProps) =>
               max={50}
               value={settings.maxActionsPerStep}
               onChange={e => updateSetting('maxActionsPerStep', Number.parseInt(e.target.value, 10))}
-              className={`w-20 rounded-md border ${isDarkMode ? 'border-slate-600 bg-slate-700 text-gray-200' : 'border-gray-300 bg-white text-gray-700'} px-3 py-2`}
+              className={inputClass}
             />
           </div>
 
           <div className="flex items-center justify-between">
             <div>
-              <h3 className={`text-base font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
-                {'Failure Tolerance'}
-              </h3>
-              <p className={`text-sm font-normal ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                {'How many consecutive failures before stopping'}
-              </p>
+              <h3 className={labelClass}>{'Failure Tolerance'}</h3>
+              <p className={descClass}>{'How many consecutive failures before stopping'}</p>
             </div>
             <label htmlFor="maxFailures" className="sr-only">
               {'Failure Tolerance'}
@@ -99,18 +84,14 @@ export const GeneralSettings = ({ isDarkMode = false }: GeneralSettingsProps) =>
               max={10}
               value={settings.maxFailures}
               onChange={e => updateSetting('maxFailures', Number.parseInt(e.target.value, 10))}
-              className={`w-20 rounded-md border ${isDarkMode ? 'border-slate-600 bg-slate-700 text-gray-200' : 'border-gray-300 bg-white text-gray-700'} px-3 py-2`}
+              className={inputClass}
             />
           </div>
 
           <div className="flex items-center justify-between">
             <div>
-              <h3 className={`text-base font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
-                {'Enable Vision'}
-              </h3>
-              <p className={`text-sm font-normal ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                {'Use vision capability of LLMs (consumes more tokens for better results)'}
-              </p>
+              <h3 className={labelClass}>{'Enable Vision'}</h3>
+              <p className={descClass}>{'Use vision capability of LLMs (consumes more tokens for better results)'}</p>
             </div>
             <div className="relative inline-flex cursor-pointer items-center">
               <input
@@ -120,9 +101,7 @@ export const GeneralSettings = ({ isDarkMode = false }: GeneralSettingsProps) =>
                 onChange={e => updateSetting('useVision', e.target.checked)}
                 className="peer sr-only"
               />
-              <label
-                htmlFor="useVision"
-                className={`peer h-6 w-11 rounded-full ${isDarkMode ? 'bg-slate-600' : 'bg-gray-200'} after:absolute after:left-[2px] after:top-[2px] after:size-5 after:rounded-full after:border after:border-gray-300 after:bg-white after:transition-all after:content-[''] peer-checked:bg-accent peer-checked:after:translate-x-full peer-checked:after:border-white peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-accent-muted`}>
+              <label htmlFor="useVision" className={toggleClass}>
                 <span className="sr-only">{'Enable Vision'}</span>
               </label>
             </div>
@@ -130,10 +109,8 @@ export const GeneralSettings = ({ isDarkMode = false }: GeneralSettingsProps) =>
 
           <div className="flex items-center justify-between">
             <div>
-              <h3 className={`text-base font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
-                {'Display Highlights'}
-              </h3>
-              <p className={`text-sm font-normal ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+              <h3 className={labelClass}>{'Display Highlights'}</h3>
+              <p className={descClass}>
                 {'Show visual highlights on interactive elements (e.g. buttons, links, etc.)'}
               </p>
             </div>
@@ -147,27 +124,17 @@ export const GeneralSettings = ({ isDarkMode = false }: GeneralSettingsProps) =>
                 onChange={e => updateSetting('displayHighlights', e.target.checked)}
                 className="peer sr-only"
               />
-              <label
-                htmlFor="displayHighlights"
-                className={`peer h-6 w-11 rounded-full ${isDarkMode ? 'bg-slate-600' : 'bg-gray-200'} after:absolute after:left-[2px] after:top-[2px] after:size-5 after:rounded-full after:border after:border-gray-300 after:bg-white after:transition-all after:content-[''] peer-checked:bg-accent peer-checked:after:translate-x-full peer-checked:after:border-white peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-accent-muted`}>
+              <label htmlFor="displayHighlights" className={toggleClass}>
                 <span className="sr-only">{'Display Highlights'}</span>
               </label>
             </div>
           </div>
-          {settings.useVision && (
-            <p className={`text-xs ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`}>
-              {'Required when Vision is enabled'}
-            </p>
-          )}
+          {settings.useVision && <p className="text-xs text-black/40">{'Required when Vision is enabled'}</p>}
 
           <div className="flex items-center justify-between">
             <div>
-              <h3 className={`text-base font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
-                {'Replanning Frequency'}
-              </h3>
-              <p className={`text-sm font-normal ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                {'Reconsider and update the plan every [Number] steps'}
-              </p>
+              <h3 className={labelClass}>{'Replanning Frequency'}</h3>
+              <p className={descClass}>{'Reconsider and update the plan every [Number] steps'}</p>
             </div>
             <label htmlFor="planningInterval" className="sr-only">
               {'Replanning Frequency'}
@@ -179,18 +146,14 @@ export const GeneralSettings = ({ isDarkMode = false }: GeneralSettingsProps) =>
               max={20}
               value={settings.planningInterval}
               onChange={e => updateSetting('planningInterval', Number.parseInt(e.target.value, 10))}
-              className={`w-20 rounded-md border ${isDarkMode ? 'border-slate-600 bg-slate-700 text-gray-200' : 'border-gray-300 bg-white text-gray-700'} px-3 py-2`}
+              className={inputClass}
             />
           </div>
 
           <div className="flex items-center justify-between">
             <div>
-              <h3 className={`text-base font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
-                {'Page Load Wait Time'}
-              </h3>
-              <p className={`text-sm font-normal ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                {'Minimum wait time after page loads (250-5000ms)'}
-              </p>
+              <h3 className={labelClass}>{'Page Load Wait Time'}</h3>
+              <p className={descClass}>{'Minimum wait time after page loads (250-5000ms)'}</p>
             </div>
             <div className="flex items-center space-x-2">
               <label htmlFor="minWaitPageLoad" className="sr-only">
@@ -204,19 +167,15 @@ export const GeneralSettings = ({ isDarkMode = false }: GeneralSettingsProps) =>
                 step={50}
                 value={settings.minWaitPageLoad}
                 onChange={e => updateSetting('minWaitPageLoad', Number.parseInt(e.target.value, 10))}
-                className={`w-20 rounded-md border ${isDarkMode ? 'border-slate-600 bg-slate-700 text-gray-200' : 'border-gray-300 bg-white text-gray-700'} px-3 py-2`}
+                className={inputClass}
               />
             </div>
           </div>
 
           <div className="flex items-center justify-between">
             <div>
-              <h3 className={`text-base font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
-                {'Show Cost Estimate'}
-              </h3>
-              <p className={`text-sm font-normal ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                {'Display estimated token usage and cost during task execution'}
-              </p>
+              <h3 className={labelClass}>{'Show Cost Estimate'}</h3>
+              <p className={descClass}>{'Display estimated token usage and cost during task execution'}</p>
             </div>
             <div className="relative inline-flex cursor-pointer items-center">
               <input
@@ -226,9 +185,7 @@ export const GeneralSettings = ({ isDarkMode = false }: GeneralSettingsProps) =>
                 onChange={e => updateSetting('showCostEstimate', e.target.checked)}
                 className="peer sr-only"
               />
-              <label
-                htmlFor="showCostEstimate"
-                className={`peer h-6 w-11 rounded-full ${isDarkMode ? 'bg-slate-600' : 'bg-gray-200'} after:absolute after:left-[2px] after:top-[2px] after:size-5 after:rounded-full after:border after:border-gray-300 after:bg-white after:transition-all after:content-[''] peer-checked:bg-accent peer-checked:after:translate-x-full peer-checked:after:border-white peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-accent-muted`}>
+              <label htmlFor="showCostEstimate" className={toggleClass}>
                 <span className="sr-only">{'Show Cost Estimate'}</span>
               </label>
             </div>
@@ -236,10 +193,8 @@ export const GeneralSettings = ({ isDarkMode = false }: GeneralSettingsProps) =>
 
           <div className="flex items-center justify-between">
             <div>
-              <h3 className={`text-base font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
-                {'Replay Historical Tasks( experimental )'}
-              </h3>
-              <p className={`text-sm font-normal ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+              <h3 className={labelClass}>{'Replay Historical Tasks( experimental )'}</h3>
+              <p className={descClass}>
                 {'Enable storing and replaying of agent step history (experimental, may have issues)'}
               </p>
             </div>
@@ -251,9 +206,7 @@ export const GeneralSettings = ({ isDarkMode = false }: GeneralSettingsProps) =>
                 onChange={e => updateSetting('replayHistoricalTasks', e.target.checked)}
                 className="peer sr-only"
               />
-              <label
-                htmlFor="replayHistoricalTasks"
-                className={`peer h-6 w-11 rounded-full ${isDarkMode ? 'bg-slate-600' : 'bg-gray-200'} after:absolute after:left-[2px] after:top-[2px] after:size-5 after:rounded-full after:border after:border-gray-300 after:bg-white after:transition-all after:content-[''] peer-checked:bg-accent peer-checked:after:translate-x-full peer-checked:after:border-white peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-accent-muted`}>
+              <label htmlFor="replayHistoricalTasks" className={toggleClass}>
                 <span className="sr-only">{'Replay Historical Tasks( experimental )'}</span>
               </label>
             </div>

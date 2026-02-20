@@ -5,16 +5,16 @@ export default {
     extend: {
       colors: {
         accent: {
-          DEFAULT: '#3d828f',
-          hover: '#346e79',
-          soft: '#f0f7f8',
-          light: '#dff0f2',
-          muted: '#70b5c2',
-          foreground: '#2a5f69',
+          DEFAULT: '#000000',
+          hover: '#1a1a1a',
+          soft: '#f5f5f5',
+          light: '#e5e5e5',
+          muted: '#a3a3a3',
+          foreground: '#171717',
         },
         brand: {
-          dark: '#0b252a',
-          'dark-lighter': '#153a40',
+          dark: '#0a0a0a',
+          'dark-lighter': '#1a1a1a',
         },
       },
     },

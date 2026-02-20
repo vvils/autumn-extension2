@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
 import { firewallStore } from '@extension/storage';
-import { Button } from '@extension/ui';
 interface FirewallSettingsProps {
   isDarkMode: boolean;
 }
@@ -29,7 +28,6 @@ export const FirewallSettings = ({ isDarkMode }: FirewallSettingsProps) => {
   };
 
   const handleAddUrl = async () => {
-    // Remove http:// or https:// prefixes
     const cleanUrl = newUrl.trim().replace(/^https?:\/\//, '');
     if (!cleanUrl) return;
 
@@ -51,19 +49,18 @@ export const FirewallSettings = ({ isDarkMode }: FirewallSettingsProps) => {
     await loadFirewallSettings();
   };
 
+  const cardClass =
+    'rounded-[20px] bg-white p-6 text-left shadow-[inset_0_1px_1px_#fff,inset_-1px_-1px_1px_#fff,0_0_0_transparent] hover:shadow-[inset_0_1px_1px_#fff,inset_-1px_-1px_1px_#fff,0_4px_12px_rgba(0,0,0,0.08)] transition-shadow duration-500 ease-out';
+
   return (
     <section className="space-y-6">
-      <div
-        className={`rounded-lg border ${isDarkMode ? 'border-slate-700 bg-slate-800' : 'border-gray-200 bg-white'} p-6 text-left shadow-sm`}>
-        <h2 className={`mb-4 text-xl font-semibold ${isDarkMode ? 'text-gray-200' : 'text-gray-800'}`}>{'Firewall'}</h2>
+      <div className={cardClass}>
+        <h2 className="mb-4 text-lg font-medium text-black">{'Firewall'}</h2>
 
         <div className="space-y-6">
-          <div
-            className={`my-6 rounded-lg border p-4 ${isDarkMode ? 'border-slate-700 bg-slate-700' : 'border-gray-200 bg-gray-100'}`}>
+          <div className="my-6 rounded-xl bg-[#f4f4f4] p-4">
             <div className="flex items-center justify-between">
-              <label
-                htmlFor="toggle-firewall"
-                className={`text-base font-medium ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>
+              <label htmlFor="toggle-firewall" className="text-[14px] font-medium text-black">
                 {'Enable Firewall'}
               </label>
               <div className="relative inline-block w-12 select-none">
@@ -92,32 +89,22 @@ export const FirewallSettings = ({ isDarkMode }: FirewallSettingsProps) => {
 
           <div className="mb-6 mt-10 flex items-center justify-between">
             <div className="flex space-x-2">
-              <Button
+              <button
+                type="button"
                 onClick={() => setActiveList('allow')}
-                className={`px-4 py-2 text-base ${
-                  activeList === 'allow'
-                    ? isDarkMode
-                      ? 'bg-accent text-white'
-                      : 'bg-accent text-white'
-                    : isDarkMode
-                      ? 'bg-slate-700 text-gray-200'
-                      : 'bg-gray-200 text-gray-700'
+                className={`rounded-lg px-4 py-2 text-[14px] font-medium transition-colors ${
+                  activeList === 'allow' ? 'bg-black text-white' : 'bg-neutral-200 text-black/70 hover:bg-neutral-300'
                 }`}>
                 {'Allow List'}
-              </Button>
-              <Button
+              </button>
+              <button
+                type="button"
                 onClick={() => setActiveList('deny')}
-                className={`px-4 py-2 text-base ${
-                  activeList === 'deny'
-                    ? isDarkMode
-                      ? 'bg-accent text-white'
-                      : 'bg-accent text-white'
-                    : isDarkMode
-                      ? 'bg-slate-700 text-gray-200'
-                      : 'bg-gray-200 text-gray-700'
+                className={`rounded-lg px-4 py-2 text-[14px] font-medium transition-colors ${
+                  activeList === 'deny' ? 'bg-black text-white' : 'bg-neutral-200 text-black/70 hover:bg-neutral-300'
                 }`}>
                 {'Deny List'}
-              </Button>
+              </button>
             </div>
           </div>
 
@@ -133,17 +120,14 @@ export const FirewallSettings = ({ isDarkMode }: FirewallSettingsProps) => {
                 }
               }}
               placeholder={'Enter domain or URL (e.g. example.com, localhost, 127.0.0.1)'}
-              className={`flex-1 rounded-md border px-3 py-2 text-sm ${
-                isDarkMode ? 'border-gray-600 bg-slate-700 text-white' : 'border-gray-300 bg-white text-gray-700'
-              }`}
+              className="flex-1 rounded-lg border-0 bg-[#f4f4f4] px-3 py-2 text-sm text-black outline-none focus:ring-2 focus:ring-black/20"
             />
-            <Button
+            <button
+              type="button"
               onClick={handleAddUrl}
-              className={`px-4 py-2 text-sm ${
-                isDarkMode ? 'bg-green-600 text-white hover:bg-green-700' : 'bg-green-500 text-white hover:bg-green-600'
-              }`}>
+              className="rounded-lg bg-black px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-black/90">
               {'Add'}
-            </Button>
+            </button>
           </div>
 
           <div className="max-h-64 overflow-y-auto">
@@ -151,63 +135,46 @@ export const FirewallSettings = ({ isDarkMode }: FirewallSettingsProps) => {
               allowList.length > 0 ? (
                 <ul className="space-y-2">
                   {allowList.map(url => (
-                    <li
-                      key={url}
-                      className={`flex items-center justify-between rounded-md p-2 pr-0 ${
-                        isDarkMode ? 'bg-slate-700' : 'bg-gray-100'
-                      }`}>
-                      <span className={`text-sm ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>{url}</span>
-                      <Button
+                    <li key={url} className="flex items-center justify-between rounded-xl bg-[#f4f4f4] px-3 py-2.5">
+                      <span className="text-sm text-black/70">{url}</span>
+                      <button
+                        type="button"
                         onClick={() => handleRemoveUrl(url, 'allow')}
-                        className={`rounded-l-none px-2 py-1 text-xs ${
-                          isDarkMode
-                            ? 'bg-red-600 text-white hover:bg-red-700'
-                            : 'bg-red-500 text-white hover:bg-red-600'
-                        }`}>
+                        className="rounded-lg px-2 py-1 text-xs font-medium text-red-600 transition-colors hover:bg-red-50">
                         {'Remove'}
-                      </Button>
+                      </button>
                     </li>
                   ))}
                 </ul>
               ) : (
-                <p className={`text-center text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                <p className="text-center text-sm text-black/40">
                   {'No domains in allow list. Empty allow list means all non-denied domains are allowed.'}
                 </p>
               )
             ) : denyList.length > 0 ? (
               <ul className="space-y-2">
                 {denyList.map(url => (
-                  <li
-                    key={url}
-                    className={`flex items-center justify-between rounded-md p-2 pr-0 ${
-                      isDarkMode ? 'bg-slate-700' : 'bg-gray-100'
-                    }`}>
-                    <span className={`text-sm ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>{url}</span>
-                    <Button
+                  <li key={url} className="flex items-center justify-between rounded-xl bg-[#f4f4f4] px-3 py-2.5">
+                    <span className="text-sm text-black/70">{url}</span>
+                    <button
+                      type="button"
                       onClick={() => handleRemoveUrl(url, 'deny')}
-                      className={`rounded-l-none px-2 py-1 text-xs ${
-                        isDarkMode ? 'bg-red-600 text-white hover:bg-red-700' : 'bg-red-500 text-white hover:bg-red-600'
-                      }`}>
+                      className="rounded-lg px-2 py-1 text-xs font-medium text-red-600 transition-colors hover:bg-red-50">
                       Remove
-                    </Button>
+                    </button>
                   </li>
                 ))}
               </ul>
             ) : (
-              <p className={`text-center text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                {'No domains in deny list'}
-              </p>
+              <p className="text-center text-sm text-black/40">{'No domains in deny list'}</p>
             )}
           </div>
         </div>
       </div>
 
-      <div
-        className={`rounded-lg border ${isDarkMode ? 'border-slate-700 bg-slate-800' : 'border-gray-200 bg-white'} p-6 text-left shadow-sm`}>
-        <h2 className={`mb-4 text-xl font-semibold ${isDarkMode ? 'text-gray-200' : 'text-gray-800'}`}>
-          {'How the Firewall Works'}
-        </h2>
-        <ul className={`list-disc space-y-2 pl-5 text-left text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>
+      <div className={cardClass}>
+        <h2 className="mb-4 text-lg font-medium text-black">{'How the Firewall Works'}</h2>
+        <ul className="list-disc space-y-2 pl-5 text-left text-sm text-black/60">
           {"The firewall contains a deny list and an allow list.\nIf both lists are empty, all URLs are allowed\nDeny list takes priority - if a URL matches any deny list entry, it's blocked\nWhen allow list is empty, all non-denied URLs are allowed\nWhen allow list is not empty, only matching URLs are allowed\nWildcards are NOT supported yet\nAllow list is preferred over deny list"
             .split('\n')
             .map((rule, index) => (

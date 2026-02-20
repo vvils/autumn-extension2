@@ -624,7 +624,6 @@ chrome.runtime.onConnect.addListener(port => {
 function formatProp(p: ManifestProp): string {
   let s = `${p.name} (${p.type}`;
   if (p.label && p.label !== p.name) s += `, "${p.label}"`;
-  if (p.description) s += `, ${p.description}`;
   if (p.options?.length) s += `, enum: [${p.options.join(', ')}]`;
   if (p.default !== undefined) s += `, default: ${p.default}`;
   if (p.min !== undefined) s += `, min: ${p.min}`;

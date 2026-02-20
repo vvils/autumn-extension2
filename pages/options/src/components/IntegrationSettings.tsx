@@ -42,9 +42,10 @@ export const IntegrationSettings = ({ isDarkMode = false }: IntegrationSettingsP
   const [disconnectingId, setDisconnectingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const cardClass = `rounded-lg border ${isDarkMode ? 'border-slate-700 bg-slate-800' : 'border-gray-200 bg-white'} p-6 text-left shadow-sm`;
-  const headingClass = `mb-4 text-left text-xl font-semibold ${isDarkMode ? 'text-gray-200' : 'text-gray-800'}`;
-  const labelClass = `text-xs font-medium uppercase tracking-wider ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`;
+  const cardClass =
+    'rounded-[20px] bg-white p-6 text-left shadow-[inset_0_1px_1px_#fff,inset_-1px_-1px_1px_#fff,0_0_0_transparent] hover:shadow-[inset_0_1px_1px_#fff,inset_-1px_-1px_1px_#fff,0_4px_12px_rgba(0,0,0,0.08)] transition-shadow duration-500 ease-out';
+  const headingClass = 'mb-4 text-left text-lg font-medium text-black';
+  const labelClass = `text-xs font-medium uppercase tracking-wider ${isDarkMode ? 'text-gray-400' : 'text-black/50'}`;
 
   const connectedAppSlugs = useMemo(
     () => new Set(integrationSettings.connectedAccounts.map(a => a.appSlug)),
@@ -154,9 +155,7 @@ export const IntegrationSettings = ({ isDarkMode = false }: IntegrationSettingsP
       <section className="space-y-6">
         <div className={cardClass}>
           <h2 className={headingClass}>{'Integrations'}</h2>
-          <p className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-            {'Connect to a server and sign in to manage integrations.'}
-          </p>
+          <p className="text-sm text-black/40">{'Connect to a server and sign in to manage integrations.'}</p>
         </div>
       </section>
     );
@@ -164,43 +163,32 @@ export const IntegrationSettings = ({ isDarkMode = false }: IntegrationSettingsP
 
   return (
     <section className="space-y-6">
-      {error && <div className="rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-700">{error}</div>}
+      {error && <div className="rounded-xl bg-red-50 p-4 text-sm text-red-700">{error}</div>}
 
-      {/* Connected Services */}
       <div className={cardClass}>
         <div className="mb-4 flex items-center justify-between">
-          <h2 className={`text-left text-xl font-semibold ${isDarkMode ? 'text-gray-200' : 'text-gray-800'}`}>
-            {'Connected Services'}
-          </h2>
+          <h2 className="text-left text-lg font-medium text-black">{'Connected Services'}</h2>
           <button
             onClick={refresh}
             disabled={refreshing}
-            className={`rounded-md px-3 py-1.5 text-xs font-medium ${
-              isDarkMode
-                ? 'bg-slate-600 text-gray-200 hover:bg-slate-500 disabled:opacity-50'
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200 disabled:opacity-50'
-            }`}>
+            className="rounded-lg bg-neutral-200 px-3 py-1.5 text-xs font-medium text-black/70 transition-colors hover:bg-neutral-300 disabled:opacity-50">
             {refreshing ? 'Refreshing...' : 'Refresh'}
           </button>
         </div>
 
         {integrationSettings.connectedAccounts.length === 0 ? (
-          <p className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>{'No services connected yet.'}</p>
+          <p className="text-sm text-black/40">{'No services connected yet.'}</p>
         ) : (
           <div className="space-y-2">
             {integrationSettings.connectedAccounts.map(account => (
               <div
                 key={account.accountId}
-                className={`flex items-center justify-between rounded-md border px-3 py-2 ${
-                  isDarkMode ? 'border-slate-600 bg-slate-700/50' : 'border-gray-100 bg-gray-50'
-                }`}>
-                <span className={`text-sm font-medium ${isDarkMode ? 'text-gray-200' : 'text-gray-800'}`}>
-                  {account.appName || account.appSlug}
-                </span>
+                className="flex items-center justify-between rounded-xl bg-[#f4f4f4] px-3 py-2.5">
+                <span className="text-sm font-medium text-black">{account.appName || account.appSlug}</span>
                 <button
                   onClick={() => disconnect(account.accountId)}
                   disabled={disconnectingId === account.accountId}
-                  className="rounded-md px-3 py-1 text-xs font-medium text-red-600 hover:bg-red-50 disabled:opacity-50">
+                  className="rounded-lg px-3 py-1 text-xs font-medium text-red-600 transition-colors hover:bg-red-50 disabled:opacity-50">
                   {disconnectingId === account.accountId ? 'Disconnecting...' : 'Disconnect'}
                 </button>
               </div>
@@ -209,7 +197,6 @@ export const IntegrationSettings = ({ isDarkMode = false }: IntegrationSettingsP
         )}
       </div>
 
-      {/* Available Actions */}
       {integrationSettings.availableActions.length > 0 && (
         <div className={cardClass}>
           <h2 className={headingClass}>{'Available Actions'}</h2>
@@ -219,18 +206,15 @@ export const IntegrationSettings = ({ isDarkMode = false }: IntegrationSettingsP
                 <div className="mb-2 flex items-center justify-between">
                   <h3 className={labelClass}>{appSlug}</h3>
                   {connectedAppSlugs.has(appSlug) ? (
-                    <span
-                      className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${
-                        isDarkMode ? 'bg-green-900/50 text-green-300' : 'bg-green-100 text-green-700'
-                      }`}>
+                    <span className="rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-700">
                       {'Connected'}
                     </span>
                   ) : (
                     <button
                       onClick={() => connectApp(appSlug)}
                       disabled={connectingApp !== null}
-                      className={`rounded-md px-3 py-1 text-xs font-medium text-white ${
-                        connectingApp === appSlug ? 'bg-blue-400' : 'bg-blue-600 hover:bg-blue-700'
+                      className={`rounded-lg px-3 py-1 text-xs font-medium text-white transition-colors ${
+                        connectingApp === appSlug ? 'bg-black/60' : 'bg-black hover:bg-black/90'
                       } disabled:opacity-50`}>
                       {connectingApp === appSlug ? 'Connecting...' : 'Connect'}
                     </button>
@@ -238,19 +222,9 @@ export const IntegrationSettings = ({ isDarkMode = false }: IntegrationSettingsP
                 </div>
                 <div className="space-y-2">
                   {actions.map(action => (
-                    <div
-                      key={action.key}
-                      className={`rounded-md border px-3 py-2 ${
-                        isDarkMode ? 'border-slate-600 bg-slate-700/50' : 'border-gray-100 bg-gray-50'
-                      }`}>
-                      <p className={`text-sm font-medium ${isDarkMode ? 'text-gray-200' : 'text-gray-800'}`}>
-                        {action.name}
-                      </p>
-                      {action.description && (
-                        <p className={`mt-0.5 text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                          {action.description}
-                        </p>
-                      )}
+                    <div key={action.key} className="rounded-xl bg-[#f4f4f4] px-3 py-2.5">
+                      <p className="text-sm font-medium text-black">{action.name}</p>
+                      {action.description && <p className="mt-0.5 text-xs text-black/50">{action.description}</p>}
                     </div>
                   ))}
                 </div>

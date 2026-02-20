@@ -91,7 +91,7 @@ export function ShortcutEditorModal({
       <div className="absolute inset-0 bg-black/30 backdrop-blur-[2px]" onClick={onClose} />
 
       <div
-        className={`absolute inset-x-0 bottom-0 flex max-h-[70%] flex-col rounded-t-2xl bg-white shadow-2xl transition-transform duration-200 ease-out ${open ? 'translate-y-0' : 'translate-y-full'}`}>
+        className={`absolute inset-x-0 bottom-0 flex max-h-[70%] flex-col rounded-t-[20px] bg-white shadow-[0_-4px_20px_rgba(0,0,0,0.08)] transition-transform duration-200 ease-out ${open ? 'translate-y-0' : 'translate-y-full'}`}>
         <div className="flex shrink-0 items-center justify-between px-4 py-3">
           <h2 className="text-[15px] font-semibold text-gray-900">
             {isCreateMode ? 'Create Shortcut' : 'Edit Shortcut'}
@@ -107,7 +107,7 @@ export function ShortcutEditorModal({
                   <EllipsisVertical size={16} />
                 </button>
                 {showMenu && (
-                  <div className="absolute right-0 top-full z-10 mt-1 w-40 rounded-lg border border-gray-200 bg-white py-1 shadow-lg">
+                  <div className="absolute right-0 top-full z-10 mt-1 w-40 rounded-xl bg-white py-1 shadow-[0_4px_20px_rgba(0,0,0,0.08)]">
                     <button
                       type="button"
                       onClick={() => {
@@ -135,18 +135,14 @@ export function ShortcutEditorModal({
           <div>
             <label className="mb-1.5 block text-[13px] font-medium text-gray-700">Name</label>
             <div className="flex items-center">
-              <span className="rounded-l-lg border border-r-0 border-gray-200 bg-gray-50 px-3 py-2 text-[13px] text-gray-400">
-                /
-              </span>
+              <span className="rounded-l-lg border-0 bg-[#f4f4f4] px-3 py-2 text-[13px] text-gray-400">/</span>
               <input
                 type="text"
                 value={editName}
                 onChange={e => handleNameChange(e.target.value)}
                 placeholder="my-shortcut"
-                className={`flex-1 rounded-r-lg border px-3 py-2 text-[13px] text-gray-900 outline-none focus:ring-2 ${
-                  nameError
-                    ? 'border-red-300 focus:border-red-400 focus:ring-red-100'
-                    : 'border-gray-200 focus:border-accent/40 focus:ring-accent/20'
+                className={`flex-1 rounded-r-lg border-0 bg-[#f4f4f4] px-3 py-2 text-[13px] text-gray-900 outline-none focus:ring-2 ${
+                  nameError ? 'focus:ring-red-100' : 'focus:ring-black/20'
                 }`}
               />
             </div>
@@ -160,7 +156,7 @@ export function ShortcutEditorModal({
               onChange={e => setEditPrompt(e.target.value)}
               rows={8}
               placeholder="The prompt text that will be sent..."
-              className="w-full resize-none rounded-lg border border-gray-200 px-3 py-2 text-[13px] leading-relaxed text-gray-900 outline-none focus:border-accent/40 focus:ring-2 focus:ring-accent/20"
+              className="w-full resize-none rounded-lg border-0 bg-[#f4f4f4] px-3 py-2 text-[13px] leading-relaxed text-gray-900 outline-none focus:ring-2 focus:ring-black/20"
             />
           </div>
         </div>
@@ -169,7 +165,7 @@ export function ShortcutEditorModal({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg border border-gray-200 px-3.5 py-2 text-[13px] font-medium text-gray-700 transition-colors hover:bg-gray-50">
+            className="rounded-lg border-0 bg-neutral-200 px-3.5 py-2 text-[13px] font-medium text-black/70 transition-colors hover:bg-neutral-300">
             Cancel
           </button>
           <button
