@@ -29,6 +29,7 @@ interface ChatInputProps {
   onEditShortcut?: (shortcut: { id: string; command: string; prompt: string }) => void;
   onCreateShortcut?: () => void;
   setShortcutActions?: (actions: ShortcutActions) => void;
+  setFocusInput?: (fn: () => void) => void;
   historicalSessionId?: string | null;
   onReplay?: (sessionId: string) => void;
   costData?: CostDisplayProps | null;
@@ -125,6 +126,7 @@ export default function ChatInput({
   onEditShortcut,
   onCreateShortcut,
   setShortcutActions,
+  setFocusInput,
   historicalSessionId,
   onReplay,
   costData,
@@ -197,7 +199,11 @@ export default function ChatInput({
     const el = editableRef.current;
     if (!el) return;
     const text = getPlainText(el).trim();
-    setHasContent(text.length > 0);
+    const empty = text.length === 0;
+    setHasContent(!empty);
+    if (empty && el.innerHTML !== '') {
+      el.innerHTML = '';
+    }
   }, []);
 
   const fetchOpenTabs = useCallback(async () => {
@@ -254,6 +260,12 @@ export default function ChatInput({
       });
     }
   }, [setContent, updateHasContent, resizeInput]);
+
+  useEffect(() => {
+    if (setFocusInput) {
+      setFocusInput(() => editableRef.current?.focus());
+    }
+  }, [setFocusInput]);
 
   useEffect(() => {
     if (setShortcutActions) {
@@ -595,7 +607,7 @@ export default function ChatInput({
 
   const handleQuickstartSelect = useCallback(
     (wp: WorkflowPrompt) => {
-      onSendMessage(wp.prompt, `${wp.icon} ${wp.name}`);
+      onSendMessage(wp.prompt, wp.name);
     },
     [onSendMessage],
   );
@@ -612,7 +624,7 @@ export default function ChatInput({
 .no-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
 .no-scrollbar::-webkit-scrollbar { display: none; }`}</style>
       <div
-        className="flex w-full justify-center transition-shadow duration-150 ease-out"
+        className="mx-auto flex w-full max-w-[550px] justify-center transition-shadow duration-150 ease-out"
         style={{
           borderRadius: 20,
           padding: 5.5,
@@ -723,7 +735,7 @@ export default function ChatInput({
                 <button
                   type="button"
                   onClick={() => onEditShortcut?.(selectedShortcut)}
-                  className="shrink-0 rounded-md bg-blue-50 px-2 py-0.5 text-[13px] font-medium leading-relaxed text-blue-700 transition-colors hover:opacity-80">
+                  className="shrink-0 rounded-md bg-black/[0.06] px-2 py-0.5 text-[13px] font-medium leading-relaxed text-black/60 transition-colors hover:bg-black/[0.1]">
                   /{selectedShortcut.command}
                 </button>
               )}

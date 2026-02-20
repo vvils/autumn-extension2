@@ -62,6 +62,7 @@ const manifest = withOperaSidebar(
       'unlimitedStorage',
       'webNavigation',
       'tabGroups',
+      'offscreen',
     ],
     options_page: 'options/index.html',
     background: {

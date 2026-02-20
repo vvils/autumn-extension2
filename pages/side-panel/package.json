@@ -21,6 +21,7 @@
   "dependencies": {
     "@extension/shared": "workspace:*",
     "@extension/storage": "workspace:*",
+    "framer-motion": "^11.0.0",
     "lucide-react": "^0.468.0",
     "react-markdown": "^10.1.0",
     "recharts": "^3.7.0",

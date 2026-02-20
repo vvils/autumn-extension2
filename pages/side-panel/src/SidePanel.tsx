@@ -52,51 +52,6 @@ import { useTaskTimer } from './hooks/useTaskTimer';
 import { Tooltip } from './components/Tooltip';
 import './SidePanel.css';
 
-interface SpeechRecognitionResult {
-  readonly [index: number]: SpeechRecognitionAlternative;
-  readonly length: number;
-}
-
-interface SpeechRecognitionAlternative {
-  readonly transcript: string;
-  readonly confidence: number;
-}
-
-interface SpeechRecognitionResultList {
-  readonly [index: number]: SpeechRecognitionResult;
-  readonly length: number;
-}
-
-interface SpeechRecognitionEvent extends Event {
-  readonly results: SpeechRecognitionResultList;
-}
-
-interface SpeechRecognitionErrorEvent extends Event {
-  readonly error: string;
-}
-
-interface SpeechRecognitionInstance extends EventTarget {
-  continuous: boolean;
-  interimResults: boolean;
-  lang: string;
-  onresult: ((event: SpeechRecognitionEvent) => void) | null;
-  onerror: ((event: SpeechRecognitionErrorEvent) => void) | null;
-  onend: (() => void) | null;
-  start: () => void;
-  stop: () => void;
-  abort: () => void;
-}
-
-type SpeechRecognitionConstructor = new () => SpeechRecognitionInstance;
-
-declare global {
-  interface Window {
-    chrome: typeof chrome;
-    SpeechRecognition?: SpeechRecognitionConstructor;
-    webkitSpeechRecognition?: SpeechRecognitionConstructor;
-  }
-}
-
 function serverRoleToActor(role: string): Actors {
   if (Object.values(Actors).includes(role as Actors)) return role as Actors;
   if (role === 'assistant') return Actors.SYNTHESIZER;
@@ -146,8 +101,8 @@ const SidePanel = () => {
   const heartbeatIntervalRef = useRef<number | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const setInputTextRef = useRef<((text: string) => void) | null>(null);
+  const focusInputRef = useRef<(() => void) | null>(null);
   const shortcutActionsRef = useRef<ShortcutActions | null>(null);
-  const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
   const widgetApplyCallbacksRef = useRef<Map<string, { resolve: (r: { success: boolean; error?: string }) => void }>>(
     new Map(),
   );
@@ -725,6 +680,29 @@ const SidePanel = () => {
             widgetApplyCallbacksRef.current.delete(message.requestId);
             pending.resolve({ success: message.success, error: message.error });
           }
+        } else if (message && message.type === 'voice_result') {
+          if (message.transcript && setInputTextRef.current) {
+            setInputTextRef.current(message.transcript);
+          }
+          setIsRecording(false);
+        } else if (message && message.type === 'voice_error') {
+          if (message.error === 'not-allowed') {
+            chrome.tabs.create({ url: chrome.runtime.getURL('permission/index.html') });
+            appendMessage({
+              actor: Actors.SYSTEM,
+              content: 'Please grant microphone permission in the new tab, then try again.',
+              timestamp: Date.now(),
+            });
+          } else {
+            appendMessage({
+              actor: Actors.SYSTEM,
+              content: `Voice input failed: ${message.error}`,
+              timestamp: Date.now(),
+            });
+          }
+          setIsRecording(false);
+        } else if (message && message.type === 'voice_end') {
+          setIsRecording(false);
         } else if (message && message.type === 'heartbeat_ack') {
           console.log('Heartbeat acknowledged');
         }
@@ -1090,6 +1068,7 @@ const SidePanel = () => {
     resetTimer();
     setCostData(null);
     stopConnection();
+    requestAnimationFrame(() => focusInputRef.current?.());
   };
 
   const loadChatSessions = useCallback(() => {
@@ -1106,6 +1085,10 @@ const SidePanel = () => {
   }, [hasConfiguredModels, loadChatSessions]);
 
   const handleBackToHistory = () => {
+    portRef.current?.postMessage({ type: 'cancel_task' });
+    setShowStopButton(false);
+    setInputEnabled(true);
+
     loadChatSessions();
     setMessages([]);
     setCurrentSessionId(null);
@@ -1135,9 +1118,7 @@ const SidePanel = () => {
 
   useEffect(() => {
     return () => {
-      if (recognitionRef.current) {
-        recognitionRef.current.abort();
-      }
+      portRef.current?.postMessage({ type: 'voice_stop' });
       stopConnection();
     };
   }, [stopConnection]);
@@ -1149,54 +1130,12 @@ const SidePanel = () => {
 
   const handleMicClick = () => {
     if (isRecording) {
-      if (recognitionRef.current) {
-        recognitionRef.current.abort();
-      }
+      portRef.current?.postMessage({ type: 'voice_stop' });
       setIsRecording(false);
       return;
     }
 
-    const SpeechRecognitionCtor = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognitionCtor) {
-      appendMessage({
-        actor: Actors.SYSTEM,
-        content: 'Speech recognition is not supported in this browser',
-        timestamp: Date.now(),
-      });
-      return;
-    }
-
-    const recognition = new SpeechRecognitionCtor();
-    recognition.continuous = false;
-    recognition.interimResults = false;
-    recognition.lang = navigator.language;
-
-    recognition.onresult = (event: SpeechRecognitionEvent) => {
-      const transcript = event.results[0][0].transcript;
-      if (transcript && setInputTextRef.current) {
-        setInputTextRef.current(transcript);
-      }
-    };
-
-    recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
-      console.error('Speech recognition error:', event.error);
-      if (event.error !== 'aborted') {
-        appendMessage({
-          actor: Actors.SYSTEM,
-          content: 'Speech recognition failed',
-          timestamp: Date.now(),
-        });
-      }
-      setIsRecording(false);
-    };
-
-    recognition.onend = () => {
-      setIsRecording(false);
-      recognitionRef.current = null;
-    };
-
-    recognitionRef.current = recognition;
-    recognition.start();
+    portRef.current?.postMessage({ type: 'voice_start', lang: navigator.language });
     setIsRecording(true);
   };
 
@@ -1269,6 +1208,9 @@ const SidePanel = () => {
       showStopButton={showStopButton}
       setContent={setter => {
         setInputTextRef.current = setter;
+      }}
+      setFocusInput={fn => {
+        focusInputRef.current = fn;
       }}
       onEditShortcut={handleEditShortcutFromInput}
       onCreateShortcut={handleCreateShortcut}
@@ -1351,10 +1293,10 @@ const SidePanel = () => {
       )}
 
       {hasConfiguredModels === true && (
-        <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col overflow-hidden">
+        <div className="flex w-full flex-1 flex-col overflow-hidden">
           {showingChatHistory ? (
-            <div className="flex flex-1 flex-col overflow-hidden">
-              <div className="no-scrollbar flex-1 overflow-y-auto">
+            <div className="relative flex flex-1 flex-col overflow-hidden">
+              <div className="no-scrollbar flex-1 overflow-y-auto pb-24">
                 {WORKFLOW_PROMPTS.length > 0 && (
                   <div className="pb-2 pt-3">
                     <p className="px-4 pb-2 text-[13px] font-normal text-black/40">Quick Actions</p>
@@ -1379,7 +1321,7 @@ const SidePanel = () => {
                   onSessionDelete={handleSessionDelete}
                 />
               </div>
-              {renderChatInput()}
+              <div className="absolute inset-x-0 bottom-0 z-10">{renderChatInput()}</div>
             </div>
           ) : messages.length === 0 ? (
             <div className="relative flex flex-1 flex-col overflow-hidden">

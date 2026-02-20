@@ -70,7 +70,7 @@ export default function ThinkingWidget({ state }: ThinkingWidgetProps) {
   const hasActions = state.actions.length > 0;
 
   return (
-    <div className="mx-1 mb-2 shrink-0">
+    <div className="mx-auto mb-2 w-full max-w-[550px] shrink-0 px-3">
       <button
         type="button"
         onClick={() => setExpanded(prev => !prev)}

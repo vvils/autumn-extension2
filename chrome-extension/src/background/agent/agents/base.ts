@@ -227,7 +227,10 @@ export abstract class BaseAgent<T extends z.ZodType, M = unknown> {
       let displayText = '';
       for (const field of targetFields) {
         const value = extractStreamingFieldValue(cleaned, field);
-        if (value) displayText = value;
+        if (value) {
+          displayText = value;
+          break;
+        }
       }
       if (displayText && displayText.length - lastEmitted.length >= MIN_DELTA_CHARS) {
         lastEmitted = displayText;
@@ -260,7 +263,10 @@ export abstract class BaseAgent<T extends z.ZodType, M = unknown> {
       let finalText = '';
       for (const field of targetFields) {
         const value = extractStreamingFieldValue(cleaned, field);
-        if (value) finalText = value;
+        if (value) {
+          finalText = value;
+          break;
+        }
       }
       if (finalText && finalText !== lastEmitted) {
         onChunk(finalText);

@@ -136,7 +136,7 @@ IMPORTANT — Integration routing rules:
 - Only fall back to browser automation if no connected integration covers the task.
 - Group booking email-to-quote workflow — follow this EXACT sequence, do NOT skip steps or set done=true early:
   1. gmail-find-email → find group booking inquiry emails. Use a SINGLE broad keyword for q (e.g. q: "group"), NOT a multi-word OR query.
-  2. Use your "ask_user" response field to present found emails for user to select using a markdown table (From, Date, Subject, Summary columns) with numbered options.
+  2. Use your "ask_user" response field to present found emails for user to select using a markdown table (From, Date, Subject, Summary columns) with numbered options. Always include a "Process All" option to handle every email in sequence.
   3. cache_content → cache selected email text for parsing
   4. parse_group_inquiry → extract structured booking data
   5. Use your "ask_user" response field to present the extracted booking details for user confirmation.

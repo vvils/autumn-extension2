@@ -124,6 +124,30 @@ chrome.tabs.onRemoved.addListener(async tabId => {
   }
 });
 
+let creatingOffscreen: Promise<void> | null = null;
+
+async function ensureOffscreenDocument(): Promise<void> {
+  const offscreenUrl = chrome.runtime.getURL('offscreen/offscreen.html');
+  const contexts = await chrome.runtime.getContexts({
+    contextTypes: ['OFFSCREEN_DOCUMENT'],
+    documentUrls: [offscreenUrl],
+  });
+  if (contexts.length > 0) return;
+
+  if (creatingOffscreen) {
+    await creatingOffscreen;
+    return;
+  }
+
+  creatingOffscreen = chrome.offscreen.createDocument({
+    url: offscreenUrl,
+    reasons: [chrome.offscreen.Reason.USER_MEDIA],
+    justification: 'Speech recognition requires a document context with media access',
+  });
+  await creatingOffscreen;
+  creatingOffscreen = null;
+}
+
 logger.info('background loaded');
 
 chrome.runtime.onInstalled.addListener(async () => {
@@ -286,6 +310,14 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   })();
   sendResponse({ received: true });
   return true;
+});
+
+chrome.runtime.onMessage.addListener(message => {
+  if (message?.type === 'voice_result' || message?.type === 'voice_error' || message?.type === 'voice_end') {
+    if (currentPort) {
+      currentPort.postMessage(message);
+    }
+  }
 });
 
 // Setup connection listener for long-lived connections (e.g., side panel)
@@ -573,6 +605,32 @@ chrome.runtime.onConnect.addListener(port => {
                 content: msgPayload.content,
                 timestamp: msgPayload.timestamp,
               });
+            }
+            break;
+          }
+
+          case 'voice_start': {
+            try {
+              await ensureOffscreenDocument();
+              chrome.runtime.sendMessage({
+                target: 'offscreen',
+                action: 'start',
+                lang: message.lang,
+              });
+            } catch (error) {
+              port.postMessage({
+                type: 'voice_error',
+                error: error instanceof Error ? error.message : 'Failed to start voice recognition',
+              });
+            }
+            break;
+          }
+
+          case 'voice_stop': {
+            try {
+              chrome.runtime.sendMessage({ target: 'offscreen', action: 'stop' });
+            } catch {
+              // Offscreen document may already be closed
             }
             break;
           }

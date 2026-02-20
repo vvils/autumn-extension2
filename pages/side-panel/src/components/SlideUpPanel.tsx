@@ -119,9 +119,7 @@ function QuickstartContent({
             if (e.key === 'Enter') onPromptSelect(wp);
           }}
           className="block w-full cursor-pointer rounded-[14px] opacity-65 transition-opacity duration-150 hover:bg-black/5 hover:opacity-100">
-          <div className="w-full px-3 py-[8px] text-left text-[13px] font-normal text-black/90">
-            {wp.icon} {wp.name}
-          </div>
+          <div className="w-full px-3 py-[8px] text-left text-[13px] font-normal text-black/90">{wp.name}</div>
         </div>
       ))}
     </div>
