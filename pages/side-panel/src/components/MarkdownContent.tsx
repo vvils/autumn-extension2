@@ -40,7 +40,7 @@ const components: Components = {
   th: ({ children }) => (
     <th className="whitespace-nowrap px-2.5 py-1.5 text-left font-semibold text-gray-700">{children}</th>
   ),
-  td: ({ children }) => <td className="px-2.5 py-1.5 text-gray-600">{children}</td>,
+  td: ({ children }) => <td className="whitespace-nowrap px-2.5 py-1.5 text-gray-600">{children}</td>,
 };
 
 const ALLOWED_ELEMENTS = [

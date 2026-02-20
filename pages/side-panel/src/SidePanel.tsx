@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState, useEffect, useCallback, useRef, useSyncExternalStore } from 'react';
-import { History, SquarePen, Settings } from 'lucide-react';
+import { LayoutGrid, ArrowLeft, SquarePen } from 'lucide-react';
 import {
   type Message,
   Actors,
@@ -43,12 +43,13 @@ import ChatHistoryList from './components/ChatHistoryList';
 import ThinkingWidget from './components/ThinkingWidget';
 import { ActiveGroupOverlay } from './components/ActiveGroupOverlay';
 import { AuthOverlay } from './components/AuthOverlay';
-import { SlidePanel } from './components/SlidePanel';
 import { ShortcutEditorModal } from './components/ShortcutEditorModal';
 import type { ShortcutActions } from './components/ChatInput';
+import { WORKFLOW_PROMPTS } from './constants/workflowPrompts';
 import { EventType, type AgentEvent, ExecutionState } from './types/event';
 import { useThinkingState } from './hooks/useThinkingState';
 import { useTaskTimer } from './hooks/useTaskTimer';
+import { Tooltip } from './components/Tooltip';
 import './SidePanel.css';
 
 interface SpeechRecognitionResult {
@@ -111,7 +112,7 @@ const SidePanel = () => {
   const [inputEnabled, setInputEnabled] = useState(true);
   const [showStopButton, setShowStopButton] = useState(false);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
-  const [showHistory, setShowHistory] = useState(false);
+  const [isNewChatMode, setIsNewChatMode] = useState(false);
   const [chatSessions, setChatSessions] = useState<
     Array<{ id: string; title: string; createdAt: number; source?: string }>
   >([]);
@@ -215,6 +216,8 @@ const SidePanel = () => {
   const serverSettings = useSyncExternalStore(serverSettingsStore.subscribe, serverSettingsStore.getSnapshot);
   const isAuthenticated =
     serverSettings === null ? null : Boolean(serverSettings.accessToken) && serverSettings.tokenExpiresAt > Date.now();
+
+  const showingChatHistory = hasConfiguredModels === true && messages.length === 0 && !isNewChatMode;
 
   useEffect(() => {
     checkModelConfiguration();
@@ -703,7 +706,7 @@ const SidePanel = () => {
             setIsFollowUpMode(false);
             setIsHistoricalSession(true);
           }
-          setShowHistory(false);
+          setIsNewChatMode(false);
         } else if (message && message.type === 'conversation_deleted') {
           setChatSessions(prev => prev.filter(s => s.id !== message.conversationId));
           if (message.conversationId === currentSessionId) {
@@ -1019,6 +1022,7 @@ const SidePanel = () => {
       };
 
       appendMessage(userMessage, sessionIdRef.current);
+      setIsNewChatMode(false);
 
       if (!portRef.current) {
         setupConnection();
@@ -1081,6 +1085,7 @@ const SidePanel = () => {
     setShowStopButton(false);
     setIsFollowUpMode(false);
     setIsHistoricalSession(false);
+    setIsNewChatMode(true);
     resetThinking();
     resetTimer();
     setCostData(null);
@@ -1094,19 +1099,24 @@ const SidePanel = () => {
     portRef.current?.postMessage({ type: 'get_conversations' });
   }, [setupConnection]);
 
-  const handleLoadHistory = () => {
-    loadChatSessions();
-    setShowHistory(true);
-  };
-
-  const handleBackToChat = (reset = false) => {
-    setShowHistory(false);
-    if (reset) {
-      setCurrentSessionId(null);
-      setMessages([]);
-      setIsFollowUpMode(false);
-      setIsHistoricalSession(false);
+  useEffect(() => {
+    if (hasConfiguredModels === true) {
+      loadChatSessions();
     }
+  }, [hasConfiguredModels, loadChatSessions]);
+
+  const handleBackToHistory = () => {
+    loadChatSessions();
+    setMessages([]);
+    setCurrentSessionId(null);
+    sessionIdRef.current = null;
+    setIsFollowUpMode(false);
+    setIsHistoricalSession(false);
+    setIsNewChatMode(false);
+    resetThinking();
+    resetTimer();
+    setCostData(null);
+    stopConnection();
   };
 
   const handleSessionSelect = (sessionId: string) => {
@@ -1269,45 +1279,50 @@ const SidePanel = () => {
       onReplay={handleReplay}
       costData={showCostEstimate ? costData : null}
       elapsedTime={showCostEstimate ? elapsedTime : null}
+      isInConversation={messages.length > 0 || isFollowUpMode}
     />
   );
 
   return (
     <div className="relative flex h-screen flex-col overflow-hidden bg-[#fafafa]">
-      <header className="flex shrink-0 items-center justify-between bg-[#fafafa] px-4 py-2.5">
-        <img src="/logo.svg" alt="Autumn" className="h-4" />
+      <header className="relative flex shrink-0 items-center justify-between bg-[#fafafa] px-4 py-2.5">
         <div className="flex items-center gap-1">
-          <button
-            type="button"
-            onClick={handleLoadHistory}
-            className="rounded-md p-1.5 text-gray-400 transition-colors hover:bg-black/[0.05] hover:text-gray-600"
-            aria-label="Load History">
-            <History size={15} />
-          </button>
+          <Tooltip label={showingChatHistory ? 'Home' : 'Back'}>
+            <button
+              type="button"
+              onClick={showingChatHistory ? () => chrome.tabs.create({ url: CLIENT_URL }) : handleBackToHistory}
+              className="rounded-md p-1.5 text-black/40 transition-colors hover:bg-black/[0.05] hover:text-black/60"
+              aria-label={showingChatHistory ? 'Home' : 'Back'}>
+              {showingChatHistory ? (
+                <svg width="15" height="15" viewBox="0 0 17 16" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M0.515885 16V12.1677L8.25415 6.27189L0.368489 10.3253C0.0736978 9.79465 0 8.82675 0 8.40912C0.353749 3.75142 3.19357 1.55523 4.56926 1.03935C7.87092 -0.552522 13.6587 0.0321474 16.1398 0.523466C16.7884 3.82513 13.8061 5.82971 12.2338 6.41929H15.2554C14.9607 8.83658 11.8408 10.0305 10.3177 10.3253H13.5604C12.7939 11.9171 11.1775 13.1012 10.4651 13.4943C7.92988 15.2041 4.00425 14.5506 2.35833 14.0102V16H0.515885Z" />
+                </svg>
+              ) : (
+                <ArrowLeft size={15} />
+              )}
+            </button>
+          </Tooltip>
+          <Tooltip label="Settings">
+            <button
+              type="button"
+              onClick={() => chrome.runtime.openOptionsPage()}
+              className="rounded-md p-1.5 text-black/40 transition-colors hover:bg-black/[0.05] hover:text-black/60"
+              aria-label="Settings">
+              <LayoutGrid size={15} />
+            </button>
+          </Tooltip>
+        </div>
+        <img src="/autumn-logo.svg" alt="autumn" className="absolute left-1/2 -translate-x-1/2 h-3" />
+        <Tooltip label="New Chat" align="end">
           <button
             type="button"
             onClick={handleNewChat}
-            className="rounded-md p-1.5 text-gray-400 transition-colors hover:bg-black/[0.05] hover:text-gray-600"
+            className="rounded-md p-1.5 text-black/40 transition-colors hover:bg-black/[0.05] hover:text-black/60"
             aria-label="New Chat">
             <SquarePen size={15} />
           </button>
-          <button
-            type="button"
-            onClick={() => chrome.runtime.openOptionsPage()}
-            className="rounded-md p-1.5 text-gray-400 transition-colors hover:bg-black/[0.05] hover:text-gray-600"
-            aria-label="Settings">
-            <Settings size={15} />
-          </button>
-        </div>
+        </Tooltip>
       </header>
-
-      <SlidePanel open={showHistory} onClose={() => handleBackToChat(false)} title="Chat History" side="left">
-        <ChatHistoryList
-          sessions={chatSessions}
-          onSessionSelect={handleSessionSelect}
-          onSessionDelete={handleSessionDelete}
-        />
-      </SlidePanel>
 
       {hasConfiguredModels === null && (
         <div className="flex flex-1 items-center justify-center p-8 text-black/50">
@@ -1337,14 +1352,41 @@ const SidePanel = () => {
 
       {hasConfiguredModels === true && (
         <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col overflow-hidden">
-          {messages.length === 0 ? (
+          {showingChatHistory ? (
             <div className="flex flex-1 flex-col overflow-hidden">
-              <div className="flex flex-1 flex-col items-center justify-center px-5">
-                <img src="/autumn-logo.svg" alt="Autumn" className="mb-3 h-8 opacity-40" />
-                <p className="max-w-[240px] text-center text-[13px] leading-relaxed text-black/40">
-                  {'Your AI-powered web automation assistant'}
-                </p>
+              <div className="no-scrollbar flex-1 overflow-y-auto">
+                {WORKFLOW_PROMPTS.length > 0 && (
+                  <div className="pb-2 pt-3">
+                    <p className="px-4 pb-2 text-[13px] font-normal text-black/40">Quick Actions</p>
+                    <div className="scrollbar-cute flex gap-2 overflow-x-auto px-4">
+                      {WORKFLOW_PROMPTS.map(wp => (
+                        <button
+                          key={wp.id}
+                          type="button"
+                          onClick={() => handleSendMessage(wp.prompt, wp.name)}
+                          className="group flex shrink-0 items-center gap-0.5 rounded-xl bg-black/[0.03] px-3.5 py-2 text-[13px] transition-colors duration-100 hover:bg-black/[0.06]">
+                          <span className="font-normal text-black/80 whitespace-nowrap group-hover:text-black">
+                            {wp.name}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                <ChatHistoryList
+                  sessions={chatSessions}
+                  onSessionSelect={handleSessionSelect}
+                  onSessionDelete={handleSessionDelete}
+                />
               </div>
+              {renderChatInput()}
+            </div>
+          ) : messages.length === 0 ? (
+            <div className="relative flex flex-1 flex-col overflow-hidden">
+              <div className="pointer-events-none absolute inset-0 flex items-center justify-center pb-[30%]">
+                <img src="/logo.svg" alt="Autumn" className="h-8" />
+              </div>
+              <div className="flex-1" />
               {renderChatInput()}
             </div>
           ) : (

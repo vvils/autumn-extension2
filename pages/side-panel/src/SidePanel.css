@@ -10,6 +10,7 @@ html {
 
 ::-webkit-scrollbar {
   width: 4px;
+  height: 4px;
 }
 
 ::-webkit-scrollbar-track {
@@ -28,4 +29,41 @@ html {
 .scrollbar-thin {
   scrollbar-width: thin;
   scrollbar-color: rgba(0, 0, 0, 0.12) transparent;
+}
+
+.scrollbar-cute {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+  padding-bottom: 6px;
+}
+
+.scrollbar-cute:hover {
+  scrollbar-color: rgba(0, 0, 0, 0.08) transparent;
+}
+
+.scrollbar-cute::-webkit-scrollbar {
+  height: 5px;
+}
+
+.scrollbar-cute::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: 99px;
+  transition: background 0.2s;
+}
+
+.scrollbar-cute:hover::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.10);
+}
+
+.scrollbar-cute:hover::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.18);
+}
+
+.no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
 }

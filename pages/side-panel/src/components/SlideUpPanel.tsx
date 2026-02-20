@@ -1,11 +1,11 @@
-import { useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Zap, Plus, Globe } from 'lucide-react';
 import type { SavedShortcut } from '@extension/storage';
 import type { WorkflowPrompt } from '../constants/workflowPrompts';
 
 export type SlideUpMode =
   | { kind: 'hidden' }
-  | { kind: 'quickstart'; prompts: readonly WorkflowPrompt[]; shortcuts: SavedShortcut[] }
+  | { kind: 'quickstart'; prompts: readonly WorkflowPrompt[] }
   | { kind: 'tabs'; tabs: chrome.tabs.Tab[]; query: string; selectedIndex: number }
   | { kind: 'shortcuts'; shortcuts: SavedShortcut[]; selectedIndex: number; showCreate: boolean };
 
@@ -13,7 +13,6 @@ interface SlideUpPanelProps {
   mode: SlideUpMode;
   onShortcutSelect: (shortcut: SavedShortcut) => void;
   onQuickstartSelect: (prompt: WorkflowPrompt) => void;
-  onQuickShortcutSelect: (shortcut: SavedShortcut) => void;
   onTabSelect: (tab: chrome.tabs.Tab) => void;
   onCreateShortcut?: () => void;
 }
@@ -22,46 +21,73 @@ export function SlideUpPanel({
   mode,
   onShortcutSelect,
   onQuickstartSelect,
-  onQuickShortcutSelect,
   onTabSelect,
   onCreateShortcut,
 }: SlideUpPanelProps) {
   const selectedRef = useRef<HTMLDivElement | null>(null);
+  const [rendered, setRendered] = useState<SlideUpMode>(mode);
+  const [collapsed, setCollapsed] = useState(false);
+  const latestModeRef = useRef(mode);
+  const prevKindRef = useRef(mode.kind);
+  latestModeRef.current = mode;
 
   useEffect(() => {
     selectedRef.current?.scrollIntoView({ block: 'nearest' });
-  }, [mode]);
+  }, [rendered]);
 
-  const isVisible = mode.kind !== 'hidden';
+  useEffect(() => {
+    if (mode.kind === rendered.kind) {
+      setRendered(mode);
+    }
+  }, [mode, rendered.kind]);
+
+  useEffect(() => {
+    const prevKind = prevKindRef.current;
+    prevKindRef.current = mode.kind;
+
+    const wasVisible = prevKind !== 'hidden';
+    const willBeVisible = mode.kind !== 'hidden';
+
+    if (wasVisible && willBeVisible && prevKind !== mode.kind) {
+      setCollapsed(true);
+      const timer = setTimeout(() => {
+        setRendered(latestModeRef.current);
+        setCollapsed(false);
+      }, 200);
+      return () => clearTimeout(timer);
+    }
+
+    setRendered(mode);
+    setCollapsed(false);
+    return undefined;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode.kind]);
+
+  const isVisible = rendered.kind !== 'hidden' && !collapsed;
 
   return (
     <div
-      className={`grid transition-[grid-template-rows] duration-[250ms] ease-[cubic-bezier(0.4,1,0.05,1)] ${isVisible ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}>
+      className={`grid transition-[grid-template-rows] duration-200 ease-[cubic-bezier(0.4,1,0.05,1)] ${isVisible ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}>
       <div className="overflow-hidden">
         {/* eslint-disable-next-line tailwindcss/no-custom-classname */}
         <div className="no-scrollbar max-h-[276px] overflow-y-auto pb-1.5" role="listbox">
-          {mode.kind === 'quickstart' && (
-            <QuickstartContent
-              prompts={mode.prompts}
-              shortcuts={mode.shortcuts}
-              onPromptSelect={onQuickstartSelect}
-              onShortcutSelect={onQuickShortcutSelect}
-            />
+          {rendered.kind === 'quickstart' && (
+            <QuickstartContent prompts={rendered.prompts} onPromptSelect={onQuickstartSelect} />
           )}
-          {mode.kind === 'shortcuts' && (
+          {rendered.kind === 'shortcuts' && (
             <ShortcutsContent
-              shortcuts={mode.shortcuts}
-              selectedIndex={mode.selectedIndex}
-              showCreate={mode.showCreate}
+              shortcuts={rendered.shortcuts}
+              selectedIndex={rendered.selectedIndex}
+              showCreate={rendered.showCreate}
               onSelect={onShortcutSelect}
               onCreateShortcut={onCreateShortcut}
               selectedRef={selectedRef}
             />
           )}
-          {mode.kind === 'tabs' && (
+          {rendered.kind === 'tabs' && (
             <TabsContent
-              tabs={mode.tabs}
-              selectedIndex={mode.selectedIndex}
+              tabs={rendered.tabs}
+              selectedIndex={rendered.selectedIndex}
               onSelect={onTabSelect}
               selectedRef={selectedRef}
             />
@@ -74,14 +100,10 @@ export function SlideUpPanel({
 
 function QuickstartContent({
   prompts,
-  shortcuts,
   onPromptSelect,
-  onShortcutSelect,
 }: {
   prompts: readonly WorkflowPrompt[];
-  shortcuts: SavedShortcut[];
   onPromptSelect: (p: WorkflowPrompt) => void;
-  onShortcutSelect: (s: SavedShortcut) => void;
 }) {
   return (
     <div className="flex flex-col-reverse">
@@ -99,23 +121,6 @@ function QuickstartContent({
           className="block w-full cursor-pointer rounded-[14px] opacity-65 transition-opacity duration-150 hover:bg-black/5 hover:opacity-100">
           <div className="w-full px-3 py-[8px] text-left text-[13px] font-normal text-black/90">
             {wp.icon} {wp.name}
-          </div>
-        </div>
-      ))}
-      {shortcuts.map(shortcut => (
-        <div
-          key={shortcut.id}
-          role="option"
-          aria-selected={false}
-          tabIndex={-1}
-          onMouseDown={e => e.preventDefault()}
-          onClick={() => onShortcutSelect(shortcut)}
-          onKeyDown={e => {
-            if (e.key === 'Enter') onShortcutSelect(shortcut);
-          }}
-          className="block w-full cursor-pointer rounded-[14px] opacity-65 transition-opacity duration-150 hover:bg-black/5 hover:opacity-100">
-          <div className="w-full px-3 py-[8px] text-left text-[13px] font-normal text-black/90">
-            /{shortcut.command}
           </div>
         </div>
       ))}

@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { Mic, Paperclip, Play, X, Globe } from 'lucide-react';
+import { Mic, Paperclip, Play, X, Globe, ThumbsUp, CircleHelp } from 'lucide-react';
 import { shortcutSettingsStore } from '@extension/storage';
 import type { SavedShortcut } from '@extension/storage';
 import { CostDisplay } from './CostDisplay';
@@ -8,8 +8,10 @@ import { SlideUpPanel } from './SlideUpPanel';
 import type { SlideUpMode } from './SlideUpPanel';
 import { WORKFLOW_PROMPTS } from '../constants/workflowPrompts';
 import type { WorkflowPrompt } from '../constants/workflowPrompts';
-import { captureScreenshot } from '../utils/screenshotCapture';
 import type { CaptureResult } from '../utils/screenshotCapture';
+import { FeedbackModal } from './FeedbackModal';
+import { SupportModal } from './SupportModal';
+import { Tooltip } from './Tooltip';
 
 export interface ShortcutActions {
   updateShortcut: (command: string, prompt: string) => void;
@@ -31,6 +33,7 @@ interface ChatInputProps {
   onReplay?: (sessionId: string) => void;
   costData?: CostDisplayProps | null;
   elapsedTime?: string | null;
+  isInConversation?: boolean;
 }
 
 interface AttachedFile {
@@ -126,6 +129,7 @@ export default function ChatInput({
   onReplay,
   costData,
   elapsedTime,
+  isInConversation = false,
 }: ChatInputProps) {
   const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([]);
   const [showShortcuts, setShowShortcuts] = useState(false);
@@ -143,8 +147,11 @@ export default function ChatInput({
   const [selectedTabIndex, setSelectedTabIndex] = useState(0);
   const [attachedTabs, setAttachedTabs] = useState<chrome.tabs.Tab[]>([]);
   const [atTriggerIndex, setAtTriggerIndex] = useState<number | null>(null);
+  const [showTabPicker, setShowTabPicker] = useState(false);
 
   const [attachedScreenshot, setAttachedScreenshot] = useState<CaptureResult | null>(null);
+  const [showFeedbackModal, setShowFeedbackModal] = useState(false);
+  const [showSupportModal, setShowSupportModal] = useState(false);
 
   useEffect(() => {
     shortcutSettingsStore.getSettings().then(s => setShortcuts(s.shortcuts));
@@ -270,6 +277,15 @@ export default function ChatInput({
   }, [openTabs, tabQuery]);
 
   const slideUpMode: SlideUpMode = useMemo(() => {
+    if (atTriggerIndex !== null || showTabPicker) {
+      return {
+        kind: 'tabs',
+        tabs: filteredTabs,
+        query: tabQuery,
+        selectedIndex: selectedTabIndex,
+      };
+    }
+    if (isInConversation) return { kind: 'hidden' };
     if (showShortcuts) {
       return {
         kind: 'shortcuts',
@@ -278,35 +294,21 @@ export default function ChatInput({
         showCreate: !!onCreateShortcut,
       };
     }
-    if (atTriggerIndex !== null) {
-      return {
-        kind: 'tabs',
-        tabs: filteredTabs,
-        query: tabQuery,
-        selectedIndex: selectedTabIndex,
-      };
-    }
-    if (
-      isFocused &&
-      !hasContent &&
-      !selectedShortcut &&
-      !showStopButton &&
-      !disabled &&
-      (shortcuts.length > 0 || WORKFLOW_PROMPTS.length > 0)
-    ) {
+    if (isFocused && !hasContent && !selectedShortcut && !showStopButton && !disabled && WORKFLOW_PROMPTS.length > 0) {
       return {
         kind: 'quickstart',
         prompts: WORKFLOW_PROMPTS,
-        shortcuts,
       };
     }
     return { kind: 'hidden' };
   }, [
+    isInConversation,
     showShortcuts,
     filteredShortcuts,
     effectiveIndex,
     onCreateShortcut,
     atTriggerIndex,
+    showTabPicker,
     filteredTabs,
     tabQuery,
     selectedTabIndex,
@@ -315,7 +317,6 @@ export default function ChatInput({
     selectedShortcut,
     showStopButton,
     disabled,
-    shortcuts,
   ]);
 
   const handleTabSelect = useCallback(
@@ -345,6 +346,7 @@ export default function ChatInput({
       }
 
       setAtTriggerIndex(null);
+      setShowTabPicker(false);
       setTabQuery('');
       updateHasContent();
       resizeInput();
@@ -474,7 +476,7 @@ export default function ChatInput({
         }
       }
 
-      if (atTriggerIndex !== null) {
+      if (atTriggerIndex !== null || showTabPicker) {
         if (e.key === 'ArrowDown') {
           e.preventDefault();
           setSelectedTabIndex(prev => Math.min(prev + 1, filteredTabs.length - 1));
@@ -488,6 +490,7 @@ export default function ChatInput({
         if (e.key === 'Escape') {
           e.preventDefault();
           setAtTriggerIndex(null);
+          setShowTabPicker(false);
           return;
         }
         if (e.key === 'Enter' && !e.shiftKey) {
@@ -525,6 +528,7 @@ export default function ChatInput({
       maxDropdownIndex,
       onCreateShortcut,
       atTriggerIndex,
+      showTabPicker,
       filteredTabs,
       selectedTabIndex,
       handleTabSelect,
@@ -596,32 +600,14 @@ export default function ChatInput({
     [onSendMessage],
   );
 
-  const handleQuickShortcutSelect = useCallback(
-    (shortcut: SavedShortcut) => {
-      onSendMessage(shortcut.prompt, `/${shortcut.command}`, [{ command: shortcut.command, prompt: shortcut.prompt }]);
-    },
-    [onSendMessage],
-  );
-
-  const handleScreenshotCapture = useCallback(async () => {
-    try {
-      const result = await captureScreenshot();
-      if (result) {
-        setAttachedScreenshot(result);
-      }
-    } catch (error) {
-      console.error('Screenshot capture failed:', error);
-    }
-  }, []);
-
   const placeholder = selectedShortcut
     ? ''
     : attachedFiles.length > 0 || attachedTabs.length > 0 || attachedScreenshot
-      ? 'Add a message (optional)...'
-      : 'What can I help you with?';
+      ? 'Write something …'
+      : 'Ask anything, @ for tabs, / for actions';
 
   return (
-    <div className="shrink-0 bg-[#fafafa] px-3 pb-2 pt-1.5">
+    <div className="shrink-0 bg-[#fafafa] px-3 pb-3 pt-1.5">
       <style>{`[contenteditable][data-placeholder]:empty::before { content: attr(data-placeholder); color: #9ca3af; pointer-events: none; }
 .no-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
 .no-scrollbar::-webkit-scrollbar { display: none; }`}</style>
@@ -643,6 +629,10 @@ export default function ChatInput({
         onBlurCapture={(e: React.FocusEvent) => {
           if (!e.currentTarget.contains(e.relatedTarget as Node)) {
             setIsFocused(false);
+            setShowTabPicker(false);
+            setAtTriggerIndex(null);
+            setShowShortcuts(false);
+            setSlashTriggerIndex(null);
           }
         }}>
         <div className="w-full">
@@ -650,74 +640,83 @@ export default function ChatInput({
             mode={slideUpMode}
             onShortcutSelect={handleShortcutSelect}
             onQuickstartSelect={handleQuickstartSelect}
-            onQuickShortcutSelect={handleQuickShortcutSelect}
             onTabSelect={handleTabSelect}
             onCreateShortcut={handleCreateShortcutFromDropdown}
           />
           <div
-            className="relative w-full overflow-hidden rounded-[14px] border border-[rgba(0,0,0,0.07)] bg-white px-4 pb-2.5 pt-3.5 transition-colors duration-[400ms] ease-[cubic-bezier(0.16,1,0.3,1)] hover:border-[rgba(0,0,0,0.1)]"
+            className="relative w-full overflow-hidden rounded-[14px] border border-[rgba(0,0,0,0.07)] bg-white pb-2.5 pl-2.5 pr-2.5 pt-2.5 transition-colors duration-[400ms] ease-[cubic-bezier(0.16,1,0.3,1)] hover:border-[rgba(0,0,0,0.1)]"
             style={{
               boxShadow: '0 1px 0 0 rgba(255,255,255,0.4) inset, 0 1px 4px 0 rgba(0,0,0,0.08)',
             }}>
-            {(attachedTabs.length > 0 || attachedScreenshot) && (
-              <div className="mb-2 flex flex-wrap gap-1.5">
-                {attachedTabs.map(tab => (
-                  <div
-                    key={tab.id}
-                    className="flex h-[26px] items-center gap-1.5 rounded-lg bg-[#5B5B5B15] px-2 text-[13px] opacity-80 transition-colors hover:bg-[#5B5B5B20]">
-                    {tab.favIconUrl ? (
-                      <img src={tab.favIconUrl} alt="" className="size-[13px] shrink-0 rounded-sm" />
-                    ) : (
-                      <Globe size={13} className="shrink-0 text-black/40" />
-                    )}
-                    <span className="max-w-[120px] truncate text-black/70">{tab.title || 'Untitled'}</span>
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveTab(tab.id!)}
-                      className="ml-0.5 rounded-full p-0.5 transition-colors hover:bg-black/10"
-                      aria-label={`Remove ${tab.title}`}>
-                      <X size={10} />
-                    </button>
-                  </div>
-                ))}
-                {attachedScreenshot && (
-                  <div className="flex h-[26px] items-center gap-1.5 rounded-lg bg-[#5B5B5B15] px-2 text-[13px] opacity-80 transition-colors hover:bg-[#5B5B5B20]">
-                    <img
-                      src={attachedScreenshot.croppedDataUrl}
-                      alt="Screenshot"
-                      className="h-[18px] shrink-0 rounded-sm"
-                    />
-                    <span className="text-black/70">Screenshot</span>
-                    <button
-                      type="button"
-                      onClick={() => setAttachedScreenshot(null)}
-                      className="ml-0.5 rounded-full p-0.5 transition-colors hover:bg-black/10"
-                      aria-label="Remove screenshot">
-                      <X size={10} />
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {attachedFiles.length > 0 && (
-              <div className="mb-2 flex flex-wrap gap-1.5">
-                {attachedFiles.map((file, index) => (
-                  <div
-                    key={index}
-                    className="flex items-center gap-1 rounded-full bg-black/[0.05] px-2.5 py-0.5 text-[11px] text-black/70">
-                    <span className="max-w-[120px] truncate">{file.name}</span>
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveFile(index)}
-                      className="ml-0.5 rounded-full p-0.5 transition-colors hover:bg-black/10"
-                      aria-label={`Remove ${file.name}`}>
-                      <X size={10} />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
+            <div className="mb-2 flex flex-wrap gap-1.5">
+              <button
+                type="button"
+                onMouseDown={e => e.preventDefault()}
+                onClick={() => {
+                  if (showTabPicker || atTriggerIndex !== null) {
+                    setShowTabPicker(false);
+                    setAtTriggerIndex(null);
+                  } else {
+                    fetchOpenTabs();
+                    setShowTabPicker(true);
+                  }
+                }}
+                disabled={disabled}
+                className="flex h-[26px] items-center rounded-lg bg-[#5B5B5B15] px-2 text-[13px] opacity-80 transition-colors hover:bg-[#5B5B5B20] disabled:cursor-not-allowed disabled:opacity-40"
+                aria-label="Add tab context">
+                <span className="font-medium text-black/60">@</span>
+              </button>
+              {attachedTabs.map(tab => (
+                <div
+                  key={tab.id}
+                  className="flex h-[26px] items-center gap-1.5 rounded-lg bg-[#5B5B5B15] px-2 text-[13px] opacity-80 transition-colors hover:bg-[#5B5B5B20]">
+                  {tab.favIconUrl ? (
+                    <img src={tab.favIconUrl} alt="" className="size-[13px] shrink-0 rounded-sm" />
+                  ) : (
+                    <Globe size={13} className="shrink-0 text-black/40" />
+                  )}
+                  <span className="max-w-[120px] truncate text-black/70">{tab.title || 'Untitled'}</span>
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveTab(tab.id!)}
+                    className="ml-0.5 rounded-full p-0.5 transition-colors hover:bg-black/10"
+                    aria-label={`Remove ${tab.title}`}>
+                    <X size={10} />
+                  </button>
+                </div>
+              ))}
+              {attachedScreenshot && (
+                <div className="flex h-[26px] items-center gap-1.5 rounded-lg bg-[#5B5B5B15] px-2 text-[13px] opacity-80 transition-colors hover:bg-[#5B5B5B20]">
+                  <img
+                    src={attachedScreenshot.croppedDataUrl}
+                    alt="Screenshot"
+                    className="h-[18px] shrink-0 rounded-sm"
+                  />
+                  <span className="text-black/70">Screenshot</span>
+                  <button
+                    type="button"
+                    onClick={() => setAttachedScreenshot(null)}
+                    className="ml-0.5 rounded-full p-0.5 transition-colors hover:bg-black/10"
+                    aria-label="Remove screenshot">
+                    <X size={10} />
+                  </button>
+                </div>
+              )}
+              {attachedFiles.map((file, index) => (
+                <div
+                  key={`file-${index}`}
+                  className="flex h-[26px] items-center gap-1.5 rounded-lg bg-[#5B5B5B15] px-2 text-[13px] opacity-80 transition-colors hover:bg-[#5B5B5B20]">
+                  <span className="max-w-[120px] truncate text-black/70">{file.name}</span>
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveFile(index)}
+                    className="ml-0.5 rounded-full p-0.5 transition-colors hover:bg-black/10"
+                    aria-label={`Remove ${file.name}`}>
+                    <X size={10} />
+                  </button>
+                </div>
+              ))}
+            </div>
 
             <div className="flex items-start gap-1.5">
               {selectedShortcut && (
@@ -737,57 +736,66 @@ export default function ChatInput({
                 aria-disabled={disabled}
                 suppressContentEditableWarning
                 data-placeholder={placeholder}
+                onFocus={() => {
+                  setShowTabPicker(false);
+                  setAtTriggerIndex(null);
+                }}
                 onInput={handleInput}
                 onKeyDown={handleKeyDown}
                 onKeyUp={(e: React.KeyboardEvent) => {
                   if (e.key === 'ArrowUp' || e.key === 'ArrowDown' || e.key === 'Escape') return;
                   recheckTriggerContext();
                 }}
-                onClick={() => recheckTriggerContext()}
+                onClick={() => {
+                  setShowTabPicker(false);
+                  setAtTriggerIndex(null);
+                  recheckTriggerContext();
+                }}
                 onPaste={handlePaste}
                 onBlur={() => {
                   setShowShortcuts(false);
                   setSlashTriggerIndex(null);
                   setAtTriggerIndex(null);
+                  setShowTabPicker(false);
                 }}
-                className={`max-h-[200px] min-h-[24px] w-full resize-none overflow-y-auto whitespace-pre-wrap break-words bg-transparent text-[14px] leading-relaxed text-black outline-none ${disabled ? 'cursor-not-allowed opacity-50' : ''}`}
+                className={`max-h-[200px] min-h-[44px] w-full resize-none overflow-y-auto whitespace-pre-wrap break-words bg-transparent text-[14px] leading-[1.75] text-black outline-none ${disabled ? 'cursor-not-allowed opacity-50' : ''}`}
               />
             </div>
 
             <div className="mt-2 flex items-center justify-between">
               <div className="flex items-center gap-1">
-                <button
-                  type="button"
-                  onClick={handleFileSelect}
-                  disabled={disabled}
-                  aria-label="Attach files"
-                  title="Attach text files (txt, md, json, csv, etc.)"
-                  className={`rounded-lg p-1.5 transition-colors ${disabled ? 'cursor-not-allowed opacity-50' : 'text-gray-400 hover:bg-gray-100 hover:text-gray-600'}`}>
-                  <Paperclip size={15} />
-                </button>
+                <Tooltip label="Attach files" side="above" align="start">
+                  <button
+                    type="button"
+                    onClick={handleFileSelect}
+                    disabled={disabled}
+                    aria-label="Attach files"
+                    className={`rounded-lg p-1.5 transition-colors ${disabled ? 'cursor-not-allowed opacity-50' : 'text-gray-400 hover:bg-gray-100 hover:text-gray-600'}`}>
+                    <Paperclip size={15} />
+                  </button>
+                </Tooltip>
 
-                <button
-                  type="button"
-                  onClick={handleScreenshotCapture}
-                  disabled={disabled}
-                  aria-label="Capture screenshot"
-                  title="Capture a screen region"
-                  className={`rounded-lg p-1.5 transition-colors ${disabled ? 'cursor-not-allowed opacity-50' : 'text-gray-400 hover:bg-gray-100 hover:text-gray-600'}`}>
-                  <svg
-                    width="15"
-                    height="15"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round">
-                    <path d="M7 2H2v5" />
-                    <path d="M17 2h5v5" />
-                    <path d="M7 22H2v-5" />
-                    <path d="M17 22h5v-5" />
-                  </svg>
-                </button>
+                <Tooltip label="Send feedback" side="above">
+                  <button
+                    type="button"
+                    onClick={() => setShowFeedbackModal(true)}
+                    disabled={disabled}
+                    aria-label="Send feedback"
+                    className={`rounded-lg p-1.5 transition-colors ${disabled ? 'cursor-not-allowed opacity-50' : 'text-gray-400 hover:bg-gray-100 hover:text-gray-600'}`}>
+                    <ThumbsUp size={15} />
+                  </button>
+                </Tooltip>
+
+                <Tooltip label="Contact support" side="above">
+                  <button
+                    type="button"
+                    onClick={() => setShowSupportModal(true)}
+                    disabled={disabled}
+                    aria-label="Contact support"
+                    className={`rounded-lg p-1.5 transition-colors ${disabled ? 'cursor-not-allowed opacity-50' : 'text-gray-400 hover:bg-gray-100 hover:text-gray-600'}`}>
+                    <CircleHelp size={15} />
+                  </button>
+                </Tooltip>
 
                 <input
                   ref={fileInputRef}
@@ -811,21 +819,23 @@ export default function ChatInput({
 
               <div className="flex items-center gap-1.5">
                 {onMicClick && (
-                  <button
-                    type="button"
-                    onClick={onMicClick}
-                    disabled={disabled}
-                    aria-label={isRecording ? 'Stop recording' : 'Start voice input'}
-                    className={`relative rounded-lg p-1.5 transition-colors ${
-                      disabled
-                        ? 'cursor-not-allowed opacity-50'
-                        : isRecording
-                          ? 'bg-red-100 text-red-500 hover:bg-red-200'
-                          : 'text-gray-400 hover:bg-gray-100 hover:text-gray-600'
-                    }`}>
-                    {isRecording && <span className="absolute inset-0 animate-voice-pulse rounded-lg bg-red-400" />}
-                    <Mic size={16} strokeWidth={2} className="relative" />
-                  </button>
+                  <Tooltip label="Voice input" side="above">
+                    <button
+                      type="button"
+                      onClick={onMicClick}
+                      disabled={disabled}
+                      aria-label={isRecording ? 'Stop recording' : 'Start voice input'}
+                      className={`relative rounded-lg p-1.5 transition-colors ${
+                        disabled
+                          ? 'cursor-not-allowed opacity-50'
+                          : isRecording
+                            ? 'bg-red-100 text-red-500 hover:bg-red-200'
+                            : 'text-gray-400 hover:bg-gray-100 hover:text-gray-600'
+                      }`}>
+                      {isRecording && <span className="absolute inset-0 animate-voice-pulse rounded-lg bg-red-400" />}
+                      <Mic size={16} strokeWidth={2} className="relative" />
+                    </button>
+                  </Tooltip>
                 )}
 
                 {historicalSessionId ? (
@@ -873,7 +883,9 @@ export default function ChatInput({
           </div>
         </div>
       </div>
-      <p className="mt-1.5 text-center text-[11px] text-gray-400/80">AI may produce inaccurate information</p>
+
+      <FeedbackModal open={showFeedbackModal} onClose={() => setShowFeedbackModal(false)} />
+      <SupportModal open={showSupportModal} onClose={() => setShowSupportModal(false)} />
     </div>
   );
 }

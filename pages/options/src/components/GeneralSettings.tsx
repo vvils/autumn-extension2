@@ -114,13 +114,11 @@ export const GeneralSettings = ({ isDarkMode = false }: GeneralSettingsProps) =>
                 {'Show visual highlights on interactive elements (e.g. buttons, links, etc.)'}
               </p>
             </div>
-            <div
-              className={`relative inline-flex items-center ${settings.useVision ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}>
+            <div className="relative inline-flex cursor-pointer items-center">
               <input
                 id="displayHighlights"
                 type="checkbox"
                 checked={settings.displayHighlights}
-                disabled={settings.useVision}
                 onChange={e => updateSetting('displayHighlights', e.target.checked)}
                 className="peer sr-only"
               />
@@ -129,7 +127,6 @@ export const GeneralSettings = ({ isDarkMode = false }: GeneralSettingsProps) =>
               </label>
             </div>
           </div>
-          {settings.useVision && <p className="text-xs text-black/40">{'Required when Vision is enabled'}</p>}
 
           <div className="flex items-center justify-between">
             <div>

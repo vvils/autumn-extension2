@@ -340,12 +340,14 @@ export const askUserActionSchema: ActionSchema = {
     options: z
       .array(
         z.object({
-          label: z.string().describe('Button label'),
-          value: z.string().describe('Value returned if selected'),
+          label: z.string().describe('Button label (plain text, no emojis)'),
+          value: z.string().describe('Value returned if selected (plain text, no emojis)'),
         }),
       )
       .min(2)
       .optional()
-      .describe('Array of {label, value} objects as predefined choices (min 2). Omit for free-text only.'),
+      .describe(
+        'Array of {label, value} objects as predefined choices (min 2). Labels and values must be plain text without emojis. Omit for free-text only.',
+      ),
   }),
 };

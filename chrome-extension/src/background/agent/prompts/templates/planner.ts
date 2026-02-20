@@ -139,7 +139,7 @@ IMPORTANT — Integration routing rules:
   2. Use your "ask_user" response field to present found emails for user to select using a markdown table (From, Date, Subject, Summary columns) with numbered options.
   3. cache_content → cache selected email text for parsing
   4. parse_group_inquiry → extract structured booking data
-  5. Use your "ask_user" response field to present parsed data for user confirmation.
+  5. Use your "ask_user" response field to present the extracted booking details for user confirmation.
   6. Use your "ask_user" response field to ask what discount % or special pricing to offer.
   7. generate_group_quote → generates quote, shows HTML email preview for user approval (built-in confirmation, sole action in its step). Do NOT follow with ask_user — approval is already handled.
   8. send_group_quote_email → sends the approved email with built-in user confirmation (go here directly after step 7)
@@ -186,7 +186,7 @@ When determining if a task is "done":
     "final_answer": "[string type], complete user-friendly answer to the task (MUST be provided when done=true, empty otherwise)",
     "reasoning": "[string type], explain your reasoning for the suggested next steps or completion decision",
     "task_type": "[string type], one of: general, ${serverAvailable ? 'domain_query, ' : ''}browser",
-    "ask_user": "(optional object) Ask the user a question mid-workflow. Fields: question (string, required), context (string, optional markdown with tables/bold/bullets), options (array of {label, value}, optional, min 2). When present, done MUST be false."
+    "ask_user": "(optional object) Ask the user a question mid-workflow. Fields: question (string, required), context (string, optional markdown with tables/bold/bullets), options (array of {label, value}, optional, min 2, plain text only — no emojis in labels or values). When present, done MUST be false."
 }
 
 # IMPORTANT FIELD RELATIONSHIPS:
