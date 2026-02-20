@@ -8,19 +8,7 @@ import {
 import type { CuratedAction } from '@extension/storage';
 import { createFrontendClient } from '@pipedream/sdk/browser';
 import type { IconType } from 'react-icons';
-import {
-  FiMail,
-  FiCalendar,
-  FiFileText,
-  FiMessageSquare,
-  FiGrid,
-  FiDatabase,
-  FiTrello,
-  FiGithub,
-  FiSlack,
-  FiBox,
-  FiChevronRight,
-} from 'react-icons/fi';
+import { FiBox, FiChevronRight, FiPlus } from 'react-icons/fi';
 
 // --- Types ---
 
@@ -41,50 +29,78 @@ function formatSlug(slug: string): string {
     .join(' ');
 }
 
-const APP_ICONS: Record<string, IconType> = {
-  gmail: FiMail,
-  'google-calendar': FiCalendar,
-  'google-sheets': FiGrid,
-  'google-docs': FiFileText,
-  slack: FiSlack,
-  github: FiGithub,
-  trello: FiTrello,
-  notion: FiFileText,
-  airtable: FiDatabase,
-  discord: FiMessageSquare,
+const APP_LOGOS: Record<string, string> = {
+  gmail: 'https://assets.pipedream.net/s.v0/app_OQYhq7/logo/orig',
+  'google-calendar': 'https://assets.pipedream.net/s.v0/app_13Gh2V/logo/orig',
 };
 
+const APP_DESCRIPTIONS: Record<string, string> = {
+  gmail: 'Read, send, and manage your email messages',
+  'google-calendar': 'Create events and manage your calendar',
+};
+
+type AppCategory = 'Communications' | 'Productivity' | 'Operations';
+
+const APP_CATEGORIES: Record<string, AppCategory> = {
+  gmail: 'Communications',
+  'google-calendar': 'Productivity',
+};
+
+const CATEGORY_ORDER: AppCategory[] = ['Communications', 'Productivity', 'Operations'];
+
+const FALLBACK_ICON: IconType = FiBox;
+
 function AppIcon({ appSlug, size = 'sm' }: { appSlug: string; size?: 'sm' | 'lg' }) {
-  const Icon = APP_ICONS[appSlug] ?? FiBox;
-  const px = size === 'lg' ? 'h-12 w-12' : 'h-9 w-9';
-  const iconSize = size === 'lg' ? 'h-6 w-6' : 'h-4 w-4';
+  const logoUrl = APP_LOGOS[appSlug];
+  const px = size === 'lg' ? 48 : 24;
+
+  if (logoUrl) {
+    return <img src={logoUrl} alt="" width={px} height={px} className="shrink-0 rounded" />;
+  }
+
+  const Icon = FALLBACK_ICON;
+  const wrapperClass = size === 'lg' ? 'h-12 w-12' : 'h-6 w-6';
+  const iconClass = size === 'lg' ? 'h-6 w-6' : 'h-4 w-4';
   return (
-    <div className={`${px} flex shrink-0 items-center justify-center rounded-xl bg-[#f4f4f4]`}>
-      <Icon className={`${iconSize} text-black/60`} />
+    <div className={`${wrapperClass} flex shrink-0 items-center justify-center rounded-xl bg-[#f4f4f4]`}>
+      <Icon className={`${iconClass} text-black/60`} />
     </div>
   );
 }
 
-function AppTile({ app, onClick }: { app: AppCard; onClick: () => void }) {
+function AppTile({ app, onClick, showPlus }: { app: AppCard; onClick: () => void; showPlus?: boolean }) {
+  const subtitle =
+    APP_DESCRIPTIONS[app.appSlug] ??
+    app.actions[0]?.description ??
+    `${app.actions.length} ${app.actions.length === 1 ? 'action' : 'actions'}`;
+
   return (
     <button
       type="button"
       onClick={onClick}
-      className="relative flex items-center gap-3 rounded-[16px] bg-white px-4 py-3.5 text-left shadow-[inset_0_1px_1px_#fff,inset_-1px_-1px_1px_#fff,0_0_0_transparent] transition-shadow duration-300 hover:shadow-[inset_0_1px_1px_#fff,inset_-1px_-1px_1px_#fff,0_4px_12px_rgba(0,0,0,0.08)]">
-      <AppIcon appSlug={app.appSlug} />
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium text-black">{app.appName}</p>
-        <p className="text-xs text-black/40">
-          {app.actions.length} {app.actions.length === 1 ? 'action' : 'actions'}
-        </p>
+      style={{
+        filter: 'drop-shadow(rgba(0,0,0,0.07) 0px 0.5px 0.5px) drop-shadow(rgba(0,0,0,0.06) 0px 1px 2px)',
+      }}
+      className="h-[188px] w-52 flex-shrink-0 text-left transition-shadow duration-300 hover:shadow-md rounded-[24px]">
+      <div className="flex h-full w-full flex-col justify-between rounded-[24px] bg-white p-6 shadow-[inset_0_1px_1px_rgba(255,255,255,1),inset_-1px_-1px_1px_rgba(255,255,255,1)]">
+        <div className="flex items-start justify-between">
+          <AppIcon appSlug={app.appSlug} />
+          {showPlus && (
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-black/5">
+              <FiPlus className="h-4 w-4 text-black/40" />
+            </div>
+          )}
+        </div>
+        <div className="min-w-0">
+          <p className="truncate text-md font-medium text-black">{app.appName}</p>
+          <p className="line-clamp-2 text-xs text-neutral-500">{subtitle}</p>
+        </div>
       </div>
-      {app.isConnected && <span className="absolute right-3 top-3 h-2 w-2 rounded-full bg-green-500" />}
-      <FiChevronRight className="h-4 w-4 shrink-0 text-black/20" />
     </button>
   );
 }
 
-// --- Server fetch (unchanged) ---
+// --- Server fetch ---
 
 interface IntegrationSettingsProps {
   isDarkMode?: boolean;
@@ -125,7 +141,6 @@ export const IntegrationSettings = ({ isDarkMode: _isDarkMode = false }: Integra
 
   const cardClass =
     'rounded-[20px] bg-white p-6 text-left shadow-[inset_0_1px_1px_#fff,inset_-1px_-1px_1px_#fff,0_0_0_transparent] hover:shadow-[inset_0_1px_1px_#fff,inset_-1px_-1px_1px_#fff,0_4px_12px_rgba(0,0,0,0.08)] transition-shadow duration-500 ease-out';
-  const labelClass = 'text-xs font-medium uppercase tracking-wider text-black/50';
 
   // --- Data derivation ---
 
@@ -142,7 +157,7 @@ export const IntegrationSettings = ({ isDarkMode: _isDarkMode = false }: Integra
       else actionsBySlug.set(action.appSlug, [action]);
     }
 
-    const allSlugs = new Set([...accountsBySlug.keys(), ...actionsBySlug.keys()]);
+    const allSlugs = new Set([...accountsBySlug.keys(), ...actionsBySlug.keys(), ...Object.keys(APP_LOGOS)]);
     return Array.from(allSlugs).map(slug => {
       const account = accountsBySlug.get(slug);
       return {
@@ -159,7 +174,7 @@ export const IntegrationSettings = ({ isDarkMode: _isDarkMode = false }: Integra
   const exploreApps = useMemo(() => appCards.filter(a => !a.isConnected), [appCards]);
   const selectedAppData = useMemo(() => appCards.find(a => a.appSlug === selectedApp) ?? null, [appCards, selectedApp]);
 
-  // --- Callbacks (unchanged) ---
+  // --- Callbacks ---
 
   const refresh = useCallback(async () => {
     setRefreshing(true);
@@ -257,11 +272,11 @@ export const IntegrationSettings = ({ isDarkMode: _isDarkMode = false }: Integra
     [refresh],
   );
 
-  // --- Auth gate (unchanged) ---
+  // --- Auth gate ---
 
   if (!settings.serverUrl || !isAuthenticated) {
     return (
-      <section className="space-y-6">
+      <section className="mt-12">
         <div className={cardClass}>
           <h2 className="mb-4 text-left text-lg font-medium text-black">{'Integrations'}</h2>
           <p className="text-sm text-black/40">{'Connect to a server and sign in to manage integrations.'}</p>
@@ -307,7 +322,7 @@ export const IntegrationSettings = ({ isDarkMode: _isDarkMode = false }: Integra
 
         {selectedAppData.actions.length > 0 && (
           <div className={cardClass}>
-            <h3 className={`${labelClass} mb-3`}>Actions</h3>
+            <h3 className="mb-3 text-xs font-medium uppercase tracking-wider text-black/50">Actions</h3>
             <div className="space-y-2">
               {selectedAppData.actions.map(action => (
                 <div key={action.key} className="rounded-xl bg-[#f4f4f4] px-3 py-2.5">
@@ -345,12 +360,15 @@ export const IntegrationSettings = ({ isDarkMode: _isDarkMode = false }: Integra
   // --- Cards view ---
 
   return (
-    <section className="space-y-6">
+    <div>
       {error && <div className="rounded-xl bg-red-50 p-4 text-sm text-red-700">{error}</div>}
 
-      <div>
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className={labelClass}>Active</h2>
+      <section className="mt-12">
+        <div className="mb-6 flex items-center justify-between">
+          <div>
+            <h2 className="text-lg font-medium text-black">Active</h2>
+            <p className="py-0.5 text-sm text-black/50">Your connected services</p>
+          </div>
           <button
             type="button"
             onClick={refresh}
@@ -362,24 +380,44 @@ export const IntegrationSettings = ({ isDarkMode: _isDarkMode = false }: Integra
         {activeApps.length === 0 ? (
           <p className="text-sm text-black/40">No services connected yet.</p>
         ) : (
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-            {activeApps.map(app => (
-              <AppTile key={app.appSlug} app={app} onClick={() => setSelectedApp(app.appSlug)} />
-            ))}
+          <div className="relative">
+            <div className="flex gap-4 overflow-x-auto pb-2">
+              {activeApps.map(app => (
+                <AppTile key={app.appSlug} app={app} onClick={() => setSelectedApp(app.appSlug)} />
+              ))}
+            </div>
+            <div className="pointer-events-none absolute bottom-0 right-0 top-0 w-12 bg-gradient-to-l from-[#f4f4f4] to-transparent" />
           </div>
         )}
-      </div>
+      </section>
 
       {exploreApps.length > 0 && (
-        <div>
-          <h2 className={`${labelClass} mb-3`}>Explore</h2>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-            {exploreApps.map(app => (
-              <AppTile key={app.appSlug} app={app} onClick={() => setSelectedApp(app.appSlug)} />
-            ))}
+        <section className="mt-12">
+          <div className="mb-8">
+            <h2 className="text-lg font-medium text-black">Explore</h2>
+            <p className="py-0.5 text-sm text-black/50">Enable more Abilities to extend Dex&apos;s capabilities</p>
           </div>
-        </div>
+          <div className="space-y-8">
+            {CATEGORY_ORDER.map(category => {
+              const categoryApps = exploreApps.filter(a => APP_CATEGORIES[a.appSlug] === category);
+              if (categoryApps.length === 0) return null;
+              return (
+                <div key={category}>
+                  <h3 className="mb-4 text-sm font-medium text-black/40">{category}</h3>
+                  <div className="relative">
+                    <div className="flex gap-4 overflow-x-auto pb-2">
+                      {categoryApps.map(app => (
+                        <AppTile key={app.appSlug} app={app} onClick={() => setSelectedApp(app.appSlug)} showPlus />
+                      ))}
+                    </div>
+                    <div className="pointer-events-none absolute bottom-0 right-0 top-0 w-12 bg-gradient-to-l from-[#f4f4f4] to-transparent" />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </section>
       )}
-    </section>
+    </div>
   );
 };
