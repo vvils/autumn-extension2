@@ -15,6 +15,9 @@
 **/.env.test.local
 **/.env.production.local
 
+# Vite temp files
+*.timestamp-*
+
 # etc
 .DS_Store
 .idea

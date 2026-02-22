@@ -34,11 +34,6 @@ export default {
           '86%': { backgroundPosition: '-200% 0', opacity: '1' },
           '100%': { backgroundPosition: '-202% 0', opacity: '0.99' },
         },
-        shine: {
-          '0%': { backgroundPosition: '0% 0%' },
-          '50%': { backgroundPosition: '100% 100%' },
-          '100%': { backgroundPosition: '0% 0%' },
-        },
       },
       animation: {
         progress: 'progress 1.5s infinite ease-in-out',
@@ -46,7 +41,6 @@ export default {
         'voice-pulse': 'voicePulse 1.6s ease-out infinite',
         'slide-in': 'slideIn 150ms ease-out both',
         shimmer: 'shimmerLoop 1s linear infinite',
-        shine: 'shine var(--duration) infinite linear',
       },
     },
   },

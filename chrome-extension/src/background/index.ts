@@ -17,7 +17,6 @@ import { createLogger } from './log';
 import { ExecutionState } from './agent/event/types';
 import { createChatModel } from './agent/helper';
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
-import { DEFAULT_AGENT_OPTIONS } from './agent/types';
 import { injectBuildDomTreeScripts } from './browser/dom/service';
 import { analytics } from './services/analytics';
 import { ServerClient, detectTokenFromTabs, listenForWebAppAuth, watchTabsForAuth } from './services/server';
@@ -420,28 +419,6 @@ chrome.runtime.onConnect.addListener(port => {
             const screenshot = await page.takeScreenshot();
             logger.info('screenshot', message.tabId, screenshot);
             return port.postMessage({ type: 'success', screenshot });
-          }
-
-          case 'state': {
-            try {
-              const browserState = await browserContext.getState(true);
-              const elementsText = browserState.elementTree.clickableElementsToString(
-                DEFAULT_AGENT_OPTIONS.includeAttributes,
-              );
-
-              logger.info('state', browserState);
-              logger.info('interactive elements', elementsText);
-              return port.postMessage({ type: 'success', msg: 'State printed to console' });
-            } catch (error) {
-              logger.error('Failed to get state:', error);
-              return port.postMessage({ type: 'error', error: 'Failed to get state' });
-            }
-          }
-
-          case 'nohighlight': {
-            const page = await browserContext.getCurrentPage();
-            await page.removeHighlight();
-            return port.postMessage({ type: 'success', msg: 'highlight removed' });
           }
 
           case 'replay': {

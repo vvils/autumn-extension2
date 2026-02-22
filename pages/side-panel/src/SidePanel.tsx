@@ -41,6 +41,7 @@ import MessageList from './components/MessageList';
 import ChatInput from './components/ChatInput';
 import ChatHistoryList from './components/ChatHistoryList';
 import InlineToolChain from './components/InlineToolChain';
+import { ShimmerText } from './components/ShimmerText';
 import { ActiveGroupOverlay } from './components/ActiveGroupOverlay';
 import { AuthOverlay } from './components/AuthOverlay';
 import { ShortcutEditorModal } from './components/ShortcutEditorModal';
@@ -48,6 +49,7 @@ import type { ShortcutActions } from './components/ChatInput';
 import { WORKFLOW_PROMPTS } from './constants/workflowPrompts';
 import { EventType, type AgentEvent, ExecutionState } from './types/event';
 import { useThinkingState } from './hooks/useThinkingState';
+import type { ToolChainSegment } from './hooks/useThinkingState';
 import { useTaskTimer } from './hooks/useTaskTimer';
 import { Tooltip } from './components/Tooltip';
 import './SidePanel.css';
@@ -93,8 +95,10 @@ const SidePanel = () => {
     source: 'input' | 'message' | 'create';
   } | null>(null);
   const [existingCommands, setExistingCommands] = useState<string[]>([]);
+  const [historicalChains, setHistoricalChains] = useState<ToolChainSegment[]>([]);
   const sessionIdRef = useRef<string | null>(null);
   const isReplayingRef = useRef<boolean>(false);
+  const prevChainCountRef = useRef(0);
   const plannerStreamingRef = useRef(false);
   const synthesizerStreamingRef = useRef(false);
   const portRef = useRef<chrome.runtime.Port | null>(null);
@@ -421,12 +425,7 @@ const SidePanel = () => {
             case ExecutionState.STEP_CANCEL:
               break;
             case ExecutionState.ACT_START:
-              if (content !== 'cache_content') {
-                skip = false;
-              }
-              break;
             case ExecutionState.ACT_OK:
-              skip = !isReplayingRef.current && !content?.startsWith('Integration result:');
               break;
             case ExecutionState.ACT_FAIL:
               skip = false;
@@ -579,8 +578,27 @@ const SidePanel = () => {
         } else if (message && message.type === 'conversation_messages_result') {
           const rawMessages: Array<{ role: string; content: string; createdAt: string }> = message.messages || [];
           const mapped: Message[] = [];
+          const restoredChains: ToolChainSegment[] = [];
           for (const m of rawMessages) {
-            if (m.role === 'widget') {
+            if (m.role === 'tool_chain') {
+              try {
+                const chainData = JSON.parse(m.content);
+                restoredChains.push({
+                  id: `history-chain-${restoredChains.length}`,
+                  actor: Actors.NAVIGATOR,
+                  actions: chainData.actions.map((a: { label: string; status: string }, idx: number) => ({
+                    id: `history-act-${restoredChains.length}-${idx}`,
+                    label: a.label,
+                    status: a.status as 'done' | 'failed',
+                    timestamp: chainData.timestamp,
+                  })),
+                  isActive: false,
+                  timestamp: chainData.timestamp,
+                });
+              } catch {
+                /* ignore malformed tool chain data */
+              }
+            } else if (m.role === 'widget') {
               try {
                 const widgetData = JSON.parse(m.content);
                 let merged = false;
@@ -655,9 +673,11 @@ const SidePanel = () => {
               });
             }
           }
-          if (mapped.length > 0) {
+          if (mapped.length > 0 || restoredChains.length > 0) {
             setCurrentSessionId(message.conversationId);
             setMessages(mapped);
+            setHistoricalChains(restoredChains);
+            prevChainCountRef.current = 0;
             setIsFollowUpMode(false);
             setIsHistoricalSession(true);
           }
@@ -875,60 +895,6 @@ const SidePanel = () => {
     }
   };
 
-  const handleCommand = async (command: string): Promise<boolean> => {
-    try {
-      if (!portRef.current) {
-        setupConnection();
-      }
-
-      if (command === '/state') {
-        portRef.current?.postMessage({
-          type: 'state',
-        });
-        return true;
-      }
-
-      if (command === '/nohighlight') {
-        portRef.current?.postMessage({
-          type: 'nohighlight',
-        });
-        return true;
-      }
-
-      if (command.startsWith('/replay ')) {
-        const parts = command.split(' ').filter(part => part.trim() !== '');
-        if (parts.length !== 2) {
-          appendMessage({
-            actor: Actors.SYSTEM,
-            content: 'Invalid arguments. Please use the format: /replay <historySessionId>',
-            timestamp: Date.now(),
-          });
-          return true;
-        }
-
-        const historySessionId = parts[1];
-        await handleReplay(historySessionId);
-        return true;
-      }
-
-      appendMessage({
-        actor: Actors.SYSTEM,
-        content: `Unsupported command: ${command}.\n\nAvailable commands: /state, /nohighlight, /replay <historySessionId>`,
-        timestamp: Date.now(),
-      });
-      return true;
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : String(err);
-      console.error('Command error', errorMessage);
-      appendMessage({
-        actor: Actors.SYSTEM,
-        content: errorMessage,
-        timestamp: Date.now(),
-      });
-      return true;
-    }
-  };
-
   const handleSendMessage = async (
     text: string,
     displayText?: string,
@@ -948,11 +914,6 @@ const SidePanel = () => {
         shortcutsMeta = shortcutsMeta || [{ command: commandName, prompt: shortcut.prompt }];
         trimmedText = shortcut.prompt;
       }
-    }
-
-    if (trimmedText.startsWith('/')) {
-      const wasHandled = await handleCommand(trimmedText);
-      if (wasHandled) return;
     }
 
     try {
@@ -1062,6 +1023,8 @@ const SidePanel = () => {
     setIsHistoricalSession(false);
     setIsNewChatMode(true);
     resetThinking();
+    setHistoricalChains([]);
+    prevChainCountRef.current = 0;
     resetTimer();
     setCostData(null);
     stopConnection();
@@ -1094,6 +1057,8 @@ const SidePanel = () => {
     setIsHistoricalSession(false);
     setIsNewChatMode(false);
     resetThinking();
+    setHistoricalChains([]);
+    prevChainCountRef.current = 0;
     resetTimer();
     setCostData(null);
     stopConnection();
@@ -1135,6 +1100,23 @@ const SidePanel = () => {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, thinkingWidgetState.actions.length]);
+
+  useEffect(() => {
+    const chains = thinkingWidgetState.completedChains;
+    if (chains.length > prevChainCountRef.current) {
+      for (let i = prevChainCountRef.current; i < chains.length; i++) {
+        persistMessage({
+          actor: 'tool_chain',
+          content: JSON.stringify({
+            actions: chains[i].actions.map(a => ({ label: a.label, status: a.status })),
+            timestamp: chains[i].timestamp,
+          }),
+          timestamp: chains[i].timestamp,
+        });
+      }
+      prevChainCountRef.current = chains.length;
+    }
+  }, [thinkingWidgetState.completedChains, persistMessage]);
 
   const handleMicClick = () => {
     if (isRecording) {
@@ -1345,7 +1327,7 @@ const SidePanel = () => {
                 <MessageList
                   messages={messages}
                   isStreaming={isStreamingPlanner || isStreamingSynthesizer}
-                  completedChains={thinkingWidgetState.completedChains}
+                  completedChains={[...historicalChains, ...thinkingWidgetState.completedChains]}
                   onWidgetApply={handleWidgetApply}
                   onWidgetRespond={handlePermissionResponse}
                   onShortcutClick={handleShortcutClickFromMessage}
@@ -1362,6 +1344,14 @@ const SidePanel = () => {
                     defaultExpanded
                   />
                 )}
+                {thinkingWidgetState.isActive &&
+                  thinkingWidgetState.activeActor === Actors.PLANNER &&
+                  !isStreamingPlanner &&
+                  thinkingWidgetState.actions.length === 0 && (
+                    <div className="animate-fade-in">
+                      <ShimmerText text="Planning next steps..." className="text-[13px]" />
+                    </div>
+                  )}
                 <div ref={messagesEndRef} />
               </div>
               {renderChatInput()}

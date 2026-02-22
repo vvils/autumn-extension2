@@ -105,12 +105,13 @@ export function useThinkingState() {
         case ExecutionState.STEP_START:
           clearGraceTimer();
           setState(prev => {
-            const chain = snapshotChain(prev);
+            const sameActor = prev.activeActor === (actor as Actors);
+            const chain = sameActor ? null : snapshotChain(prev);
             return {
               ...prev,
               isActive: true,
               activeActor: actor as Actors,
-              actions: [],
+              actions: sameActor ? prev.actions : [],
               stepInfo: data ? { step: data.step + 1, maxSteps: data.maxSteps } : prev.stepInfo,
               completedChains: chain ? [...prev.completedChains, chain] : prev.completedChains,
             };
@@ -128,16 +129,12 @@ export function useThinkingState() {
             setState(prev => ({
               ...prev,
               isActive: true,
-              actions: [...prev.actions, newAction],
+              actions: [...markAllRunning(prev.actions, 'done'), newAction],
             }));
           }
           break;
 
         case ExecutionState.ACT_OK:
-          setState(prev => ({
-            ...prev,
-            actions: markLatestRunning(prev.actions, 'done'),
-          }));
           break;
 
         case ExecutionState.ACT_FAIL:
@@ -175,6 +172,10 @@ export function useThinkingState() {
   );
 
   return { state, handleEvent, reset };
+}
+
+function markAllRunning(actions: ThinkingAction[], newStatus: 'done' | 'failed'): ThinkingAction[] {
+  return actions.map(a => (a.status === 'running' ? { ...a, status: newStatus } : a));
 }
 
 function markLatestRunning(actions: ThinkingAction[], newStatus: 'done' | 'failed'): ThinkingAction[] {

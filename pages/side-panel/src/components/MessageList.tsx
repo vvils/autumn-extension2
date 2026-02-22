@@ -1,6 +1,5 @@
 import type { Message } from '@extension/storage';
 import { Actors } from '@extension/storage';
-import { ACTOR_PROFILES } from '../types/message';
 import { memo, useMemo } from 'react';
 import MarkdownContent from './MarkdownContent';
 import WidgetRenderer from './widgets/WidgetRenderer';
@@ -57,19 +56,15 @@ export default memo(function MessageList({
 
   return (
     <div className="max-w-full space-y-4">
-      {items.map((item, i) => {
+      {items.map(item => {
         if (item.kind === 'chain') {
           return <InlineToolChain key={item.chain.id} segment={item.chain} />;
         }
-
-        const prevMessage = i > 0 ? items.findLast((it, idx) => idx < i && it.kind === 'message') : undefined;
-        const isSameActor = prevMessage?.kind === 'message' ? prevMessage.message.actor === item.message.actor : false;
 
         return (
           <MessageBlock
             key={`${item.message.actor}-${item.index}`}
             message={item.message}
-            isSameActor={isSameActor}
             isStreaming={isStreaming && item.index === messages.length - 1}
             onWidgetApply={onWidgetApply}
             onWidgetRespond={onWidgetRespond}
@@ -147,7 +142,6 @@ function ShortcutChipButton({
 
 interface MessageBlockProps {
   message: Message;
-  isSameActor: boolean;
   isStreaming?: boolean;
   onWidgetApply?: WidgetApplyFn;
   onWidgetRespond?: WidgetRespondFn;
@@ -156,7 +150,6 @@ interface MessageBlockProps {
 
 function MessageBlock({
   message,
-  isSameActor,
   isStreaming = false,
   onWidgetApply,
   onWidgetRespond,
@@ -166,7 +159,6 @@ function MessageBlock({
     console.error('No actor found');
     return <div />;
   }
-  const actor = ACTOR_PROFILES[message.actor as keyof typeof ACTOR_PROFILES];
   const isUser = message.actor === Actors.USER;
 
   if (isUser) {
@@ -187,9 +179,6 @@ function MessageBlock({
 
   return (
     <div className="animate-fade-in">
-      {!isSameActor && actor && (
-        <div className="mb-1 text-[11px] font-medium uppercase tracking-wide text-gray-400">{actor.name}</div>
-      )}
       <div className="break-words text-[13px] leading-relaxed text-black">
         <MarkdownContent content={message.content} />
         {isStreaming && <span className="ml-0.5 inline-block animate-pulse text-blue-500">|</span>}
