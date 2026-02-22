@@ -15,17 +15,19 @@ Open Tabs
 Interactive Elements
 
 ## Format of Interactive Elements
-[index]<type>text</type>
+[index] role "name" attr=value
 
 - index: Numeric identifier for interaction
-- type: HTML element type (button, input, etc.)
-- text: Element description
+- role: ARIA role (link, button, textbox, combobox, checkbox, etc.)
+- name: Accessible name in quotes (from aria-label, placeholder, title, or text content)
+- attr=value: Key attributes like href, type, placeholder
   Example:
-  [33]<div>User form</div>
-  \\t*[35]*<button aria-label='Submit form'>Submit</button>
+  form "User form"
+  \\t*[35] button "Submit form"
 
 - Only elements with numeric indexes in [] are interactive
-- (stacked) indentation (with \\t) is important and means that the element is a (html) child of the element above (with a lower index)
+- Lines without [] are structural landmarks (navigation, banner, heading, search, etc.) providing page context
+- (stacked) indentation (with \\t) is important and means that the element is a child of the element above
 - Elements with * are new elements that were added after the previous step (if url has not changed)
 
 # Response Rules

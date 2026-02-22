@@ -98,9 +98,9 @@ export default class MessageManager {
               the tool did not direct me to a new page. I then used the 'click_element' tool to click 
               on a element labelled 'Apple' which redirected me to the 'Apple' company homepage. 
               Currently at step 3/15.`.trim(),
-            next_goal: `Looking at reported structure of the current page, I can see the item '[127]<h3 iPhone/>' 
-              in the content. I think this button will lead to more information and potentially prices 
-              for iPhones. I'll click on the link to 'iPhone' at index [127] using the 'click_element' 
+            next_goal: `Looking at reported structure of the current page, I can see the item '[127] heading "iPhone"'
+              in the content. I think this will lead to more information and potentially prices
+              for iPhones. I'll click on the element at index [127] using the 'click_element'
               tool and hope to see prices on the next page.`.trim(),
           },
           action: [{ click_element: { index: 127 } }],

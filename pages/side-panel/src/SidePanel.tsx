@@ -1286,7 +1286,14 @@ const SidePanel = () => {
         <div className="flex w-full flex-1 flex-col overflow-hidden">
           {showingChatHistory ? (
             <div className="relative flex flex-1 flex-col overflow-hidden">
-              <div className="no-scrollbar flex-1 overflow-y-auto pb-24">
+              <div
+                className="no-scrollbar flex-1 overflow-y-auto pb-24"
+                style={{
+                  maskImage:
+                    'linear-gradient(to bottom, black calc(100% - 160px), rgba(0,0,0,0.3) calc(100% - 80px), transparent 100%)',
+                  WebkitMaskImage:
+                    'linear-gradient(to bottom, black calc(100% - 160px), rgba(0,0,0,0.3) calc(100% - 80px), transparent 100%)',
+                }}>
                 {WORKFLOW_PROMPTS.length > 0 && (
                   <div className="pb-2 pt-3">
                     <p className="px-4 pb-2 text-[13px] font-normal text-black/40">Quick Actions</p>
@@ -1322,8 +1329,16 @@ const SidePanel = () => {
               {renderChatInput()}
             </div>
           ) : (
-            <>
-              <div className="scrollbar-thin flex-1 space-y-4 overflow-y-auto p-4">
+            <div className="relative flex flex-1 flex-col overflow-hidden">
+              <div
+                className="scrollbar-thin flex-1 space-y-4 overflow-y-auto px-4 pt-4"
+                style={{
+                  paddingBottom: 100,
+                  maskImage:
+                    'linear-gradient(to bottom, black calc(100% - 160px), rgba(0,0,0,0.3) calc(100% - 80px), transparent 100%)',
+                  WebkitMaskImage:
+                    'linear-gradient(to bottom, black calc(100% - 160px), rgba(0,0,0,0.3) calc(100% - 80px), transparent 100%)',
+                }}>
                 <MessageList
                   messages={messages}
                   isStreaming={isStreamingPlanner || isStreamingSynthesizer}
@@ -1354,8 +1369,8 @@ const SidePanel = () => {
                   )}
                 <div ref={messagesEndRef} />
               </div>
-              {renderChatInput()}
-            </>
+              <div className="absolute inset-x-0 bottom-0 z-10">{renderChatInput()}</div>
+            </div>
           )}
         </div>
       )}

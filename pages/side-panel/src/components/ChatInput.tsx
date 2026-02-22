@@ -620,7 +620,7 @@ export default function ChatInput({
       : 'Ask anything, @ for tabs, / for actions';
 
   return (
-    <div className="shrink-0 bg-[#fafafa] px-3 pb-3 pt-1.5">
+    <div className="shrink-0 px-3 pb-3 pt-1.5">
       <style>{`[contenteditable][data-placeholder]:empty::before { content: attr(data-placeholder); color: #9ca3af; pointer-events: none; }
 .no-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
 .no-scrollbar::-webkit-scrollbar { display: none; }`}</style>
@@ -657,7 +657,7 @@ export default function ChatInput({
             onCreateShortcut={handleCreateShortcutFromDropdown}
           />
           <div
-            className="relative w-full overflow-hidden rounded-[14px] border border-[rgba(0,0,0,0.07)] bg-white pb-2.5 pl-2.5 pr-2.5 pt-2.5 transition-colors duration-[400ms] ease-[cubic-bezier(0.16,1,0.3,1)] hover:border-[rgba(0,0,0,0.1)]"
+            className="relative w-full rounded-[14px] border border-[rgba(0,0,0,0.07)] bg-white pb-2.5 pl-2.5 pr-2.5 pt-2.5 transition-colors duration-[400ms] ease-[cubic-bezier(0.16,1,0.3,1)] hover:border-[rgba(0,0,0,0.1)]"
             style={{
               boxShadow: '0 1px 0 0 rgba(255,255,255,0.4) inset, 0 1px 4px 0 rgba(0,0,0,0.08)',
             }}>
@@ -777,7 +777,20 @@ export default function ChatInput({
 
             <div className="mt-2 flex items-center justify-between">
               <div className="flex items-center gap-1">
-                <Tooltip label="Attach files" side="above" align="start">
+                <ConfirmToggle />
+              </div>
+
+              {(costData || elapsedTime) && (
+                <CostDisplay
+                  totalInputTokens={costData?.totalInputTokens ?? 0}
+                  totalOutputTokens={costData?.totalOutputTokens ?? 0}
+                  estimatedCostUsd={costData?.estimatedCostUsd ?? 0}
+                  elapsedTime={elapsedTime}
+                />
+              )}
+
+              <div className="flex items-center gap-1.5">
+                <Tooltip label="Attach files" side="above">
                   <button
                     type="button"
                     onClick={handleFileSelect}
@@ -810,8 +823,6 @@ export default function ChatInput({
                   </button>
                 </Tooltip>
 
-                <ConfirmToggle />
-
                 <input
                   ref={fileInputRef}
                   type="file"
@@ -821,18 +832,7 @@ export default function ChatInput({
                   className="hidden"
                   aria-hidden="true"
                 />
-              </div>
 
-              {(costData || elapsedTime) && (
-                <CostDisplay
-                  totalInputTokens={costData?.totalInputTokens ?? 0}
-                  totalOutputTokens={costData?.totalOutputTokens ?? 0}
-                  estimatedCostUsd={costData?.estimatedCostUsd ?? 0}
-                  elapsedTime={elapsedTime}
-                />
-              )}
-
-              <div className="flex items-center gap-1.5">
                 {onMicClick && (
                   <Tooltip label="Voice input" side="above">
                     <button

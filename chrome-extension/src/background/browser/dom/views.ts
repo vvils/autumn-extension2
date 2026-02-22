@@ -7,17 +7,85 @@ export const DEFAULT_INCLUDE_ATTRIBUTES = [
   'type',
   'checked',
   'name',
-  'role',
   'value',
   'placeholder',
   'data-date-format',
   'data-state',
   'alt',
   'aria-checked',
-  'aria-label',
   'aria-expanded',
   'href',
 ];
+
+const TAG_TO_ROLE: Record<string, string> = {
+  a: 'link',
+  button: 'button',
+  select: 'combobox',
+  textarea: 'textbox',
+  h1: 'heading',
+  h2: 'heading',
+  h3: 'heading',
+  h4: 'heading',
+  h5: 'heading',
+  h6: 'heading',
+  img: 'image',
+  nav: 'navigation',
+  main: 'main',
+  header: 'banner',
+  footer: 'contentinfo',
+  section: 'region',
+  article: 'article',
+  aside: 'complementary',
+  form: 'form',
+  table: 'table',
+  ul: 'list',
+  ol: 'list',
+  li: 'listitem',
+  label: 'label',
+  dialog: 'dialog',
+  details: 'group',
+  summary: 'button',
+  fieldset: 'group',
+  legend: 'legend',
+  option: 'option',
+  optgroup: 'group',
+  search: 'search',
+};
+
+const INPUT_TYPE_TO_ROLE: Record<string, string> = {
+  submit: 'button',
+  button: 'button',
+  reset: 'button',
+  checkbox: 'checkbox',
+  radio: 'radio',
+  file: 'button',
+  range: 'slider',
+  number: 'spinbutton',
+};
+
+const LANDMARK_ROLES = new Set([
+  'navigation',
+  'banner',
+  'main',
+  'contentinfo',
+  'search',
+  'heading',
+  'region',
+  'article',
+  'complementary',
+  'form',
+]);
+
+function tagToRole(tagName: string | null, attributes: Record<string, string>): string {
+  if (attributes.role) return attributes.role;
+  if (!tagName) return 'generic';
+  const tag = tagName.toLowerCase();
+  if (tag === 'input') {
+    const inputType = (attributes.type || 'text').toLowerCase();
+    return INPUT_TYPE_TO_ROLE[inputType] || 'textbox';
+  }
+  return TAG_TO_ROLE[tag] || 'generic';
+}
 
 export abstract class DOMBaseNode {
   isVisible: boolean;
@@ -181,6 +249,30 @@ export class DOMElementNode extends DOMBaseNode {
     this._hashPromise = undefined;
   }
 
+  getAccessibleName(): string {
+    const ariaLabel = this.attributes['aria-label'];
+    if (ariaLabel?.trim()) return ariaLabel.trim();
+
+    const placeholder = this.attributes.placeholder;
+    if (placeholder?.trim()) return placeholder.trim();
+
+    const title = this.attributes.title;
+    if (title?.trim()) return title.trim();
+
+    const alt = this.attributes.alt;
+    if (alt?.trim()) return alt.trim();
+
+    return this.getAllTextTillNextClickableElement();
+  }
+
+  getRole(): string {
+    return tagToRole(this.tagName, this.attributes);
+  }
+
+  isLandmark(): boolean {
+    return LANDMARK_ROLES.has(this.getRole());
+  }
+
   getAllTextTillNextClickableElement(maxDepth = -1): string {
     const textParts: string[] = [];
 
@@ -208,131 +300,96 @@ export class DOMElementNode extends DOMBaseNode {
   }
 
   clickableElementsToString(includeAttributes: string[] | null = null): string {
-    /**
-     * Convert the processed DOM content to HTML.
-     */
     const formattedText: string[] = [];
 
     if (!includeAttributes) {
       includeAttributes = DEFAULT_INCLUDE_ATTRIBUTES;
     }
 
+    const buildAttributeString = (node: DOMElementNode, name: string, attrs: string[] | null): string | null => {
+      if (!attrs) return null;
+
+      const attributesToInclude: Record<string, string> = {};
+
+      for (const [key, value] of Object.entries(node.attributes)) {
+        if (attrs.includes(key) && String(value).trim() !== '') {
+          attributesToInclude[key] = String(value).trim();
+        }
+      }
+
+      // Deduplicate: if multiple attributes share the same value, keep only the first per includeAttributes order
+      const orderedKeys = attrs.filter(key => key in attributesToInclude);
+      if (orderedKeys.length > 1) {
+        const keysToRemove = new Set<string>();
+        const seenValues: Record<string, string> = {};
+        for (const key of orderedKeys) {
+          const value = attributesToInclude[key];
+          if (value.length > 5) {
+            if (value in seenValues) {
+              keysToRemove.add(key);
+            } else {
+              seenValues[value] = key;
+            }
+          }
+        }
+        for (const key of keysToRemove) {
+          delete attributesToInclude[key];
+        }
+      }
+
+      // Remove attributes that duplicate the accessible name
+      const attrsToRemoveIfNameMatches = ['aria-label', 'placeholder', 'title', 'alt'];
+      for (const attr of attrsToRemoveIfNameMatches) {
+        if (attributesToInclude[attr] && attributesToInclude[attr].trim().toLowerCase() === name.trim().toLowerCase()) {
+          delete attributesToInclude[attr];
+        }
+      }
+
+      if (Object.keys(attributesToInclude).length === 0) return null;
+      return Object.entries(attributesToInclude)
+        .map(([key, value]) => `${key}=${capTextLength(value, 15)}`)
+        .join(' ');
+    };
+
     const processNode = (node: DOMBaseNode, depth: number): void => {
       let nextDepth = depth;
-      const depthStr = '\t'.repeat(depth);
+      const indent = '\t'.repeat(depth);
 
       if (node instanceof DOMElementNode) {
-        // Add element with highlight_index
         if (node.highlightIndex !== null) {
+          // Interactive element — emit with index
           nextDepth += 1;
 
-          const text = node.getAllTextTillNextClickableElement();
-          let attributesHtmlStr: string | null = null;
+          const role = node.getRole();
+          const name = node.getAccessibleName();
+          const attrStr = buildAttributeString(node, name, includeAttributes);
+          const prefix = node.isNew ? `*[${node.highlightIndex}]` : `[${node.highlightIndex}]`;
 
-          if (includeAttributes) {
-            const attributesToInclude: Record<string, string> = {};
+          let line = `${indent}${prefix} ${role}`;
+          if (name) line += ` "${capTextLength(name, 50)}"`;
+          if (attrStr) line += ` ${attrStr}`;
 
-            for (const [key, value] of Object.entries(node.attributes)) {
-              if (includeAttributes.includes(key) && String(value).trim() !== '') {
-                attributesToInclude[key] = String(value).trim();
-              }
-            }
+          formattedText.push(line);
+        } else if (node.isLandmark() && node.isVisible) {
+          // Structural landmark — emit without index for context
+          nextDepth += 1;
 
-            // If value of any of the attributes is the same as ANY other value attribute only include the one that appears first in includeAttributes
-            // WARNING: heavy vibes, but it seems good enough for saving tokens (it kicks in hard when it's long text)
+          const role = node.getRole();
+          const name = node.getAccessibleName();
 
-            // Pre-compute ordered keys that exist in both lists (faster than repeated lookups)
-            const orderedKeys = includeAttributes.filter(key => key in attributesToInclude);
+          let line = `${indent}${role}`;
+          if (name) line += ` "${capTextLength(name, 50)}"`;
 
-            if (orderedKeys.length > 1) {
-              // Only process if we have multiple attributes
-              const keysToRemove = new Set<string>(); // Use set for O(1) lookups
-              const seenValues: Record<string, string> = {}; // value -> first_key_with_this_value
-
-              for (const key of orderedKeys) {
-                const value = attributesToInclude[key];
-                if (value.length > 5) {
-                  // to not remove false, true, etc
-                  if (value in seenValues) {
-                    // This value was already seen with an earlier key, so remove this key
-                    keysToRemove.add(key);
-                  } else {
-                    // First time seeing this value, record it
-                    seenValues[value] = key;
-                  }
-                }
-              }
-
-              // Remove duplicate keys (no need to check existence since we know they exist)
-              for (const key of keysToRemove) {
-                delete attributesToInclude[key];
-              }
-            }
-
-            // Easy LLM optimizations
-            // if tag == role attribute, don't include it
-            if (node.tagName === attributesToInclude.role) {
-              delete attributesToInclude.role;
-            }
-
-            // Remove attributes that duplicate the node's text content
-            const attrsToRemoveIfTextMatches = ['aria-label', 'placeholder', 'title'];
-            for (const attr of attrsToRemoveIfTextMatches) {
-              if (
-                attributesToInclude[attr] &&
-                attributesToInclude[attr].trim().toLowerCase() === text.trim().toLowerCase()
-              ) {
-                delete attributesToInclude[attr];
-              }
-            }
-
-            if (Object.keys(attributesToInclude).length > 0) {
-              // Format as key1='value1' key2='value2'
-              attributesHtmlStr = Object.entries(attributesToInclude)
-                .map(([key, value]) => `${key}=${capTextLength(value, 15)}`)
-                .join(' ');
-            }
-          }
-
-          // Build the line
-          const highlightIndicator = node.isNew ? `*[${node.highlightIndex}]` : `[${node.highlightIndex}]`;
-
-          let line = `${depthStr}${highlightIndicator}<${node.tagName}`;
-
-          if (attributesHtmlStr) {
-            line += ` ${attributesHtmlStr}`;
-          }
-
-          if (text) {
-            // Add space before >text only if there were NO attributes added before
-            const trimmedText = text.trim();
-            if (!attributesHtmlStr) {
-              line += ' ';
-            }
-            line += `>${trimmedText}`;
-          }
-          // Add space before /> only if neither attributes NOR text were added
-          else if (!attributesHtmlStr) {
-            line += ' ';
-          }
-
-          // makes sense to have if the website has lots of text -> so the LLM knows which things are part of the same clickable element and which are not
-          line += ' />'; // 1 token
           formattedText.push(line);
         }
 
-        // Process children regardless
         for (const child of node.children) {
           processNode(child, nextDepth);
         }
       } else if (node instanceof DOMTextNode) {
-        // Add text only if it doesn't have a highlighted parent
-        if (node.hasParentWithHighlightIndex()) {
-          return;
-        }
-
+        if (node.hasParentWithHighlightIndex()) return;
         if (node.parent && node.parent.isVisible && node.parent.isTopElement) {
-          formattedText.push(`${depthStr}${node.text}`);
+          formattedText.push(`${indent}${node.text}`);
         }
       }
     };

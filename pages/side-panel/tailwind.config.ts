@@ -34,6 +34,10 @@ export default {
           '86%': { backgroundPosition: '-200% 0', opacity: '1' },
           '100%': { backgroundPosition: '-202% 0', opacity: '0.99' },
         },
+        popUp: {
+          from: { opacity: '0', transform: 'scale(0.95) translateY(4px)' },
+          to: { opacity: '1', transform: 'scale(1) translateY(0)' },
+        },
       },
       animation: {
         progress: 'progress 1.5s infinite ease-in-out',
@@ -41,6 +45,7 @@ export default {
         'voice-pulse': 'voicePulse 1.6s ease-out infinite',
         'slide-in': 'slideIn 150ms ease-out both',
         shimmer: 'shimmerLoop 1s linear infinite',
+        'pop-up': 'popUp 150ms ease-out',
       },
     },
   },

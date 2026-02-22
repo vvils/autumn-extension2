@@ -1,6 +1,6 @@
 /* eslint-disable react/prop-types */
 import { useState } from 'react';
-import { Ellipsis, Trash2 } from 'lucide-react';
+import { Ellipsis, MessageSquare, Trash2 } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 
 interface ChatHistoryItem {
@@ -63,6 +63,7 @@ const ChatHistoryRow: React.FC<{
       onKeyDown={e => {
         if (e.key === 'Enter' || e.key === ' ') onSelect(session.id);
       }}>
+      <MessageSquare size={14} className="shrink-0 text-black/25" />
       <span className="min-w-0 flex-1 truncate text-[14px] text-black opacity-90">{session.title}</span>
       <div className="relative shrink-0 flex h-[20px] items-center">
         <span className="text-[12px] text-black/30 transition-opacity group-hover:opacity-0">
