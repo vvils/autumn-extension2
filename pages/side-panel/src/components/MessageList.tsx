@@ -1,14 +1,19 @@
 import type { Message } from '@extension/storage';
 import { Actors } from '@extension/storage';
 import { ACTOR_PROFILES } from '../types/message';
-import { memo } from 'react';
+import { memo, useMemo } from 'react';
 import MarkdownContent from './MarkdownContent';
 import WidgetRenderer from './widgets/WidgetRenderer';
+import InlineToolChain from './InlineToolChain';
 import type { WidgetPayload, WidgetApplyFn, WidgetRespondFn } from './widgets/types';
+import type { ToolChainSegment } from '../hooks/useThinkingState';
+
+type RenderItem = { kind: 'message'; message: Message; index: number } | { kind: 'chain'; chain: ToolChainSegment };
 
 interface MessageListProps {
   messages: Message[];
   isStreaming?: boolean;
+  completedChains?: ToolChainSegment[];
   onWidgetApply?: WidgetApplyFn;
   onWidgetRespond?: WidgetRespondFn;
   onShortcutClick?: (shortcut: { command: string; prompt: string }) => void;
@@ -17,23 +22,61 @@ interface MessageListProps {
 export default memo(function MessageList({
   messages,
   isStreaming = false,
+  completedChains = [],
   onWidgetApply,
   onWidgetRespond,
   onShortcutClick,
 }: MessageListProps) {
+  const items = useMemo<RenderItem[]>(() => {
+    if (completedChains.length === 0) {
+      return messages.map((message, index) => ({ kind: 'message' as const, message, index }));
+    }
+
+    const merged: RenderItem[] = [];
+    let chainIdx = 0;
+
+    for (let i = 0; i < messages.length; i++) {
+      merged.push({ kind: 'message', message: messages[i], index: i });
+
+      while (
+        chainIdx < completedChains.length &&
+        (i === messages.length - 1 || completedChains[chainIdx].timestamp <= messages[i + 1].timestamp)
+      ) {
+        merged.push({ kind: 'chain', chain: completedChains[chainIdx] });
+        chainIdx++;
+      }
+    }
+
+    while (chainIdx < completedChains.length) {
+      merged.push({ kind: 'chain', chain: completedChains[chainIdx] });
+      chainIdx++;
+    }
+
+    return merged;
+  }, [messages, completedChains]);
+
   return (
     <div className="max-w-full space-y-4">
-      {messages.map((message, index) => (
-        <MessageBlock
-          key={`${message.actor}-${index}`}
-          message={message}
-          isSameActor={index > 0 ? messages[index - 1].actor === message.actor : false}
-          isStreaming={isStreaming && index === messages.length - 1}
-          onWidgetApply={onWidgetApply}
-          onWidgetRespond={onWidgetRespond}
-          onShortcutClick={onShortcutClick}
-        />
-      ))}
+      {items.map((item, i) => {
+        if (item.kind === 'chain') {
+          return <InlineToolChain key={item.chain.id} segment={item.chain} />;
+        }
+
+        const prevMessage = i > 0 ? items.findLast((it, idx) => idx < i && it.kind === 'message') : undefined;
+        const isSameActor = prevMessage?.kind === 'message' ? prevMessage.message.actor === item.message.actor : false;
+
+        return (
+          <MessageBlock
+            key={`${item.message.actor}-${item.index}`}
+            message={item.message}
+            isSameActor={isSameActor}
+            isStreaming={isStreaming && item.index === messages.length - 1}
+            onWidgetApply={onWidgetApply}
+            onWidgetRespond={onWidgetRespond}
+            onShortcutClick={onShortcutClick}
+          />
+        );
+      })}
     </div>
   );
 });

@@ -10,11 +10,20 @@ export interface ThinkingAction {
   timestamp: number;
 }
 
+export interface ToolChainSegment {
+  id: string;
+  actor: Actors;
+  actions: ThinkingAction[];
+  isActive: boolean;
+  timestamp: number;
+}
+
 export interface ThinkingState {
   isActive: boolean;
   activeActor: Actors | null;
   actions: ThinkingAction[];
   stepInfo: { step: number; maxSteps: number } | null;
+  completedChains: ToolChainSegment[];
 }
 
 const INITIAL_STATE: ThinkingState = {
@@ -22,11 +31,24 @@ const INITIAL_STATE: ThinkingState = {
   activeActor: null,
   actions: [],
   stepInfo: null,
+  completedChains: [],
 };
 
 const GRACE_PERIOD_MS = 800;
 
 let actionCounter = 0;
+let chainCounter = 0;
+
+function snapshotChain(prev: ThinkingState): ToolChainSegment | null {
+  if (prev.actions.length === 0) return null;
+  return {
+    id: `chain-${++chainCounter}`,
+    actor: prev.activeActor ?? Actors.NAVIGATOR,
+    actions: prev.actions.map(a => (a.status === 'running' ? { ...a, status: 'done' as const } : a)),
+    isActive: false,
+    timestamp: prev.actions[0].timestamp,
+  };
+}
 
 export function useThinkingState() {
   const [state, setState] = useState<ThinkingState>(INITIAL_STATE);
@@ -47,7 +69,16 @@ export function useThinkingState() {
   const deactivateWithGrace = useCallback(() => {
     clearGraceTimer();
     graceTimerRef.current = setTimeout(() => {
-      setState(prev => ({ ...prev, isActive: false, activeActor: null }));
+      setState(prev => {
+        const chain = snapshotChain(prev);
+        return {
+          ...prev,
+          isActive: false,
+          activeActor: null,
+          actions: [],
+          completedChains: chain ? [...prev.completedChains, chain] : prev.completedChains,
+        };
+      });
       graceTimerRef.current = null;
     }, GRACE_PERIOD_MS);
   }, [clearGraceTimer]);
@@ -55,6 +86,7 @@ export function useThinkingState() {
   const reset = useCallback(() => {
     clearGraceTimer();
     actionCounter = 0;
+    chainCounter = 0;
     setState(INITIAL_STATE);
   }, [clearGraceTimer]);
 
@@ -66,17 +98,23 @@ export function useThinkingState() {
         case ExecutionState.TASK_START:
           clearGraceTimer();
           actionCounter = 0;
-          setState({ isActive: true, activeActor: null, actions: [], stepInfo: null });
+          chainCounter = 0;
+          setState({ isActive: true, activeActor: null, actions: [], stepInfo: null, completedChains: [] });
           break;
 
         case ExecutionState.STEP_START:
           clearGraceTimer();
-          setState(prev => ({
-            ...prev,
-            isActive: true,
-            activeActor: actor as Actors,
-            stepInfo: data ? { step: data.step + 1, maxSteps: data.maxSteps } : prev.stepInfo,
-          }));
+          setState(prev => {
+            const chain = snapshotChain(prev);
+            return {
+              ...prev,
+              isActive: true,
+              activeActor: actor as Actors,
+              actions: [],
+              stepInfo: data ? { step: data.step + 1, maxSteps: data.maxSteps } : prev.stepInfo,
+              completedChains: chain ? [...prev.completedChains, chain] : prev.completedChains,
+            };
+          });
           break;
 
         case ExecutionState.ACT_START:
@@ -120,7 +158,16 @@ export function useThinkingState() {
         case ExecutionState.TASK_FAIL:
         case ExecutionState.TASK_CANCEL:
           clearGraceTimer();
-          setState(prev => ({ ...prev, isActive: false, activeActor: null }));
+          setState(prev => {
+            const chain = snapshotChain(prev);
+            return {
+              ...prev,
+              isActive: false,
+              activeActor: null,
+              actions: [],
+              completedChains: chain ? [...prev.completedChains, chain] : prev.completedChains,
+            };
+          });
           break;
       }
     },

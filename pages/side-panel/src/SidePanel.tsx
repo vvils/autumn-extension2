@@ -40,7 +40,7 @@ function portRpc(
 import MessageList from './components/MessageList';
 import ChatInput from './components/ChatInput';
 import ChatHistoryList from './components/ChatHistoryList';
-import ThinkingWidget from './components/ThinkingWidget';
+import InlineToolChain from './components/InlineToolChain';
 import { ActiveGroupOverlay } from './components/ActiveGroupOverlay';
 import { AuthOverlay } from './components/AuthOverlay';
 import { ShortcutEditorModal } from './components/ShortcutEditorModal';
@@ -1114,6 +1114,17 @@ const SidePanel = () => {
   };
 
   useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && showStopButton) {
+        e.preventDefault();
+        handleStopTask();
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [showStopButton]);
+
+  useEffect(() => {
     return () => {
       portRef.current?.postMessage({ type: 'voice_stop' });
       stopConnection();
@@ -1123,7 +1134,7 @@ const SidePanel = () => {
   // biome-ignore lint/correctness/useExhaustiveDependencies: <explanation>
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+  }, [messages, thinkingWidgetState.actions.length]);
 
   const handleMicClick = () => {
     if (isRecording) {
@@ -1334,13 +1345,25 @@ const SidePanel = () => {
                 <MessageList
                   messages={messages}
                   isStreaming={isStreamingPlanner || isStreamingSynthesizer}
+                  completedChains={thinkingWidgetState.completedChains}
                   onWidgetApply={handleWidgetApply}
                   onWidgetRespond={handlePermissionResponse}
                   onShortcutClick={handleShortcutClickFromMessage}
                 />
+                {thinkingWidgetState.isActive && thinkingWidgetState.actions.length > 0 && (
+                  <InlineToolChain
+                    segment={{
+                      id: 'active',
+                      actor: thinkingWidgetState.activeActor ?? Actors.NAVIGATOR,
+                      actions: thinkingWidgetState.actions,
+                      isActive: true,
+                      timestamp: thinkingWidgetState.actions[0].timestamp,
+                    }}
+                    defaultExpanded
+                  />
+                )}
                 <div ref={messagesEndRef} />
               </div>
-              <ThinkingWidget state={thinkingWidgetState} />
               {renderChatInput()}
             </>
           )}
