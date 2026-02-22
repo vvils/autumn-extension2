@@ -52,6 +52,7 @@ const rawPlannerSchema = z.object({
     }),
   ]),
   next_steps: z.string(),
+  user_facing_summary: z.string().optional().default(''),
   final_answer: z.string(),
   reasoning: z.string(),
   ask_user: z
@@ -121,7 +122,7 @@ export class PlannerAgent extends BaseAgent<typeof plannerOutputSchema, PlannerO
         plannerMessages[plannerMessages.length - 1] = new HumanMessage(newMsg);
       }
 
-      const modelOutput = await this.streamInvoke(plannerMessages, ['next_steps', 'final_answer'], text => {
+      const modelOutput = await this.streamInvoke(plannerMessages, ['user_facing_summary', 'final_answer'], text => {
         this.context.emitEvent(Actors.PLANNER, ExecutionState.STEP_STREAMING, text);
       });
       if (!modelOutput) {
@@ -142,6 +143,7 @@ export class PlannerAgent extends BaseAgent<typeof plannerOutputSchema, PlannerO
       const next_steps = filterExternalContent(modelOutput.next_steps);
       const challenges = filterExternalContent(modelOutput.challenges);
       const reasoning = filterExternalContent(modelOutput.reasoning);
+      const user_facing_summary = filterExternalContent(modelOutput.user_facing_summary || '');
 
       const cleanedPlan: PlannerOutput = {
         ...modelOutput,
@@ -150,10 +152,12 @@ export class PlannerAgent extends BaseAgent<typeof plannerOutputSchema, PlannerO
         reasoning,
         final_answer,
         next_steps,
+        user_facing_summary,
       };
 
-      // If task is done, emit the final answer; otherwise emit next steps
-      const eventMessage = cleanedPlan.done ? cleanedPlan.final_answer : cleanedPlan.next_steps;
+      const eventMessage = cleanedPlan.done
+        ? cleanedPlan.final_answer
+        : cleanedPlan.user_facing_summary || cleanedPlan.next_steps;
       await this.context.emitEvent(Actors.PLANNER, ExecutionState.STEP_OK, eventMessage);
       logger.info('Planner output', JSON.stringify(cleanedPlan, null, 2));
 

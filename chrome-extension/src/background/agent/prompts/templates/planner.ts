@@ -183,6 +183,7 @@ When determining if a task is "done":
     "done": "[boolean type], whether the ultimate task is fully completed successfully",
     "challenges": "[string type], list any potential challenges or roadblocks",
     "next_steps": "[string type], list 2-3 high-level next steps to take (MUST be empty if done=true)",
+    "user_facing_summary": "[string type], a brief, first-person, conversational sentence describing what you plan to do next — written as natural prose for the user to read, NOT a numbered list (MUST be empty if done=true). Example: \"I'll navigate to Gmail and look for your unread emails.\"",
     "final_answer": "[string type], complete user-friendly answer to the task (MUST be provided when done=true, empty otherwise)",
     "reasoning": "[string type], explain your reasoning for the suggested next steps or completion decision",
     "task_type": "[string type], one of: general, ${serverAvailable ? 'domain_query, ' : ''}browser",
@@ -190,8 +191,8 @@ When determining if a task is "done":
 }
 
 # IMPORTANT FIELD RELATIONSHIPS:
-- When done=false: next_steps should contain action items, final_answer should be empty
-- When done=true: next_steps should be empty, final_answer should contain the complete response
+- When done=false: user_facing_summary should be a brief, conversational description of your plan for the user; next_steps should contain the technical action items for execution; final_answer should be empty
+- When done=true: user_facing_summary and next_steps should both be empty, final_answer should contain the complete response
 - When ask_user is present: done must be false, next_steps should briefly describe what you're asking, final_answer must be empty
 
 # NOTE:

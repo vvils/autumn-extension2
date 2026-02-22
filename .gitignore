@@ -32,3 +32,4 @@ chrome-extension/public/manifest.json
 .cursor
 *.py
 talented-tarpon-grateful_-_CLI_Quickstart-oauth-credentials.txt
+dev/

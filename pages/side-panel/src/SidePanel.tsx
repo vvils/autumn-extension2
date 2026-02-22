@@ -1333,7 +1333,7 @@ const SidePanel = () => {
               <div
                 className="scrollbar-thin flex-1 space-y-4 overflow-y-auto px-4 pt-4"
                 style={{
-                  paddingBottom: 100,
+                  paddingBottom: 160,
                   maskImage:
                     'linear-gradient(to bottom, black calc(100% - 160px), rgba(0,0,0,0.3) calc(100% - 80px), transparent 100%)',
                   WebkitMaskImage:
