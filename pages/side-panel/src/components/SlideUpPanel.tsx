@@ -1,18 +1,17 @@
 import { useState, useEffect, useRef } from 'react';
 import { Zap, Plus, Globe } from 'lucide-react';
-import type { SavedShortcut } from '@extension/storage';
-import type { WorkflowPrompt } from '../constants/workflowPrompts';
+import type { SavedShortcut, SavedQuickAction } from '@extension/storage';
 
 export type SlideUpMode =
   | { kind: 'hidden' }
-  | { kind: 'quickstart'; prompts: readonly WorkflowPrompt[] }
+  | { kind: 'quickstart'; prompts: readonly SavedQuickAction[] }
   | { kind: 'tabs'; tabs: chrome.tabs.Tab[]; query: string; selectedIndex: number }
   | { kind: 'shortcuts'; shortcuts: SavedShortcut[]; selectedIndex: number; showCreate: boolean };
 
 interface SlideUpPanelProps {
   mode: SlideUpMode;
   onShortcutSelect: (shortcut: SavedShortcut) => void;
-  onQuickstartSelect: (prompt: WorkflowPrompt) => void;
+  onQuickstartSelect: (prompt: SavedQuickAction) => void;
   onTabSelect: (tab: chrome.tabs.Tab) => void;
   onCreateShortcut?: () => void;
 }
@@ -102,24 +101,24 @@ function QuickstartContent({
   prompts,
   onPromptSelect,
 }: {
-  prompts: readonly WorkflowPrompt[];
-  onPromptSelect: (p: WorkflowPrompt) => void;
+  prompts: readonly SavedQuickAction[];
+  onPromptSelect: (p: SavedQuickAction) => void;
 }) {
   return (
     <div className="flex flex-col-reverse">
-      {prompts.map(wp => (
+      {prompts.map(qa => (
         <div
-          key={wp.id}
+          key={qa.id}
           role="option"
           aria-selected={false}
           tabIndex={-1}
           onMouseDown={e => e.preventDefault()}
-          onClick={() => onPromptSelect(wp)}
+          onClick={() => onPromptSelect(qa)}
           onKeyDown={e => {
-            if (e.key === 'Enter') onPromptSelect(wp);
+            if (e.key === 'Enter') onPromptSelect(qa);
           }}
           className="block w-full cursor-pointer rounded-[14px] opacity-65 transition-opacity duration-150 hover:bg-black/5 hover:opacity-100">
-          <div className="w-full px-3 py-[8px] text-left text-[13px] font-normal text-black/90">{wp.name}</div>
+          <div className="w-full px-3 py-[8px] text-left text-[13px] font-normal text-black/90">{qa.name}</div>
         </div>
       ))}
     </div>

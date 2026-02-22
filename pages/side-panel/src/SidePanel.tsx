@@ -9,8 +9,11 @@ import {
   generalSettingsStore,
   serverSettingsStore,
   shortcutSettingsStore,
+  quickActionSettingsStore,
   mergeWidgetIntoMessages,
+  isTokenValid,
 } from '@extension/storage';
+import type { SavedQuickAction } from '@extension/storage';
 
 function portRpc(
   port: chrome.runtime.Port,
@@ -45,8 +48,8 @@ import { ShimmerText } from './components/ShimmerText';
 import { ActiveGroupOverlay } from './components/ActiveGroupOverlay';
 import { AuthOverlay } from './components/AuthOverlay';
 import { ShortcutEditorModal } from './components/ShortcutEditorModal';
+import { QuickActionModal } from './components/QuickActionModal';
 import type { ShortcutActions } from './components/ChatInput';
-import { WORKFLOW_PROMPTS } from './constants/workflowPrompts';
 import { EventType, type AgentEvent, ExecutionState } from './types/event';
 import { useThinkingState } from './hooks/useThinkingState';
 import type { ToolChainSegment } from './hooks/useThinkingState';
@@ -94,8 +97,14 @@ const SidePanel = () => {
     id?: string;
     source: 'input' | 'message' | 'create';
   } | null>(null);
+  const [quickActionModalData, setQuickActionModalData] = useState<{
+    name: string;
+    description: string;
+    prompt: string;
+  } | null>(null);
   const [existingCommands, setExistingCommands] = useState<string[]>([]);
   const [historicalChains, setHistoricalChains] = useState<ToolChainSegment[]>([]);
+  const [quickActions, setQuickActions] = useState<SavedQuickAction[]>([]);
   const sessionIdRef = useRef<string | null>(null);
   const isReplayingRef = useRef<boolean>(false);
   const prevChainCountRef = useRef(0);
@@ -173,15 +182,24 @@ const SidePanel = () => {
   }, []);
 
   const serverSettings = useSyncExternalStore(serverSettingsStore.subscribe, serverSettingsStore.getSnapshot);
-  const isAuthenticated =
-    serverSettings === null ? null : Boolean(serverSettings.accessToken) && serverSettings.tokenExpiresAt > Date.now();
+  const isAuthenticated = serverSettings === null ? null : isTokenValid(serverSettings);
 
   const showingChatHistory = hasConfiguredModels === true && messages.length === 0 && !isNewChatMode;
+
+  const loadQuickActions = useCallback(async () => {
+    try {
+      const settings = await quickActionSettingsStore.getSettings();
+      setQuickActions(settings.quickActions);
+    } catch (error) {
+      console.error('Error loading quick actions:', error);
+    }
+  }, []);
 
   useEffect(() => {
     checkModelConfiguration();
     loadGeneralSettings();
-  }, [checkModelConfiguration, loadGeneralSettings]);
+    loadQuickActions();
+  }, [checkModelConfiguration, loadGeneralSettings, loadQuickActions]);
 
   const requestAuthDetection = useCallback(() => {
     chrome.runtime.sendMessage({ type: 'detect_auth', clientUrl: CLIENT_URL }).catch(() => {});
@@ -196,6 +214,7 @@ const SidePanel = () => {
       if (!document.hidden) {
         checkModelConfiguration();
         loadGeneralSettings();
+        loadQuickActions();
         requestAuthDetection();
       }
     };
@@ -203,6 +222,7 @@ const SidePanel = () => {
     const handleFocus = () => {
       checkModelConfiguration();
       loadGeneralSettings();
+      loadQuickActions();
       requestAuthDetection();
     };
 
@@ -213,7 +233,7 @@ const SidePanel = () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('focus', handleFocus);
     };
-  }, [checkModelConfiguration, loadGeneralSettings, requestAuthDetection]);
+  }, [checkModelConfiguration, loadGeneralSettings, loadQuickActions, requestAuthDetection]);
 
   useEffect(() => {
     const listener = (activeInfo: chrome.tabs.TabActiveInfo) => {
@@ -899,6 +919,7 @@ const SidePanel = () => {
     text: string,
     displayText?: string,
     shortcutsMeta?: Array<{ command: string; prompt: string }>,
+    quickActionMeta?: { name: string; description: string; prompt: string },
   ) => {
     console.log('handleSendMessage', text);
 
@@ -955,6 +976,7 @@ const SidePanel = () => {
         content: displayText || text,
         timestamp: Date.now(),
         ...(shortcutsMeta && { shortcuts: shortcutsMeta }),
+        ...(quickActionMeta && { quickAction: quickActionMeta }),
       };
 
       appendMessage(userMessage, sessionIdRef.current);
@@ -1204,6 +1226,7 @@ const SidePanel = () => {
       }}
       onEditShortcut={handleEditShortcutFromInput}
       onCreateShortcut={handleCreateShortcut}
+      onViewQuickAction={setQuickActionModalData}
       setShortcutActions={actions => {
         shortcutActionsRef.current = actions;
       }}
@@ -1294,18 +1317,24 @@ const SidePanel = () => {
                   WebkitMaskImage:
                     'linear-gradient(to bottom, black calc(100% - 160px), rgba(0,0,0,0.3) calc(100% - 80px), transparent 100%)',
                 }}>
-                {WORKFLOW_PROMPTS.length > 0 && (
+                {quickActions.length > 0 && (
                   <div className="pb-2 pt-3">
                     <p className="px-4 pb-2 text-[13px] font-normal text-black/40">Quick Actions</p>
                     <div className="scrollbar-cute flex gap-2 overflow-x-auto px-4">
-                      {WORKFLOW_PROMPTS.map(wp => (
+                      {quickActions.map(qa => (
                         <button
-                          key={wp.id}
+                          key={qa.id}
                           type="button"
-                          onClick={() => handleSendMessage(wp.prompt, wp.name)}
-                          className="group flex shrink-0 items-center gap-0.5 rounded-xl bg-black/[0.03] px-3.5 py-2 text-[13px] transition-colors duration-100 hover:bg-black/[0.06]">
+                          onClick={() =>
+                            setQuickActionModalData({
+                              name: qa.name,
+                              description: qa.description,
+                              prompt: qa.prompt,
+                            })
+                          }
+                          className="group flex shrink-0 items-center gap-0.5 rounded-xl border border-[rgba(0,0,0,0.07)] bg-white px-3.5 py-2 text-[13px] shadow-[0_1px_3px_0_rgba(0,0,0,0.06)] transition-colors duration-100 hover:border-[rgba(0,0,0,0.1)]">
                           <span className="font-normal text-black/80 whitespace-nowrap group-hover:text-black">
-                            {wp.name}
+                            {qa.name}
                           </span>
                         </button>
                       ))}
@@ -1346,6 +1375,7 @@ const SidePanel = () => {
                   onWidgetApply={handleWidgetApply}
                   onWidgetRespond={handlePermissionResponse}
                   onShortcutClick={handleShortcutClickFromMessage}
+                  onQuickActionClick={setQuickActionModalData}
                 />
                 {thinkingWidgetState.isActive && thinkingWidgetState.actions.length > 0 && (
                   <InlineToolChain
@@ -1382,6 +1412,18 @@ const SidePanel = () => {
         onSave={handleShortcutEditorSave}
         onDelete={handleShortcutEditorDelete}
         existingCommands={existingCommands}
+      />
+
+      <QuickActionModal
+        open={!!quickActionModalData}
+        onClose={() => setQuickActionModalData(null)}
+        quickAction={quickActionModalData}
+        onRun={() => {
+          if (quickActionModalData) {
+            handleSendMessage(quickActionModalData.prompt, quickActionModalData.name, undefined, quickActionModalData);
+          }
+          setQuickActionModalData(null);
+        }}
       />
 
       {isAuthenticated === false && <AuthOverlay />}

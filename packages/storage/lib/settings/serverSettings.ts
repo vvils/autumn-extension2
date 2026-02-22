@@ -20,6 +20,11 @@ export type ServerSettingsStorage = BaseStorage<ServerSettingsConfig> & {
   hasValidToken: () => Promise<boolean>;
 };
 
+export function isTokenValid(settings: ServerSettingsConfig | null): boolean {
+  if (!settings) return false;
+  return Boolean(settings.accessToken) && settings.tokenExpiresAt > Date.now();
+}
+
 export const DEFAULT_SERVER_SETTINGS: ServerSettingsConfig = {
   serverUrl: '',
   clientUrl: '',
@@ -76,6 +81,6 @@ export const serverSettingsStore: ServerSettingsStorage = {
   },
   async hasValidToken() {
     const settings = await storage.get();
-    return Boolean(settings?.accessToken) && settings.tokenExpiresAt > Date.now();
+    return isTokenValid(settings);
   },
 };

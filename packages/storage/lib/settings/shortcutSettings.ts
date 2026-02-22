@@ -58,12 +58,13 @@ export const shortcutSettingsStore: ShortcutSettingsStorage = {
     const currentSettings = await this.getSettings();
     const duplicate = currentSettings.shortcuts.some(s => s.command === sanitized);
     if (duplicate) return;
+
+    const localId = `shortcut_${Date.now()}`;
     await this.updateSettings({
-      shortcuts: [
-        ...currentSettings.shortcuts,
-        { id: `shortcut_${Date.now()}`, command: sanitized, prompt, createdAt: Date.now() },
-      ],
+      shortcuts: [...currentSettings.shortcuts, { id: localId, command: sanitized, prompt, createdAt: Date.now() }],
     });
+
+    chrome.runtime.sendMessage({ type: 'shortcut_created', command: sanitized, prompt, localId }).catch(() => {});
   },
   async updateShortcut(id: string, updates: { command?: string; prompt?: string }) {
     const currentSettings = await this.getSettings();
@@ -83,12 +84,16 @@ export const shortcutSettingsStore: ShortcutSettingsStorage = {
     const shortcuts = [...currentSettings.shortcuts];
     shortcuts[index] = updated;
     await this.updateSettings({ shortcuts });
+
+    chrome.runtime.sendMessage({ type: 'shortcut_updated', id, updates }).catch(() => {});
   },
   async deleteShortcut(id: string) {
     const currentSettings = await this.getSettings();
     await this.updateSettings({
       shortcuts: currentSettings.shortcuts.filter(s => s.id !== id),
     });
+
+    chrome.runtime.sendMessage({ type: 'shortcut_deleted', id }).catch(() => {});
   },
   async getShortcutByCommand(command: string) {
     const currentSettings = await this.getSettings();

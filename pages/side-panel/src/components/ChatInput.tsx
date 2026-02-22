@@ -1,13 +1,11 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { Mic, Paperclip, Play, X, Globe, ThumbsUp, CircleHelp } from 'lucide-react';
-import { shortcutSettingsStore } from '@extension/storage';
-import type { SavedShortcut } from '@extension/storage';
+import { shortcutSettingsStore, quickActionSettingsStore } from '@extension/storage';
+import type { SavedShortcut, SavedQuickAction } from '@extension/storage';
 import { CostDisplay } from './CostDisplay';
 import type { CostDisplayProps } from './CostDisplay';
 import { SlideUpPanel } from './SlideUpPanel';
 import type { SlideUpMode } from './SlideUpPanel';
-import { WORKFLOW_PROMPTS } from '../constants/workflowPrompts';
-import type { WorkflowPrompt } from '../constants/workflowPrompts';
 import type { CaptureResult } from '../utils/screenshotCapture';
 import { FeedbackModal } from './FeedbackModal';
 import { SupportModal } from './SupportModal';
@@ -20,7 +18,12 @@ export interface ShortcutActions {
 }
 
 interface ChatInputProps {
-  onSendMessage: (text: string, displayText?: string, shortcuts?: Array<{ command: string; prompt: string }>) => void;
+  onSendMessage: (
+    text: string,
+    displayText?: string,
+    shortcuts?: Array<{ command: string; prompt: string }>,
+    quickActionMeta?: { name: string; description: string; prompt: string },
+  ) => void;
   onStopTask: () => void;
   onMicClick?: () => void;
   isRecording?: boolean;
@@ -36,6 +39,7 @@ interface ChatInputProps {
   costData?: CostDisplayProps | null;
   elapsedTime?: string | null;
   isInConversation?: boolean;
+  onViewQuickAction?: (qa: { name: string; description: string; prompt: string }) => void;
 }
 
 interface AttachedFile {
@@ -133,6 +137,7 @@ export default function ChatInput({
   costData,
   elapsedTime,
   isInConversation = false,
+  onViewQuickAction,
 }: ChatInputProps) {
   const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([]);
   const [showShortcuts, setShowShortcuts] = useState(false);
@@ -155,9 +160,12 @@ export default function ChatInput({
   const [attachedScreenshot, setAttachedScreenshot] = useState<CaptureResult | null>(null);
   const [showFeedbackModal, setShowFeedbackModal] = useState(false);
   const [showSupportModal, setShowSupportModal] = useState(false);
+  const [quickActions, setQuickActions] = useState<SavedQuickAction[]>([]);
+  const [selectedQuickAction, setSelectedQuickAction] = useState<SavedQuickAction | null>(null);
 
   useEffect(() => {
     shortcutSettingsStore.getSettings().then(s => setShortcuts(s.shortcuts));
+    quickActionSettingsStore.getSettings().then(s => setQuickActions(s.quickActions));
   }, []);
 
   useEffect(() => {
@@ -180,9 +188,10 @@ export default function ChatInput({
       (!hasContent &&
         attachedFiles.length === 0 &&
         !selectedShortcut &&
+        !selectedQuickAction &&
         attachedTabs.length === 0 &&
         !attachedScreenshot),
-    [disabled, hasContent, attachedFiles, selectedShortcut, attachedTabs, attachedScreenshot],
+    [disabled, hasContent, attachedFiles, selectedShortcut, selectedQuickAction, attachedTabs, attachedScreenshot],
   );
 
   const editableRef = useRef<HTMLDivElement>(null);
@@ -307,10 +316,18 @@ export default function ChatInput({
         showCreate: !!onCreateShortcut,
       };
     }
-    if (isFocused && !hasContent && !selectedShortcut && !showStopButton && !disabled && WORKFLOW_PROMPTS.length > 0) {
+    if (
+      isFocused &&
+      !hasContent &&
+      !selectedShortcut &&
+      !selectedQuickAction &&
+      !showStopButton &&
+      !disabled &&
+      quickActions.length > 0
+    ) {
       return {
         kind: 'quickstart',
-        prompts: WORKFLOW_PROMPTS,
+        prompts: quickActions,
       };
     }
     return { kind: 'hidden' };
@@ -328,8 +345,10 @@ export default function ChatInput({
     isFocused,
     hasContent,
     selectedShortcut,
+    selectedQuickAction,
     showStopButton,
     disabled,
+    quickActions,
   ]);
 
   const handleTabSelect = useCallback(
@@ -391,6 +410,25 @@ export default function ChatInput({
       return;
     }
 
+    if (selectedQuickAction) {
+      const plainText = el ? getPlainText(el).trim() : '';
+      const messageContent = plainText ? `${selectedQuickAction.prompt}\n\n${plainText}` : selectedQuickAction.prompt;
+      const displayContent = plainText ? `${selectedQuickAction.name} ${plainText}` : selectedQuickAction.name;
+      onSendMessage(messageContent, displayContent, undefined, {
+        name: selectedQuickAction.name,
+        description: selectedQuickAction.description,
+        prompt: selectedQuickAction.prompt,
+      });
+      if (el) el.textContent = '';
+      setSelectedQuickAction(null);
+      setAttachedFiles([]);
+      setAttachedTabs([]);
+      setAttachedScreenshot(null);
+      setHasContent(false);
+      resizeInput();
+      return;
+    }
+
     if (!el) return;
 
     const plainText = getPlainText(el).trim();
@@ -430,7 +468,16 @@ export default function ChatInput({
     setAttachedScreenshot(null);
     setHasContent(false);
     resizeInput();
-  }, [attachedFiles, attachedTabs, attachedScreenshot, selectedShortcut, editedPrompt, onSendMessage, resizeInput]);
+  }, [
+    attachedFiles,
+    attachedTabs,
+    attachedScreenshot,
+    selectedShortcut,
+    selectedQuickAction,
+    editedPrompt,
+    onSendMessage,
+    resizeInput,
+  ]);
 
   const handleCreateShortcutFromDropdown = useCallback(() => {
     setShowShortcuts(false);
@@ -525,6 +572,15 @@ export default function ChatInput({
           return;
         }
       }
+      if (e.key === 'Backspace' && selectedQuickAction) {
+        const el = editableRef.current;
+        const text = el ? getPlainText(el).trim() : '';
+        if (text === '') {
+          e.preventDefault();
+          setSelectedQuickAction(null);
+          return;
+        }
+      }
       if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
         e.preventDefault();
         handleSubmit();
@@ -545,6 +601,7 @@ export default function ChatInput({
       filteredTabs,
       selectedTabIndex,
       handleTabSelect,
+      selectedQuickAction,
     ],
   );
 
@@ -606,18 +663,22 @@ export default function ChatInput({
     setAttachedFiles(prev => prev.filter((_, i) => i !== index));
   }, []);
 
-  const handleQuickstartSelect = useCallback(
-    (wp: WorkflowPrompt) => {
-      onSendMessage(wp.prompt, wp.name);
-    },
-    [onSendMessage],
-  );
+  const handleQuickstartSelect = useCallback((qa: SavedQuickAction) => {
+    setSelectedQuickAction(qa);
+    const el = editableRef.current;
+    if (el) {
+      el.textContent = '';
+      setHasContent(false);
+    }
+    requestAnimationFrame(() => el?.focus());
+  }, []);
 
-  const placeholder = selectedShortcut
-    ? ''
-    : attachedFiles.length > 0 || attachedTabs.length > 0 || attachedScreenshot
-      ? 'Write something …'
-      : 'Ask anything, @ for tabs, / for actions';
+  const placeholder =
+    selectedShortcut || selectedQuickAction
+      ? ''
+      : attachedFiles.length > 0 || attachedTabs.length > 0 || attachedScreenshot
+        ? 'Write something …'
+        : 'Ask anything, @ for tabs, / for shortcuts';
 
   return (
     <div className="shrink-0 px-3 pb-3 pt-1.5">
@@ -738,6 +799,20 @@ export default function ChatInput({
                   onClick={() => onEditShortcut?.(selectedShortcut)}
                   className="shrink-0 rounded-md bg-black/[0.06] px-2 py-0.5 text-[13px] font-medium leading-relaxed text-black/60 transition-colors hover:bg-black/[0.1]">
                   /{selectedShortcut.command}
+                </button>
+              )}
+              {selectedQuickAction && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    onViewQuickAction?.({
+                      name: selectedQuickAction.name,
+                      description: selectedQuickAction.description,
+                      prompt: selectedQuickAction.prompt,
+                    })
+                  }
+                  className="shrink-0 rounded-md bg-black/[0.06] px-2 py-0.5 text-[13px] font-medium leading-relaxed text-black/60 transition-colors hover:bg-black/[0.1]">
+                  {selectedQuickAction.name}
                 </button>
               )}
               <div

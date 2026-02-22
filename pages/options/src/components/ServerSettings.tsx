@@ -4,6 +4,7 @@ import {
   DEFAULT_SERVER_SETTINGS,
   llmProviderStore,
   agentModelStore,
+  isTokenValid,
   type ProviderConfig,
   type AgentNameEnum,
 } from '@extension/storage';
@@ -20,7 +21,7 @@ function maskApiKey(key: string): string {
 export const ServerSettings = ({ isDarkMode = false }: ServerSettingsProps) => {
   const settingsSnapshot = useSyncExternalStore(serverSettingsStore.subscribe, serverSettingsStore.getSnapshot);
   const settings = settingsSnapshot ?? DEFAULT_SERVER_SETTINGS;
-  const isAuthenticated = Boolean(settings.accessToken) && settings.tokenExpiresAt > Date.now();
+  const isAuthenticated = isTokenValid(settings);
 
   const [providers, setProviders] = useState<Record<string, ProviderConfig>>({});
   const [agentModels, setAgentModels] = useState<Record<string, ModelConfig>>({});

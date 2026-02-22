@@ -18,6 +18,7 @@ export class ServerApiClient {
   constructor(
     config: ServerApiClientConfig,
     private readonly getAuthToken: () => Promise<string | null>,
+    private readonly onAuthFailure?: () => void,
   ) {
     this.config = {
       defaultTimeout: 30_000,
@@ -89,6 +90,7 @@ export class ServerApiClient {
       });
 
       if (!response.ok) {
+        if (response.status === 401) this.onAuthFailure?.();
         const responseBody = await response.text().catch(() => undefined);
         throw createServerErrorFromResponse(response.status, method, url.toString(), responseBody);
       }
@@ -138,6 +140,7 @@ export class ServerApiClient {
         });
 
         if (!response.ok) {
+          if (response.status === 401) this.onAuthFailure?.();
           const responseBody = await response.text().catch(() => undefined);
           throw createServerErrorFromResponse(response.status, method, url.toString(), responseBody);
         }

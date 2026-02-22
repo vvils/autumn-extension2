@@ -8,6 +8,8 @@ import {
   analyticsSettingsStore,
   serverSettingsStore,
   integrationSettingsStore,
+  shortcutSettingsStore,
+  quickActionSettingsStore,
   type CuratedAction,
   type ManifestProp,
 } from '@extension/storage';
@@ -30,6 +32,7 @@ let currentExecutor: Executor | null = null;
 let serverClient: ServerClient | null = null;
 let cachedHotelCapabilities: string | undefined;
 let currentPort: chrome.runtime.Port | null = null;
+let tokenExpiryTimer: ReturnType<typeof setTimeout> | null = null;
 const SIDE_PANEL_URL = chrome.runtime.getURL('side-panel/index.html');
 
 class MessageRetryQueue {
@@ -177,7 +180,23 @@ async function autoPopulateServerUrls() {
   }
 }
 
-// Initialize server client
+function scheduleTokenExpiryCheck() {
+  if (tokenExpiryTimer) {
+    clearTimeout(tokenExpiryTimer);
+    tokenExpiryTimer = null;
+  }
+  const snapshot = serverSettingsStore.getSnapshot();
+  if (!snapshot?.accessToken || !snapshot.tokenExpiresAt) return;
+  const msUntilExpiry = snapshot.tokenExpiresAt - Date.now();
+  if (msUntilExpiry <= 0) {
+    serverSettingsStore.clearAuth();
+    return;
+  }
+  tokenExpiryTimer = setTimeout(() => {
+    serverSettingsStore.clearAuth();
+  }, msUntilExpiry);
+}
+
 async function initServerClient() {
   await autoPopulateServerUrls();
   serverClient = await ServerClient.create(serverSettingsStore);
@@ -257,6 +276,59 @@ async function initServerClient() {
         } catch (error) {
           logger.warning('Failed to fetch integration data:', error);
         }
+
+        try {
+          const serverShortcuts = await serverClient.getShortcuts();
+          const localSettings = await shortcutSettingsStore.getSettings();
+
+          if (serverShortcuts.length === 0 && localSettings.shortcuts.length > 0) {
+            await serverClient.syncShortcuts(
+              localSettings.shortcuts.map(s => ({ command: s.command, prompt: s.prompt, createdAt: s.createdAt })),
+            );
+            const synced = await serverClient.getShortcuts();
+            await shortcutSettingsStore.updateSettings({
+              shortcuts: synced.map(s => ({
+                id: s.id,
+                command: s.command,
+                prompt: s.prompt,
+                createdAt: new Date(s.createdAt).getTime(),
+              })),
+            });
+            logger.info(`Migrated ${synced.length} shortcuts to server`);
+          } else if (serverShortcuts.length > 0) {
+            await shortcutSettingsStore.updateSettings({
+              shortcuts: serverShortcuts.map(s => ({
+                id: s.id,
+                command: s.command,
+                prompt: s.prompt,
+                createdAt: new Date(s.createdAt).getTime(),
+              })),
+            });
+            logger.info(`Loaded ${serverShortcuts.length} shortcuts from server`);
+          }
+        } catch (error) {
+          logger.warning('Failed to sync shortcuts from server:', error);
+        }
+
+        try {
+          const serverQuickActions = await serverClient.getQuickActions();
+          if (serverQuickActions.length > 0) {
+            await quickActionSettingsStore.updateSettings({
+              quickActions: serverQuickActions.map(qa => ({
+                id: qa.id,
+                name: qa.name,
+                prompt: qa.prompt,
+                description: qa.description,
+                icon: qa.icon,
+                sortOrder: qa.sortOrder,
+                createdAt: new Date(qa.createdAt).getTime(),
+              })),
+            });
+            logger.info(`Loaded ${serverQuickActions.length} quick actions from server`);
+          }
+        } catch (error) {
+          logger.warning('Failed to fetch quick actions from server:', error);
+        }
       }
     } catch (error) {
       logger.warning('Failed to fetch hotel context:', error);
@@ -264,6 +336,7 @@ async function initServerClient() {
   } else {
     logger.info('Server not configured, standalone mode');
   }
+  scheduleTokenExpiryCheck();
 }
 
 initServerClient().catch(error => {
@@ -283,6 +356,7 @@ serverSettingsStore.subscribe(() => {
 });
 
 const reinitOnAuthChange = () => {
+  scheduleTokenExpiryCheck();
   initServerClient().catch(error => {
     logger.error('Failed to reinit after auth change:', error);
   });
@@ -316,6 +390,45 @@ chrome.runtime.onMessage.addListener(message => {
     if (currentPort) {
       currentPort.postMessage(message);
     }
+  }
+});
+
+chrome.runtime.onMessage.addListener((message, _sender) => {
+  if (message?.type === 'shortcut_created') {
+    (async () => {
+      if (!serverClient || !(await serverClient.isAuthenticated())) return;
+      try {
+        const result = await serverClient.createShortcut(message.command, message.prompt);
+        const settings = await shortcutSettingsStore.getSettings();
+        await shortcutSettingsStore.updateSettings({
+          shortcuts: settings.shortcuts.map(s => (s.id === message.localId ? { ...s, id: result.id } : s)),
+        });
+      } catch (error) {
+        logger.warning('Failed to sync shortcut creation to server:', error);
+      }
+    })();
+  }
+
+  if (message?.type === 'shortcut_updated') {
+    (async () => {
+      if (!serverClient || !(await serverClient.isAuthenticated())) return;
+      try {
+        await serverClient.updateShortcut(message.id, message.updates);
+      } catch (error) {
+        logger.warning('Failed to sync shortcut update to server:', error);
+      }
+    })();
+  }
+
+  if (message?.type === 'shortcut_deleted') {
+    (async () => {
+      if (!serverClient || !(await serverClient.isAuthenticated())) return;
+      try {
+        await serverClient.deleteShortcut(message.id);
+      } catch (error) {
+        logger.warning('Failed to sync shortcut deletion to server:', error);
+      }
+    })();
   }
 });
 

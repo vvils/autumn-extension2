@@ -4,6 +4,7 @@ import {
   DEFAULT_SERVER_SETTINGS,
   integrationSettingsStore,
   DEFAULT_INTEGRATION_SETTINGS,
+  isTokenValid,
 } from '@extension/storage';
 import type { CuratedAction } from '@extension/storage';
 import { createFrontendClient } from '@pipedream/sdk/browser';
@@ -125,7 +126,7 @@ async function serverFetch(path: string, options?: RequestInit): Promise<Respons
 export const IntegrationSettings = ({ isDarkMode: _isDarkMode = false }: IntegrationSettingsProps) => {
   const serverSnapshot = useSyncExternalStore(serverSettingsStore.subscribe, serverSettingsStore.getSnapshot);
   const settings = serverSnapshot ?? DEFAULT_SERVER_SETTINGS;
-  const isAuthenticated = Boolean(settings.accessToken) && settings.tokenExpiresAt > Date.now();
+  const isAuthenticated = isTokenValid(settings);
 
   const integrationSnapshot = useSyncExternalStore(
     integrationSettingsStore.subscribe,

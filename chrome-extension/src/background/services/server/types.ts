@@ -163,6 +163,25 @@ export interface GenerateGroupQuoteParams {
   discountPercent?: number;
 }
 
+export interface ServerShortcut {
+  id: string;
+  command: string;
+  prompt: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface ServerQuickAction {
+  id: string;
+  name: string;
+  prompt: string;
+  description: string;
+  icon: string;
+  sortOrder: number;
+  createdAt: string;
+  updatedAt?: string;
+}
+
 export interface GroupQuoteSettingsResponse {
   success: boolean;
   data: {

@@ -17,6 +17,8 @@ import type {
   PushRatesResponse,
   GenerateGroupQuoteParams,
   GroupQuoteSettingsResponse,
+  ServerShortcut,
+  ServerQuickAction,
 } from './types';
 import { ServerApiClient } from './apiClient';
 
@@ -42,11 +44,17 @@ export class ServerClient {
     const config = await serverSettings.getSettings();
     if (!config.serverUrl) return null;
 
-    const apiClient = new ServerApiClient({ baseUrl: config.serverUrl }, async () => {
-      const settings = await serverSettings.getSettings();
-      if (!settings.accessToken || settings.tokenExpiresAt <= Date.now()) return null;
-      return settings.accessToken;
-    });
+    const apiClient = new ServerApiClient(
+      { baseUrl: config.serverUrl },
+      async () => {
+        const settings = await serverSettings.getSettings();
+        if (!settings.accessToken || settings.tokenExpiresAt <= Date.now()) return null;
+        return settings.accessToken;
+      },
+      () => {
+        serverSettings.clearAuth();
+      },
+    );
 
     return new ServerClient(apiClient, serverSettings);
   }
@@ -198,5 +206,36 @@ export class ServerClient {
     } catch {
       return null;
     }
+  }
+
+  async getShortcuts(): Promise<ServerShortcut[]> {
+    const { data } = await this.apiClient.get<ServerShortcut[]>('/ai/shortcuts');
+    return data;
+  }
+
+  async createShortcut(command: string, prompt: string): Promise<ServerShortcut> {
+    const { data } = await this.apiClient.post<ServerShortcut>('/ai/shortcuts', { command, prompt });
+    return data;
+  }
+
+  async updateShortcut(id: string, updates: { command?: string; prompt?: string }): Promise<ServerShortcut> {
+    const { data } = await this.apiClient.patch<ServerShortcut>(`/ai/shortcuts/${encodeURIComponent(id)}`, updates);
+    return data;
+  }
+
+  async deleteShortcut(id: string): Promise<void> {
+    await this.apiClient.delete(`/ai/shortcuts/${encodeURIComponent(id)}`);
+  }
+
+  async syncShortcuts(
+    shortcuts: Array<{ command: string; prompt: string; createdAt?: number }>,
+  ): Promise<{ synced: number }> {
+    const { data } = await this.apiClient.post<{ synced: number }>('/ai/shortcuts/sync', { shortcuts });
+    return data;
+  }
+
+  async getQuickActions(): Promise<ServerQuickAction[]> {
+    const { data } = await this.apiClient.get<ServerQuickAction[]>('/ai/quick-actions');
+    return data;
   }
 }

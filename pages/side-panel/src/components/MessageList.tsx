@@ -16,6 +16,7 @@ interface MessageListProps {
   onWidgetApply?: WidgetApplyFn;
   onWidgetRespond?: WidgetRespondFn;
   onShortcutClick?: (shortcut: { command: string; prompt: string }) => void;
+  onQuickActionClick?: (qa: { name: string; description: string; prompt: string }) => void;
 }
 
 export default memo(function MessageList({
@@ -25,6 +26,7 @@ export default memo(function MessageList({
   onWidgetApply,
   onWidgetRespond,
   onShortcutClick,
+  onQuickActionClick,
 }: MessageListProps) {
   const items = useMemo<RenderItem[]>(() => {
     if (completedChains.length === 0) {
@@ -69,6 +71,7 @@ export default memo(function MessageList({
             onWidgetApply={onWidgetApply}
             onWidgetRespond={onWidgetRespond}
             onShortcutClick={onShortcutClick}
+            onQuickActionClick={onQuickActionClick}
           />
         );
       })}
@@ -140,12 +143,30 @@ function ShortcutChipButton({
   );
 }
 
+function QuickActionChip({
+  quickAction,
+  onClick,
+}: {
+  quickAction: { name: string; description: string; prompt: string };
+  onClick?: (qa: { name: string; description: string; prompt: string }) => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={() => onClick?.(quickAction)}
+      className="inline rounded-md bg-white/20 px-1.5 py-0.5 font-medium transition-colors hover:bg-white/30">
+      {quickAction.name}
+    </button>
+  );
+}
+
 interface MessageBlockProps {
   message: Message;
   isStreaming?: boolean;
   onWidgetApply?: WidgetApplyFn;
   onWidgetRespond?: WidgetRespondFn;
   onShortcutClick?: (shortcut: { command: string; prompt: string }) => void;
+  onQuickActionClick?: (qa: { name: string; description: string; prompt: string }) => void;
 }
 
 function MessageBlock({
@@ -154,6 +175,7 @@ function MessageBlock({
   onWidgetApply,
   onWidgetRespond,
   onShortcutClick,
+  onQuickActionClick,
 }: MessageBlockProps) {
   if (!message.actor) {
     console.error('No actor found');
@@ -163,11 +185,18 @@ function MessageBlock({
 
   if (isUser) {
     const shortcuts = message.shortcuts ?? (message.shortcut ? [message.shortcut] : []);
+    const qa = message.quickAction;
+    const extraText = qa ? message.content.slice(qa.name.length).trimStart() : '';
 
     return (
       <div className="flex animate-fade-in justify-end">
         <div className="max-w-[85%] whitespace-pre-wrap break-words rounded-2xl rounded-br-md bg-black px-3.5 py-2.5 text-[13px] leading-relaxed text-white">
-          {shortcuts.length > 0 ? (
+          {qa ? (
+            <>
+              <QuickActionChip quickAction={qa} onClick={onQuickActionClick} />
+              {extraText && <span> {extraText}</span>}
+            </>
+          ) : shortcuts.length > 0 ? (
             <InlineShortcutContent content={message.content} shortcuts={shortcuts} onClick={onShortcutClick} />
           ) : (
             message.content
