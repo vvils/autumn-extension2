@@ -28,6 +28,8 @@ chrome-extension/public/manifest.json
 **/tailwind-output.css
 
 .autumn
+.claude
+.serena
 .vscode
 .cursor
 *.py

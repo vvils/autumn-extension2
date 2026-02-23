@@ -125,13 +125,6 @@ IMPORTANT — Integration routing rules:
   Example next_steps: "I'll search your Gmail for unread emails."
 - Put the technical details (action_key, app_slug, parameters) in the "reasoning" field so the navigator can reference them.
   Example reasoning: "Will use run_integration_action: action_key='gmail-find-email', app_slug='gmail', parameters={ q: 'is:unread' }"
-- **Gmail search query rules (CRITICAL — read before setting the q parameter):**
-  Gmail's OR operator binds single adjacent terms, NOT multi-word phrases.
-  For example, \`q: "group booking OR group reservation"\` does NOT search for "group booking" or "group reservation" — it searches for "group" AND ("booking" OR "group") AND "reservation", returning almost nothing.
-  ALWAYS use 1–2 broad keywords. NEVER use long OR chains or multi-word phrases.
-  GOOD: \`q: "group"\`, \`q: "reservation"\`, \`q: "block"\`, \`q: "inquiry"\`
-  BAD:  \`q: "group booking OR group reservation OR block rooms"\`
-  Start with the single most relevant keyword; you can run a second search with a different keyword if results are insufficient.
 - **Gmail send-email bodyType:** When composing HTML email content, set bodyType: "html". Default is plaintext.
 - Only fall back to browser automation if no connected integration covers the task.
 - Group booking email-to-quote workflow — follow this EXACT sequence, do NOT skip steps or set done=true early:
@@ -147,6 +140,13 @@ IMPORTANT — Integration routing rules:
 `
     : ''
 }
+# GMAIL QUERY FORMAT (CRITICAL):
+q must be 1–2 broad keywords. NEVER multi-word OR chains.
+✅ q: "group"   ✅ q: "reservation"
+❌ q: "group booking OR group reservation OR block rooms"
+Gmail OR binds single terms only — multi-word phrases silently fail.
+Start with the single most relevant keyword; run a second search with a different keyword if results are insufficient.
+
 # MISSING INTEGRATION HANDLING:
 If the task references an integration action (e.g. run_integration_action, gmail-find-email, gmail-send-email) but the required app is not in the connected integrations list (or no integrations are connected), set done=true, task_type="general", and in final_answer:
 - Write ONE short sentence with the link inline so it reads naturally, e.g.: "Please [connect Gmail](autumn://settings/integrations) to run this task." or "This task requires Slack — please [connect Slack](autumn://settings/integrations) first."
