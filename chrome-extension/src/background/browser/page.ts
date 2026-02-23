@@ -403,13 +403,6 @@ export default class Page {
     }
   }
 
-  async getContent(): Promise<string> {
-    if (!this._puppeteerPage) {
-      throw new Error('Puppeteer page is not connected');
-    }
-    return await this._puppeteerPage.content();
-  }
-
   getCachedState(): PageState | null {
     return this._cachedState;
   }
@@ -1496,18 +1489,6 @@ export default class Page {
     }
     // Otherwise return the cached state's selector map
     return this._cachedState.selectorMap;
-  }
-
-  async getElementByIndex(index: number): Promise<ElementHandle | null> {
-    const selectorMap = this.getSelectorMap();
-    const element = selectorMap.get(index);
-    if (!element) return null;
-    return await this.locateElement(element);
-  }
-
-  getDomElementByIndex(index: number): DOMElementNode | null {
-    const selectorMap = this.getSelectorMap();
-    return selectorMap.get(index) || null;
   }
 
   isFileUploader(elementNode: DOMElementNode, maxDepth = 3, currentDepth = 0): boolean {

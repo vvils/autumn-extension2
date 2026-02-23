@@ -45,19 +45,4 @@ export class DOMHistoryElement {
     public viewportCoordinates: CoordinateSet | null = null,
     public viewportInfo: ViewportInfo | null = null,
   ) {}
-
-  toDict(): Record<string, any> {
-    return {
-      tagName: this.tagName,
-      xpath: this.xpath,
-      highlightIndex: this.highlightIndex,
-      entireParentBranchPath: this.entireParentBranchPath,
-      attributes: this.attributes,
-      shadowRoot: this.shadowRoot,
-      cssSelector: this.cssSelector,
-      pageCoordinates: this.pageCoordinates,
-      viewportCoordinates: this.viewportCoordinates,
-      viewportInfo: this.viewportInfo,
-    };
-  }
 }

@@ -5,12 +5,7 @@ import type { BasePrompt } from '../prompts/base';
 import type { BaseMessage, UsageMetadata } from '@langchain/core/messages';
 import { createLogger } from '@src/background/log';
 import type { Action } from '../actions/builder';
-import {
-  extractJsonFromModelOutput,
-  extractStreamingFieldValue,
-  removeThinkTags,
-  removeThinkTagsForStreaming,
-} from '../messages/utils';
+import { extractJsonFromModelOutput, removeThinkTags } from '../messages/utils';
 import { isAbortedError, ResponseParseError } from './errors';
 
 const logger = createLogger('agent');
@@ -181,83 +176,6 @@ export abstract class BaseAgent<T extends z.ZodType, M = unknown> {
     const errorMessage = `Failed to parse response from ${this.modelName}`;
     logger.error(errorMessage);
     throw new ResponseParseError('Could not parse response');
-  }
-
-  protected async streamInvoke(
-    inputMessages: BaseMessage[],
-    targetFields: string[],
-    onChunk: (text: string) => void,
-  ): Promise<this['ModelOutput']> {
-    const DEBOUNCE_MS = 100;
-    const MIN_DELTA_CHARS = 5;
-
-    let buffer = '';
-    let lastEmitted = '';
-    let lastEmitTime = 0;
-
-    const emitIfNeeded = () => {
-      const cleaned = removeThinkTagsForStreaming(buffer);
-      let displayText = '';
-      for (const field of targetFields) {
-        const value = extractStreamingFieldValue(cleaned, field);
-        if (value) {
-          displayText = value;
-          break;
-        }
-      }
-      if (displayText && displayText.length - lastEmitted.length >= MIN_DELTA_CHARS) {
-        lastEmitted = displayText;
-        onChunk(displayText);
-      }
-    };
-
-    try {
-      const stream = await this.chatLLM.stream(inputMessages, {
-        signal: this.context.controller.signal,
-        ...this.callOptions,
-      });
-
-      let lastChunkUsage: UsageMetadata | undefined;
-      for await (const chunk of stream) {
-        const content = typeof chunk.content === 'string' ? chunk.content : '';
-        buffer += content;
-        if (chunk.usage_metadata) lastChunkUsage = chunk.usage_metadata;
-
-        const now = Date.now();
-        if (now - lastEmitTime >= DEBOUNCE_MS) {
-          lastEmitTime = now;
-          emitIfNeeded();
-        }
-      }
-      this.lastUsageMetadata = lastChunkUsage;
-
-      // Final emission
-      const cleaned = removeThinkTagsForStreaming(buffer);
-      let finalText = '';
-      for (const field of targetFields) {
-        const value = extractStreamingFieldValue(cleaned, field);
-        if (value) {
-          finalText = value;
-          break;
-        }
-      }
-      if (finalText && finalText !== lastEmitted) {
-        onChunk(finalText);
-      }
-
-      const parsed = this.manuallyParseResponse(buffer);
-      if (parsed) return parsed;
-
-      throw new ResponseParseError('Could not parse streamed response');
-    } catch (error) {
-      if (isAbortedError(error)) throw error;
-
-      logger.debug(
-        `[${this.modelName}] Stream parse failed, falling back to invoke (expected for structured-output models):`,
-        error,
-      );
-      return this.invoke(inputMessages);
-    }
   }
 
   // Execute the agent and return the result

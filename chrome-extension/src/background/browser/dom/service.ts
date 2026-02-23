@@ -10,19 +10,6 @@ function isNotNull<T>(item: T | null | undefined): item is T {
   return item != null;
 }
 
-export interface ReadabilityResult {
-  title: string;
-  content: string;
-  textContent: string;
-  length: number;
-  excerpt: string;
-  byline: string;
-  dir: string;
-  siteName: string;
-  lang: string;
-  publishedTime: string;
-}
-
 export interface FrameInfo {
   frameId: number;
   computedHeight: number;
@@ -35,50 +22,7 @@ export interface FrameInfo {
 declare global {
   interface Window {
     buildDomTree: (args: BuildDomTreeArgs) => RawDomTreeNode | null;
-    turn2Markdown: (selector?: string) => string;
-    parserReadability: () => ReadabilityResult | null;
   }
-}
-
-/**
- * Get the markdown content for the current page.
- * @param tabId - The ID of the tab to get the markdown content for.
- * @param selector - The selector to get the markdown content for. If not provided, the body of the entire page will be converted to markdown.
- * @returns The markdown content for the selected element on the current page.
- */
-export async function getMarkdownContent(tabId: number, selector?: string): Promise<string> {
-  const results = await chrome.scripting.executeScript({
-    target: { tabId: tabId },
-    func: sel => {
-      return window.turn2Markdown(sel);
-    },
-    args: [selector || ''], // Pass the selector as an argument
-  });
-
-  const result = results[0]?.result;
-  if (!result) {
-    throw new Error('Failed to get markdown content');
-  }
-  return result as string;
-}
-
-/**
- * Get the readability content for the current page.
- * @param tabId - The ID of the tab to get the readability content for.
- * @returns The readability content for the current page.
- */
-export async function getReadabilityContent(tabId: number): Promise<ReadabilityResult> {
-  const results = await chrome.scripting.executeScript({
-    target: { tabId },
-    func: () => {
-      return window.parserReadability();
-    },
-  });
-  const result = results[0]?.result;
-  if (!result) {
-    throw new Error('Failed to get readability content');
-  }
-  return result as ReadabilityResult;
 }
 
 /**

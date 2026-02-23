@@ -52,10 +52,6 @@ export class NavigatorActionRegistry {
     this.actions[action.name()] = action;
   }
 
-  unregisterAction(name: string): void {
-    delete this.actions[name];
-  }
-
   getAction(name: string): Action | undefined {
     return this.actions[name];
   }

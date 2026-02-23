@@ -21,18 +21,6 @@ export class EventManager {
     }
   }
 
-  unsubscribe(eventType: EventType, callback: EventCallback): void {
-    if (this._subscribers.has(eventType)) {
-      const callbacks = this._subscribers.get(eventType);
-      if (callbacks) {
-        this._subscribers.set(
-          eventType,
-          callbacks.filter(cb => cb !== callback),
-        );
-      }
-    }
-  }
-
   clearSubscribers(eventType: EventType): void {
     if (this._subscribers.has(eventType)) {
       this._subscribers.set(eventType, []);

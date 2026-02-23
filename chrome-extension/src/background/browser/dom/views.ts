@@ -241,14 +241,6 @@ export class DOMElementNode extends DOMBaseNode {
     return this._hashPromise;
   }
 
-  /**
-   * Clears the cached hash value, forcing recalculation on next hash() call
-   */
-  clearHashCache(): void {
-    this._hashedValue = undefined;
-    this._hashPromise = undefined;
-  }
-
   getAccessibleName(): string {
     const ariaLabel = this.attributes['aria-label'];
     if (ariaLabel?.trim()) return ariaLabel.trim();
@@ -614,30 +606,6 @@ export class DOMElementNode extends DOMBaseNode {
 export interface DOMState {
   elementTree: DOMElementNode;
   selectorMap: Map<number, DOMElementNode>;
-}
-
-export function domElementNodeToDict(elementTree: DOMBaseNode): unknown {
-  function nodeToDict(node: DOMBaseNode): unknown {
-    if (node instanceof DOMTextNode) {
-      return {
-        type: 'text',
-        text: node.text,
-      };
-    }
-    if (node instanceof DOMElementNode) {
-      return {
-        type: 'element',
-        tagName: node.tagName,
-        attributes: node.attributes,
-        highlightIndex: node.highlightIndex,
-        children: node.children.map(child => nodeToDict(child)),
-      };
-    }
-
-    return {};
-  }
-
-  return nodeToDict(elementTree);
 }
 
 export async function calcBranchPathHashSet(state: DOMState): Promise<Set<string>> {
