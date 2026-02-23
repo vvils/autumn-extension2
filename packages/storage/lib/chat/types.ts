@@ -17,23 +17,6 @@ export interface Message {
   quickAction?: { name: string; description: string; prompt: string };
 }
 
-export interface ChatMessage extends Message {
-  id: string; // Unique ID for each message
-}
-
-export interface ChatSessionMetadata {
-  id: string;
-  title: string;
-  createdAt: number; // Unix timestamp in milliseconds
-  updatedAt: number; // Unix timestamp in milliseconds
-  messageCount: number;
-}
-
-// ChatSession is the full conversation history displayed in the Sidepanel
-export interface ChatSession extends ChatSessionMetadata {
-  messages: ChatMessage[];
-}
-
 // ChatAgentStepHistory is the history of the every step of the agent
 export interface ChatAgentStepHistory {
   task: string;
