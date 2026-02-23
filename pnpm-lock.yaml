@@ -210,12 +210,6 @@ importers:
         specifier: 8.18.0
         version: 8.18.0
 
-  packages/schema-utils:
-    devDependencies:
-      '@extension/tsconfig':
-        specifier: workspace:*
-        version: link:../tsconfig
-
   packages/shared:
     devDependencies:
       '@extension/storage':
