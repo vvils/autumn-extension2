@@ -9,5 +9,5 @@ const fileName = `extension-${YYYYMMDD}-${HHmmss}`;
 zipBundle({
   distDirectory: resolve(__dirname, '../../dist'),
   buildDirectory: resolve(__dirname, '../../dist-zip'),
-  archiveName: process.env.__FIREFOX__ ? `${fileName}.xpi` : `${fileName}.zip`,
+  archiveName: `${fileName}.zip`,
 });

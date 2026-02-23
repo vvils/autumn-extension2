@@ -30,14 +30,13 @@ export default function makeManifestPlugin(config: { outDir: string }): PluginOp
     }
     const manifestPath = resolve(to, 'manifest.json');
 
-    const isFirefox = process.env.__FIREFOX__ === 'true';
     const isDev = process.env.__DEV__ === 'true';
 
     if (isDev) {
       addRefreshContentScript(manifest);
     }
 
-    fs.writeFileSync(manifestPath, ManifestParser.convertManifestToString(manifest, isFirefox ? 'firefox' : 'chrome'));
+    fs.writeFileSync(manifestPath, ManifestParser.convertManifestToString(manifest, 'chrome'));
     if (isDev) {
       fs.copyFileSync(refreshFile, resolve(to, 'refresh.js'));
     }
