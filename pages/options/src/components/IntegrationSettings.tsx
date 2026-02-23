@@ -7,6 +7,7 @@ import {
   isTokenValid,
 } from '@extension/storage';
 import type { CuratedAction } from '@extension/storage';
+import { serverFetch } from '@extension/shared';
 import { createFrontendClient } from '@pipedream/sdk/browser';
 import type { IconType } from 'react-icons';
 import { FiBox, FiPlus } from 'react-icons/fi';
@@ -161,22 +162,6 @@ function AppTile({ app, onClick, showPlus }: { app: AppCard; onClick: () => void
       </div>
     </button>
   );
-}
-
-// --- Server fetch ---
-
-async function serverFetch(path: string, options?: RequestInit): Promise<Response> {
-  const { serverUrl, accessToken } = await serverSettingsStore.getSettings();
-  const base = serverUrl.replace(/\/+$/, '');
-  return fetch(`${base}${path}`, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${accessToken}`,
-      ...options?.headers,
-    },
-    signal: options?.signal ?? AbortSignal.timeout(10_000),
-  });
 }
 
 // --- Main component ---
