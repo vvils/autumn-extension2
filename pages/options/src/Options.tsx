@@ -3,12 +3,11 @@ import '@src/Options.css';
 import { withErrorBoundary, withSuspense } from '@extension/shared';
 import { GeneralSettings } from './components/GeneralSettings';
 import { FirewallSettings } from './components/FirewallSettings';
-import { AnalyticsSettings } from './components/AnalyticsSettings';
 import { ServerSettings } from './components/ServerSettings';
 import { IntegrationSettings } from './components/IntegrationSettings';
 import { ShortcutSettings } from './components/ShortcutSettings';
 
-type TabTypes = 'general' | 'firewall' | 'analytics' | 'server' | 'integrations' | 'shortcuts';
+type TabTypes = 'general' | 'firewall' | 'server' | 'integrations' | 'shortcuts';
 
 const ALL_TABS: { id: TabTypes; label: string; title: string; subtitle: string; devOnly?: boolean }[] = [
   { id: 'server', label: 'Server', title: 'Server', subtitle: 'Connection and model configuration', devOnly: true },
@@ -31,13 +30,6 @@ const ALL_TABS: { id: TabTypes; label: string; title: string; subtitle: string; 
     label: 'Firewall',
     title: 'Firewall',
     subtitle: 'URL access control and domain filtering',
-    devOnly: true,
-  },
-  {
-    id: 'analytics',
-    label: 'Analytics',
-    title: 'Analytics',
-    subtitle: 'Usage data and telemetry preferences',
     devOnly: true,
   },
 ];
@@ -73,8 +65,6 @@ const Options = () => {
         return <GeneralSettings isDarkMode={isDarkMode} />;
       case 'firewall':
         return <FirewallSettings isDarkMode={isDarkMode} />;
-      case 'analytics':
-        return <AnalyticsSettings isDarkMode={isDarkMode} />;
       case 'server':
         return <ServerSettings isDarkMode={isDarkMode} />;
       case 'integrations':

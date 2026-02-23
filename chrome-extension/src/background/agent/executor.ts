@@ -24,7 +24,6 @@ import { chatHistoryStore } from '@extension/storage/lib/chat';
 import type { AgentStepHistory } from './history';
 import type { GeneralSettingsConfig } from '@extension/storage';
 import type { ServerClient } from '../services/server';
-import { analytics } from '../services/analytics';
 
 const logger = createLogger('Executor');
 
@@ -141,7 +140,6 @@ export class Executor {
 
     try {
       this.context.emitEvent(Actors.SYSTEM, ExecutionState.TASK_START, this.context.taskId);
-      void analytics.trackTaskStart(this.context.taskId);
 
       // Phase 1: Run initial planner to classify the task
       let latestPlanOutput = await this.runPlannerWithAskUser();
@@ -159,12 +157,10 @@ export class Executor {
         const domainResult = await this.executeDomainQuery(refinedQuery);
         if (domainResult === 'completed') {
           this.appendConversationHistory(task, this.context.finalAnswer ?? '');
-          void analytics.trackTaskComplete(this.context.taskId);
           return;
         }
         if (domainResult === 'error') {
           this.context.emitEvent(Actors.SYSTEM, ExecutionState.TASK_FAIL, 'Domain query failed: Stream failed');
-          void analytics.trackTaskFailed(this.context.taskId, analytics.categorizeError('domain_query_error'));
           return;
         }
         // domainResult === 'escalated': fall through to browser loop
@@ -177,7 +173,6 @@ export class Executor {
         const finalMessage = this.context.finalAnswer || this.context.taskId;
         this.context.emitEvent(Actors.SYSTEM, ExecutionState.TASK_OK, finalMessage);
         this.appendConversationHistory(task, this.context.finalAnswer ?? '');
-        void analytics.trackTaskComplete(this.context.taskId);
         return;
       }
 
@@ -220,28 +215,20 @@ export class Executor {
         const finalMessage = this.context.finalAnswer || this.context.taskId;
         this.context.emitEvent(Actors.SYSTEM, ExecutionState.TASK_OK, finalMessage);
         this.appendConversationHistory(task, this.context.finalAnswer ?? '');
-        void analytics.trackTaskComplete(this.context.taskId);
       } else if (step >= allowedMaxSteps) {
         logger.error('❌ Task failed: Max steps reached');
         this.context.emitEvent(Actors.SYSTEM, ExecutionState.TASK_FAIL, 'Max steps reached');
-        const maxStepsError = new MaxStepsReachedError('Max steps reached');
-        const errorCategory = analytics.categorizeError(maxStepsError);
-        void analytics.trackTaskFailed(this.context.taskId, errorCategory);
       } else if (this.context.stopped) {
         this.context.emitEvent(Actors.SYSTEM, ExecutionState.TASK_CANCEL, 'Task cancelled');
-        void analytics.trackTaskCancelled(this.context.taskId);
       } else {
         this.context.emitEvent(Actors.SYSTEM, ExecutionState.TASK_PAUSE, 'Task paused');
       }
     } catch (error) {
       if (error instanceof RequestCancelledError) {
         this.context.emitEvent(Actors.SYSTEM, ExecutionState.TASK_CANCEL, 'Task cancelled');
-        void analytics.trackTaskCancelled(this.context.taskId);
       } else {
         const errorMessage = error instanceof Error ? error.message : String(error);
         this.context.emitEvent(Actors.SYSTEM, ExecutionState.TASK_FAIL, `Task failed: \n\n${errorMessage}`);
-        const errorCategory = analytics.categorizeError(error instanceof Error ? error : errorMessage);
-        void analytics.trackTaskFailed(this.context.taskId, errorCategory);
       }
     } finally {
       if (import.meta.env.DEV) {

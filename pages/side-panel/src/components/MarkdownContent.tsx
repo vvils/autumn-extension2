@@ -30,8 +30,8 @@ const components: Components = {
             const base = 'options/index.html';
             chrome.tabs.create({ url: chrome.runtime.getURL(hash ? `${base}#${hash}` : base) });
           }}
-          className="mt-1 inline-flex items-center gap-1 rounded-full bg-accent/10 px-2.5 py-1 text-[12px] font-medium text-accent transition-colors hover:bg-accent/20">
-          {children} &rarr;
+          className="inline rounded-md bg-black/[0.06] px-1.5 py-0.5 font-medium transition-colors hover:bg-black/[0.10]">
+          {children}
         </button>
       );
     }

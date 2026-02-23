@@ -1,11 +1,9 @@
-import 'webextension-polyfill';
 import {
   agentModelStore,
   AgentNameEnum,
   firewallStore,
   generalSettingsStore,
   llmProviderStore,
-  analyticsSettingsStore,
   serverSettingsStore,
   integrationSettingsStore,
   shortcutSettingsStore,
@@ -20,7 +18,6 @@ import { ExecutionState } from './agent/event/types';
 import { createChatModel } from './agent/helper';
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import { injectBuildDomTreeScripts } from './browser/dom/service';
-import { analytics } from './services/analytics';
 import { ServerClient, detectTokenFromTabs, listenForWebAppAuth, watchTabsForAuth } from './services/server';
 import type { AddMessagePayload } from './services/server/types';
 import { validateWidgetApplyRequest, executeWidgetApply } from './services/widgetApply';
@@ -153,16 +150,6 @@ logger.info('background loaded');
 
 chrome.runtime.onInstalled.addListener(async () => {
   // Reserved for future install/update hooks
-});
-
-analytics.init().catch((error: unknown) => {
-  logger.error('Failed to initialize analytics:', error);
-});
-
-analyticsSettingsStore.subscribe(() => {
-  analytics.updateSettings().catch((error: unknown) => {
-    logger.error('Failed to update analytics settings:', error);
-  });
 });
 
 const SERVER_URL = import.meta.env.DEV

@@ -148,8 +148,10 @@ IMPORTANT — Integration routing rules:
     : ''
 }
 # MISSING INTEGRATION HANDLING:
-If the task references an integration action (e.g. run_integration_action, gmail-find-email, gmail-send-email) but the required app is not in the connected integrations list (or no integrations are connected), set done=true, task_type="general", and in final_answer name the specific service needed and include: [Connect in Settings](autumn://settings/integrations).
-Do NOT attempt browser automation as a fallback for integration actions.
+If the task references an integration action (e.g. run_integration_action, gmail-find-email, gmail-send-email) but the required app is not in the connected integrations list (or no integrations are connected), set done=true, task_type="general", and in final_answer:
+- Write ONE short sentence with the link inline so it reads naturally, e.g.: "Please [connect Gmail](autumn://settings/integrations) to run this task." or "This task requires Slack — please [connect Slack](autumn://settings/integrations) first."
+- Do NOT put the link on a separate line, do NOT list features or capabilities
+- Do NOT attempt browser automation as a fallback for integration actions
 
 # TASK COMPLETION VALIDATION:
 When determining if a task is "done":

@@ -31,14 +31,4 @@ describe('findModelPricing', () => {
   it('returns null for unknown model', () => {
     expect(findModelPricing('totally-unknown-model')).toBeNull();
   });
-
-  it('returns null for Ollama models (not in pricing table)', () => {
-    expect(findModelPricing('llama3:latest')).toBeNull();
-  });
-
-  it('finds Gemini model pricing', () => {
-    const pricing = findModelPricing('gemini-2.5-flash-preview-05-20');
-    expect(pricing).not.toBeNull();
-    expect(pricing!.inputPricePerMillion).toBe(0.15);
-  });
 });

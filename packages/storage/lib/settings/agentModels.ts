@@ -9,7 +9,7 @@ export interface ModelConfig {
   provider: string;
   modelName: string;
   parameters?: Record<string, unknown>;
-  reasoningEffort?: 'minimal' | 'low' | 'medium' | 'high'; // For o-series models (OpenAI and Azure)
+  reasoningEffort?: 'minimal' | 'low' | 'medium' | 'high'; // For o-series models (OpenAI)
 }
 
 // Interface for storing multiple agent model configurations

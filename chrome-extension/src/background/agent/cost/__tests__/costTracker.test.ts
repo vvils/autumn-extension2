@@ -31,7 +31,7 @@ describe('CostTracker', () => {
 
   it('accumulates tokens but not cost for unknown models', () => {
     const tracker = new CostTracker();
-    tracker.recordUsage('my-custom-ollama-model', { inputTokens: 500, outputTokens: 300 });
+    tracker.recordUsage('my-custom-unknown-model', { inputTokens: 500, outputTokens: 300 });
 
     const snapshot = tracker.getSnapshot();
     expect(snapshot.totalInputTokens).toBe(500);

@@ -46,36 +46,9 @@ export const MODEL_PRICING: Record<string, ModelPricing> = {
   o3: { inputPricePerMillion: 2.0, outputPricePerMillion: 8.0 },
   'o3-mini': { inputPricePerMillion: 1.1, outputPricePerMillion: 4.4 },
   'o4-mini': { inputPricePerMillion: 1.1, outputPricePerMillion: 4.4 },
-
-  // Google Gemini
-  'gemini-2.5-flash': { inputPricePerMillion: 0.15, outputPricePerMillion: 0.6 },
-  'gemini-2.5-flash-preview-05-20': { inputPricePerMillion: 0.15, outputPricePerMillion: 0.6 },
-  'gemini-2.5-pro': { inputPricePerMillion: 1.25, outputPricePerMillion: 10.0 },
-  'gemini-2.5-pro-preview-05-06': { inputPricePerMillion: 1.25, outputPricePerMillion: 10.0 },
-  'gemini-2.0-flash-001': { inputPricePerMillion: 0.1, outputPricePerMillion: 0.4 },
-  'gemini-2.0-flash-lite-preview-02-05': { inputPricePerMillion: 0.075, outputPricePerMillion: 0.3 },
-
-  // DeepSeek
-  'deepseek-chat': { inputPricePerMillion: 0.27, outputPricePerMillion: 1.1 },
-  'deepseek-reasoner': { inputPricePerMillion: 0.55, outputPricePerMillion: 2.19 },
-
-  // xAI Grok
-  'grok-2': { inputPricePerMillion: 2.0, outputPricePerMillion: 10.0 },
-  'grok-3': { inputPricePerMillion: 3.0, outputPricePerMillion: 15.0 },
-  'grok-3-mini': { inputPricePerMillion: 0.3, outputPricePerMillion: 0.5 },
-  'grok-4': { inputPricePerMillion: 3.0, outputPricePerMillion: 15.0 },
-
-  // Groq (hosted models — free tier prices may vary)
-  'llama-3.3-70b-versatile': { inputPricePerMillion: 0.59, outputPricePerMillion: 0.79 },
-  'llama-3.1-8b-instant': { inputPricePerMillion: 0.05, outputPricePerMillion: 0.08 },
-
-  // Cerebras
-  'llama3.1-8b': { inputPricePerMillion: 0.1, outputPricePerMillion: 0.1 },
-  'llama3.1-70b': { inputPricePerMillion: 0.6, outputPricePerMillion: 0.6 },
-  'llama-3.3-70b': { inputPricePerMillion: 0.6, outputPricePerMillion: 0.6 },
 };
 
-const PROVIDER_PREFIXES = ['openai/', 'anthropic/', 'google/', 'deepseek/', 'xai/', 'groq/', 'cerebras/', 'meta/'];
+const PROVIDER_PREFIXES = ['openai/', 'anthropic/'];
 
 export function findModelPricing(modelName: string): ModelPricing | null {
   if (MODEL_PRICING[modelName]) return MODEL_PRICING[modelName];

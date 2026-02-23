@@ -1,4 +1,3 @@
-import 'webextension-polyfill';
 import {
   type BrowserContextConfig,
   type BrowserState,
@@ -9,7 +8,6 @@ import {
 import Page, { build_initial_state } from './page';
 import { createLogger } from '@src/background/log';
 import { isUrlAllowed } from './util';
-import { analytics } from '../services/analytics';
 import { TabGroupManager } from './tab-group';
 
 const logger = createLogger('BrowserContext');
@@ -240,9 +238,6 @@ export default class BrowserContext {
     if (!isUrlAllowed(url, this._config.allowedUrls, this._config.deniedUrls)) {
       throw new URLNotAllowedError(`URL: ${url} is not allowed`);
     }
-
-    // Track domain visit for analytics
-    void analytics.trackDomainVisit(url);
 
     const page = await this.getCurrentPage();
     if (!page) {

@@ -1,4 +1,3 @@
-import 'webextension-polyfill';
 import {
   connect,
   ExtensionTransport,
