@@ -5,7 +5,7 @@ html {
 }
 
 #app-container {
-  text-align: center;
+  text-align: left;
   width: 100vw;
   height: 100vh;
 }
@@ -22,4 +22,20 @@ html {
 }
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(0, 0, 0, 0.2);
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-fadeIn {
+  animation: fadeIn 200ms ease-out;
 }

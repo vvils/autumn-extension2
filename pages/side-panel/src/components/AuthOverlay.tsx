@@ -1,4 +1,6 @@
-const CLIENT_URL = import.meta.env.VITE_CLIENT_URL || 'http://localhost:3000';
+const CLIENT_URL = import.meta.env.DEV
+  ? import.meta.env.VITE_CLIENT_URL || 'http://localhost:3000'
+  : 'https://app.autumnplatform.com';
 
 export function AuthOverlay() {
   const handleSignIn = async () => {

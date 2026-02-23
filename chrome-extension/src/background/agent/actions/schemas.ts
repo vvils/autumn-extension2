@@ -267,6 +267,15 @@ export const queryHotelDataActionSchema: ActionSchema = {
   }),
 };
 
+export const getHotelContextActionSchema: ActionSchema = {
+  name: 'get_hotel_context',
+  description:
+    'Retrieve hotel metadata — name, timezone, currency, room types, and available data capabilities. Call this first when a task involves hotel-specific information.',
+  schema: z.object({
+    intent: z.string().default('').describe('purpose of this action'),
+  }),
+};
+
 export const runIntegrationActionSchema: ActionSchema = {
   name: 'run_integration_action',
   description: 'Execute an action on a connected third-party service (e.g. Slack, Gmail, Google Sheets)',
@@ -344,8 +353,8 @@ export const askUserActionSchema: ActionSchema = {
           value: z.string().describe('Value returned if selected (plain text, no emojis)'),
         }),
       )
-      .min(2)
       .optional()
+      .transform(arr => (arr && arr.length >= 2 ? arr : undefined))
       .describe(
         'Array of {label, value} objects as predefined choices (min 2). Labels and values must be plain text without emojis. Omit for free-text only.',
       ),

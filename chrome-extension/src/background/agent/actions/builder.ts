@@ -27,6 +27,7 @@ import {
   scrollToTopActionSchema,
   scrollToBottomActionSchema,
   queryHotelDataActionSchema,
+  getHotelContextActionSchema,
   runIntegrationActionSchema,
   pushRatesToPmsActionSchema,
   parseGroupInquiryActionSchema,
@@ -909,6 +910,29 @@ export class ActionBuilder {
         }
       }, queryHotelDataActionSchema);
       actions.push(queryHotelData);
+
+      const getHotelContext = new Action(async (params: { intent?: string }) => {
+        try {
+          const intent = params.intent || 'Retrieving hotel context...';
+          context.emitEvent(Actors.NAVIGATOR, ExecutionState.ACT_START, intent);
+          const manifest = await serverClient.fetchHotelContext();
+          console.log('[get_hotel_context] manifest:', JSON.stringify(manifest, null, 2));
+          if (!manifest) {
+            context.emitEvent(Actors.NAVIGATOR, ExecutionState.ACT_FAIL, 'Hotel context unavailable');
+            return new ActionResult({ error: 'Hotel context not available', includeInMemory: true });
+          }
+          context.emitEvent(Actors.NAVIGATOR, ExecutionState.ACT_OK, 'Hotel context retrieved');
+          return new ActionResult({
+            extractedContent: JSON.stringify(manifest),
+            includeInMemory: true,
+          });
+        } catch (error) {
+          const errorMsg = error instanceof Error ? error.message : String(error);
+          context.emitEvent(Actors.NAVIGATOR, ExecutionState.ACT_FAIL, errorMsg);
+          return new ActionResult({ error: errorMsg, includeInMemory: true });
+        }
+      }, getHotelContextActionSchema);
+      actions.push(getHotelContext);
 
       const pushRates = new Action(async (params: { intent?: string; start_date: string; end_date: string }) => {
         try {

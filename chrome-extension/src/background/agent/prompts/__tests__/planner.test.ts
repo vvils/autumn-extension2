@@ -37,18 +37,9 @@ describe('buildPlannerSystemPrompt', () => {
       expect(prompt).toContain('"browser"');
     });
 
-    it('includes hotel capabilities when provided', () => {
-      const prompt = buildPlannerSystemPrompt({
-        serverAvailable: true,
-        hotelCapabilities: 'Rate parity checking\nCompetitor analysis',
-      });
-      expect(prompt).toContain('Rate parity checking');
-      expect(prompt).toContain('Competitor analysis');
-    });
-
-    it('does NOT include hotel capabilities section when not provided', () => {
+    it('includes get_hotel_context hint when server available', () => {
       const prompt = buildPlannerSystemPrompt({ serverAvailable: true });
-      expect(prompt).not.toContain('Available hotel data capabilities');
+      expect(prompt).toContain('get_hotel_context');
     });
   });
 });
@@ -88,7 +79,7 @@ describe('workflow hints', () => {
   it('includes OTA workflow ask_user guard', () => {
     const prompt = buildPlannerSystemPrompt({ serverAvailable: true });
     expect(prompt).toContain('ask_user');
-    expect(prompt).toContain('NOT complete until step 4');
+    expect(prompt).toContain('NOT complete until step 5');
   });
 });
 
@@ -115,5 +106,25 @@ describe('connected integrations', () => {
   it('does not include group booking hints when omitted', () => {
     const prompt = buildPlannerSystemPrompt();
     expect(prompt).not.toContain('parse_group_inquiry');
+  });
+});
+
+describe('missing integration handling', () => {
+  it('includes missing integration rule when no integrations connected', () => {
+    const prompt = buildPlannerSystemPrompt();
+    expect(prompt).toContain('MISSING INTEGRATION HANDLING');
+    expect(prompt).toContain('autumn://settings/integrations');
+  });
+
+  it('includes missing integration rule when server available but no integrations', () => {
+    const prompt = buildPlannerSystemPrompt({ serverAvailable: true });
+    expect(prompt).toContain('MISSING INTEGRATION HANDLING');
+    expect(prompt).toContain('autumn://settings/integrations');
+  });
+
+  it('includes missing integration rule even when integrations are connected', () => {
+    const prompt = buildPlannerSystemPrompt({ connectedIntegrations: 'gmail: find-email, send-email' });
+    expect(prompt).toContain('MISSING INTEGRATION HANDLING');
+    expect(prompt).toContain('autumn://settings/integrations');
   });
 });

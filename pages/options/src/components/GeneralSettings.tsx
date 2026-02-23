@@ -18,15 +18,15 @@ export const GeneralSettings = ({ isDarkMode = false }: GeneralSettingsProps) =>
     setSettings(latestSettings);
   };
 
-  const cardClass = `rounded-[20px] bg-white p-6 text-left shadow-[inset_0_1px_1px_#fff,inset_-1px_-1px_1px_#fff,0_0_0_transparent] hover:shadow-[inset_0_1px_1px_#fff,inset_-1px_-1px_1px_#fff,0_4px_12px_rgba(0,0,0,0.08)] transition-shadow duration-500 ease-out`;
+  const cardClass = `rounded-[20px] bg-white p-6 text-left shadow-[inset_0_1px_1px_#fff,inset_-1px_-1px_1px_#fff,0_1px_3px_rgba(0,0,0,0.04)] hover:shadow-[inset_0_1px_1px_#fff,inset_-1px_-1px_1px_#fff,0_4px_12px_rgba(0,0,0,0.08)] transition-shadow duration-500 ease-out`;
   const headingClass = `mb-4 text-left text-lg font-medium text-black`;
   const labelClass = `text-[14px] font-medium text-black`;
   const descClass = `text-[13px] text-black/50`;
-  const inputClass = `w-20 rounded-lg border-0 bg-[#f4f4f4] px-3 py-2 text-[14px] text-black outline-none focus:ring-2 focus:ring-black/20`;
+  const inputClass = `w-20 rounded-lg border-0 bg-neutral-100 px-3 py-2 text-[14px] text-black outline-none focus:ring-2 focus:ring-black/20`;
   const toggleClass = `peer h-6 w-11 rounded-full ${isDarkMode ? 'bg-slate-600' : 'bg-gray-200'} after:absolute after:left-[2px] after:top-[2px] after:size-5 after:rounded-full after:border after:border-gray-300 after:bg-white after:transition-all after:content-[''] peer-checked:bg-accent peer-checked:after:translate-x-full peer-checked:after:border-white peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-black/20`;
 
   return (
-    <section className="space-y-6">
+    <section className="mt-12 space-y-6">
       <div className={cardClass}>
         <h2 className={headingClass}>{'General'}</h2>
 

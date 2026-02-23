@@ -50,15 +50,15 @@ export const FirewallSettings = ({ isDarkMode }: FirewallSettingsProps) => {
   };
 
   const cardClass =
-    'rounded-[20px] bg-white p-6 text-left shadow-[inset_0_1px_1px_#fff,inset_-1px_-1px_1px_#fff,0_0_0_transparent] hover:shadow-[inset_0_1px_1px_#fff,inset_-1px_-1px_1px_#fff,0_4px_12px_rgba(0,0,0,0.08)] transition-shadow duration-500 ease-out';
+    'rounded-[20px] bg-white p-6 text-left shadow-[inset_0_1px_1px_#fff,inset_-1px_-1px_1px_#fff,0_1px_3px_rgba(0,0,0,0.04)] hover:shadow-[inset_0_1px_1px_#fff,inset_-1px_-1px_1px_#fff,0_4px_12px_rgba(0,0,0,0.08)] transition-shadow duration-500 ease-out';
 
   return (
-    <section className="space-y-6">
+    <section className="mt-12 space-y-6">
       <div className={cardClass}>
         <h2 className="mb-4 text-lg font-medium text-black">{'Firewall'}</h2>
 
         <div className="space-y-6">
-          <div className="my-6 rounded-xl bg-[#f4f4f4] p-4">
+          <div className="my-6 rounded-xl bg-neutral-100 p-4">
             <div className="flex items-center justify-between">
               <label htmlFor="toggle-firewall" className="text-[14px] font-medium text-black">
                 {'Enable Firewall'}
@@ -120,7 +120,7 @@ export const FirewallSettings = ({ isDarkMode }: FirewallSettingsProps) => {
                 }
               }}
               placeholder={'Enter domain or URL (e.g. example.com, localhost, 127.0.0.1)'}
-              className="flex-1 rounded-lg border-0 bg-[#f4f4f4] px-3 py-2 text-sm text-black outline-none focus:ring-2 focus:ring-black/20"
+              className="flex-1 rounded-lg border-0 bg-neutral-100 px-3 py-2 text-sm text-black outline-none focus:ring-2 focus:ring-black/20"
             />
             <button
               type="button"
@@ -135,7 +135,7 @@ export const FirewallSettings = ({ isDarkMode }: FirewallSettingsProps) => {
               allowList.length > 0 ? (
                 <ul className="space-y-2">
                   {allowList.map(url => (
-                    <li key={url} className="flex items-center justify-between rounded-xl bg-[#f4f4f4] px-3 py-2.5">
+                    <li key={url} className="flex items-center justify-between rounded-xl bg-neutral-100 px-3 py-2.5">
                       <span className="text-sm text-black/70">{url}</span>
                       <button
                         type="button"
@@ -154,7 +154,7 @@ export const FirewallSettings = ({ isDarkMode }: FirewallSettingsProps) => {
             ) : denyList.length > 0 ? (
               <ul className="space-y-2">
                 {denyList.map(url => (
-                  <li key={url} className="flex items-center justify-between rounded-xl bg-[#f4f4f4] px-3 py-2.5">
+                  <li key={url} className="flex items-center justify-between rounded-xl bg-neutral-100 px-3 py-2.5">
                     <span className="text-sm text-black/70">{url}</span>
                     <button
                       type="button"

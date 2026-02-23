@@ -50,13 +50,13 @@ export const ServerSettings = ({ isDarkMode = false }: ServerSettingsProps) => {
   }, [loadServerConfig]);
 
   const cardClass =
-    'rounded-[20px] bg-white p-6 text-left shadow-[inset_0_1px_1px_#fff,inset_-1px_-1px_1px_#fff,0_0_0_transparent] hover:shadow-[inset_0_1px_1px_#fff,inset_-1px_-1px_1px_#fff,0_4px_12px_rgba(0,0,0,0.08)] transition-shadow duration-500 ease-out';
+    'rounded-[20px] bg-white p-6 text-left shadow-[inset_0_1px_1px_#fff,inset_-1px_-1px_1px_#fff,0_1px_3px_rgba(0,0,0,0.04)] hover:shadow-[inset_0_1px_1px_#fff,inset_-1px_-1px_1px_#fff,0_4px_12px_rgba(0,0,0,0.08)] transition-shadow duration-500 ease-out';
   const headingClass = 'mb-4 text-left text-lg font-medium text-black';
   const labelClass = 'text-xs font-medium uppercase tracking-wider text-black/50';
   const valueClass = `text-sm ${isDarkMode ? 'text-gray-300' : 'text-black/70'}`;
 
   return (
-    <section className="space-y-6">
+    <section className="mt-12 space-y-6">
       <div className={cardClass}>
         <h2 className={headingClass}>{'Server URL'}</h2>
         <p className="text-sm text-black/60">{settings.serverUrl || 'Not configured'}</p>
@@ -79,7 +79,7 @@ export const ServerSettings = ({ isDarkMode = false }: ServerSettingsProps) => {
         <div className={cardClass}>
           <div className="mb-4 flex items-center gap-2">
             <h2 className="text-left text-lg font-medium text-black">{'Server Configuration'}</h2>
-            <span className="rounded-full bg-[#f4f4f4] px-2.5 py-0.5 text-[11px] font-medium text-black/50">
+            <span className="rounded-full bg-neutral-100 px-2.5 py-0.5 text-[11px] font-medium text-black/50">
               {'Managed by server'}
             </span>
           </div>
@@ -89,7 +89,7 @@ export const ServerSettings = ({ isDarkMode = false }: ServerSettingsProps) => {
               <h3 className={`mb-2 ${labelClass}`}>{'API Providers'}</h3>
               <div className="space-y-2">
                 {Object.entries(providers).map(([id, config]) => (
-                  <div key={id} className="flex items-center justify-between rounded-xl bg-[#f4f4f4] px-3 py-2.5">
+                  <div key={id} className="flex items-center justify-between rounded-xl bg-neutral-100 px-3 py-2.5">
                     <div>
                       <span className="text-sm font-medium text-black">{config.name || id}</span>
                       {config.type && <span className="ml-2 text-xs text-black/50">{config.type}</span>}
@@ -106,7 +106,9 @@ export const ServerSettings = ({ isDarkMode = false }: ServerSettingsProps) => {
               <h3 className={`mb-2 ${labelClass}`}>{'Agent Model Assignments'}</h3>
               <div className="space-y-2">
                 {Object.entries(agentModels).map(([agentKey, config]) => (
-                  <div key={agentKey} className="flex items-center justify-between rounded-xl bg-[#f4f4f4] px-3 py-2.5">
+                  <div
+                    key={agentKey}
+                    className="flex items-center justify-between rounded-xl bg-neutral-100 px-3 py-2.5">
                     <span className="text-sm font-medium capitalize text-black">{agentKey as AgentNameEnum}</span>
                     <span className={valueClass}>
                       {config.provider} / {config.modelName}

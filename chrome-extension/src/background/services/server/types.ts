@@ -65,11 +65,7 @@ export interface HotelContextManifest {
     currency: { code: string; symbol?: string };
     roomTypes: string[];
   };
-  capabilities: Array<{
-    name: string;
-    description: string;
-    examples: string[];
-  }>;
+  capabilities: string[];
   flags: {
     hasCompetitorData: boolean;
     hasMarketingIntegration: boolean;

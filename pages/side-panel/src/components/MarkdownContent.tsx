@@ -1,5 +1,5 @@
 import type { Components } from 'react-markdown';
-import ReactMarkdown from 'react-markdown';
+import ReactMarkdown, { defaultUrlTransform } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { memo } from 'react';
 
@@ -20,11 +20,27 @@ const components: Components = {
   ul: ({ children }) => <ul className="mb-2 list-disc space-y-0.5 pl-5 last:mb-0">{children}</ul>,
   ol: ({ children }) => <ol className="mb-2 list-decimal space-y-0.5 pl-5 last:mb-0">{children}</ol>,
   li: ({ children }) => <li>{children}</li>,
-  a: ({ href, children }) => (
-    <a href={href} target="_blank" rel="noopener noreferrer" className="text-accent underline">
-      {children}
-    </a>
-  ),
+  a: ({ href, children }) => {
+    if (href?.startsWith('autumn://settings')) {
+      const hash = href.replace('autumn://settings', '').replace(/^\//, '');
+      return (
+        <button
+          type="button"
+          onClick={() => {
+            const base = 'options/index.html';
+            chrome.tabs.create({ url: chrome.runtime.getURL(hash ? `${base}#${hash}` : base) });
+          }}
+          className="mt-1 inline-flex items-center gap-1 rounded-full bg-accent/10 px-2.5 py-1 text-[12px] font-medium text-accent transition-colors hover:bg-accent/20">
+          {children} &rarr;
+        </button>
+      );
+    }
+    return (
+      <a href={href} target="_blank" rel="noopener noreferrer" className="text-accent underline">
+        {children}
+      </a>
+    );
+  },
   h2: ({ children }) => <h2 className="mb-2 mt-3 text-[15px] font-semibold first:mt-0">{children}</h2>,
   h3: ({ children }) => <h3 className="mb-1.5 mt-2.5 text-[14px] font-semibold first:mt-0">{children}</h3>,
   h4: ({ children }) => <h4 className="mb-1 mt-2 text-[13px] font-semibold first:mt-0">{children}</h4>,
@@ -70,12 +86,18 @@ interface MarkdownContentProps {
   content: string;
 }
 
+function urlTransform(url: string) {
+  if (url.startsWith('autumn://')) return url;
+  return defaultUrlTransform(url);
+}
+
 export default memo(function MarkdownContent({ content }: MarkdownContentProps) {
   return (
     <ReactMarkdown
       remarkPlugins={[remarkGfm]}
       allowedElements={ALLOWED_ELEMENTS}
       unwrapDisallowed
+      urlTransform={urlTransform}
       components={components}>
       {content}
     </ReactMarkdown>

@@ -8,7 +8,7 @@ export interface GeneralSettingsConfig {
   maxActionsPerStep: number;
   maxFailures: number;
   useVision: boolean;
-  useVisionForPlanner: boolean;
+
   planningInterval: number;
   displayHighlights: boolean;
   minWaitPageLoad: number;
@@ -27,13 +27,13 @@ export const DEFAULT_GENERAL_SETTINGS: GeneralSettingsConfig = {
   maxSteps: 100,
   maxActionsPerStep: 5,
   maxFailures: 3,
-  useVision: false,
-  useVisionForPlanner: false,
+  useVision: true,
+
   planningInterval: 3,
-  displayHighlights: true,
+  displayHighlights: false,
   minWaitPageLoad: 250,
   replayHistoricalTasks: false,
-  showCostEstimate: true,
+  showCostEstimate: false,
 };
 
 const storage = createStorage<GeneralSettingsConfig>('general-settings', DEFAULT_GENERAL_SETTINGS, {

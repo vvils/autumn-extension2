@@ -7,7 +7,6 @@ import { buildPlannerSystemPrompt } from './templates/planner';
 export class PlannerPrompt extends BasePrompt {
   constructor(
     private readonly serverAvailable = false,
-    private readonly hotelCapabilities?: string,
     private readonly connectedIntegrations?: string,
   ) {
     super();
@@ -17,7 +16,6 @@ export class PlannerPrompt extends BasePrompt {
     return new SystemMessage(
       buildPlannerSystemPrompt({
         serverAvailable: this.serverAvailable,
-        hotelCapabilities: this.hotelCapabilities,
         connectedIntegrations: this.connectedIntegrations,
       }),
     );

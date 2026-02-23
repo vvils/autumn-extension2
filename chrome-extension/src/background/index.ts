@@ -30,7 +30,6 @@ const logger = createLogger('background');
 const browserContext = new BrowserContext({});
 let currentExecutor: Executor | null = null;
 let serverClient: ServerClient | null = null;
-let cachedHotelCapabilities: string | undefined;
 let currentPort: chrome.runtime.Port | null = null;
 let tokenExpiryTimer: ReturnType<typeof setTimeout> | null = null;
 const SIDE_PANEL_URL = chrome.runtime.getURL('side-panel/index.html');
@@ -166,14 +165,22 @@ analyticsSettingsStore.subscribe(() => {
   });
 });
 
+const SERVER_URL = import.meta.env.DEV
+  ? import.meta.env.VITE_SERVER_URL || 'http://localhost:3004'
+  : 'https://api.autumnplatform.com';
+
+const CLIENT_URL = import.meta.env.DEV
+  ? import.meta.env.VITE_CLIENT_URL || 'http://localhost:3000'
+  : 'https://app.autumnplatform.com';
+
 async function autoPopulateServerUrls() {
   const settings = await serverSettingsStore.getSettings();
   const updates: Partial<typeof settings> = {};
-  if (!settings.serverUrl && import.meta.env.VITE_SERVER_URL) {
-    updates.serverUrl = import.meta.env.VITE_SERVER_URL;
+  if (!settings.serverUrl) {
+    updates.serverUrl = SERVER_URL;
   }
-  if (!settings.clientUrl && import.meta.env.VITE_CLIENT_URL) {
-    updates.clientUrl = import.meta.env.VITE_CLIENT_URL;
+  if (!settings.clientUrl) {
+    updates.clientUrl = CLIENT_URL;
   }
   if (Object.keys(updates).length > 0) {
     await serverSettingsStore.updateSettings(updates);
@@ -200,7 +207,6 @@ function scheduleTokenExpiryCheck() {
 async function initServerClient() {
   await autoPopulateServerUrls();
   serverClient = await ServerClient.create(serverSettingsStore);
-  cachedHotelCapabilities = undefined;
   if (serverClient) {
     logger.info('Server client initialized');
     try {
@@ -208,12 +214,6 @@ async function initServerClient() {
         await detectTokenFromTabs(serverSettingsStore);
       }
       if (await serverClient.isAuthenticated()) {
-        const manifest = await serverClient.fetchHotelContext();
-        if (manifest) {
-          cachedHotelCapabilities = manifest.capabilities.map(c => `   - ${c.name}: ${c.description}`).join('\n');
-          logger.info(`Hotel context loaded: ${manifest.capabilities.length} capabilities`);
-        }
-
         try {
           const pullResult = await serverClient.pullKeys();
           const serverKeys = pullResult.keys;
@@ -864,12 +864,10 @@ async function setupExecutor(taskId: string, task: string, browserContext: Brows
       maxFailures: generalSettings.maxFailures,
       maxActionsPerStep: generalSettings.maxActionsPerStep,
       useVision: generalSettings.useVision,
-      useVisionForPlanner: true,
       planningInterval: generalSettings.planningInterval,
     },
     generalSettings: generalSettings,
     serverClient,
-    hotelCapabilities: cachedHotelCapabilities,
     connectedIntegrations,
   });
 

@@ -63,7 +63,9 @@ function serverRoleToActor(role: string): Actors {
   return Actors.SYSTEM;
 }
 
-const CLIENT_URL = import.meta.env.VITE_CLIENT_URL || 'http://localhost:3000';
+const CLIENT_URL = import.meta.env.DEV
+  ? import.meta.env.VITE_CLIENT_URL || 'http://localhost:3000'
+  : 'https://app.autumnplatform.com';
 
 const SidePanel = () => {
   const [messages, setMessages] = useState<Message[]>([]);
@@ -1310,8 +1312,9 @@ const SidePanel = () => {
           {showingChatHistory ? (
             <div className="relative flex flex-1 flex-col overflow-hidden">
               <div
-                className="no-scrollbar flex-1 overflow-y-auto pb-24"
+                className="no-scrollbar flex-1 overflow-y-auto"
                 style={{
+                  paddingBottom: 160,
                   maskImage:
                     'linear-gradient(to bottom, black calc(100% - 160px), rgba(0,0,0,0.3) calc(100% - 80px), transparent 100%)',
                   WebkitMaskImage:
@@ -1390,11 +1393,18 @@ const SidePanel = () => {
                   />
                 )}
                 {thinkingWidgetState.isActive &&
-                  thinkingWidgetState.activeActor === Actors.PLANNER &&
                   !isStreamingPlanner &&
+                  !isStreamingSynthesizer &&
                   thinkingWidgetState.actions.length === 0 && (
                     <div className="animate-fade-in">
-                      <ShimmerText text="Planning next steps..." className="text-[13px]" />
+                      <ShimmerText
+                        text={
+                          thinkingWidgetState.activeActor === Actors.NAVIGATOR
+                            ? 'Thinking...'
+                            : 'Planning next steps...'
+                        }
+                        className="text-[13px]"
+                      />
                     </div>
                   )}
                 <div ref={messagesEndRef} />

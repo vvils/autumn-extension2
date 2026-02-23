@@ -2,7 +2,7 @@ import { BaseAgent, type BaseAgentOptions, type ExtraAgentOptions } from './base
 import { createLogger } from '@src/background/log';
 import { z } from 'zod';
 import type { AgentOutput } from '../types';
-import { HumanMessage } from '@langchain/core/messages';
+
 import { Actors, ExecutionState } from '../event/types';
 import {
   ChatModelAuthError,
@@ -66,8 +66,8 @@ const rawPlannerSchema = z.object({
             value: z.string(),
           }),
         )
-        .min(2)
-        .optional(),
+        .optional()
+        .transform(arr => (arr && arr.length >= 2 ? arr : undefined)),
     })
     .optional(),
   task_type: z.string().optional(),
@@ -103,28 +103,7 @@ export class PlannerAgent extends BaseAgent<typeof plannerOutputSchema, PlannerO
       // Use full message history except the first one
       const plannerMessages = [this.prompt.getSystemMessage(), ...messages.slice(1)];
 
-      // Remove images from last message if vision is not enabled for planner but vision is enabled
-      if (!this.context.options.useVisionForPlanner && this.context.options.useVision) {
-        const lastStateMessage = plannerMessages[plannerMessages.length - 1];
-        let newMsg = '';
-
-        if (Array.isArray(lastStateMessage.content)) {
-          for (const msg of lastStateMessage.content) {
-            if (msg.type === 'text') {
-              newMsg += msg.text;
-            }
-            // Skip image_url messages
-          }
-        } else {
-          newMsg = lastStateMessage.content;
-        }
-
-        plannerMessages[plannerMessages.length - 1] = new HumanMessage(newMsg);
-      }
-
-      const modelOutput = await this.streamInvoke(plannerMessages, ['user_facing_summary', 'final_answer'], text => {
-        this.context.emitEvent(Actors.PLANNER, ExecutionState.STEP_STREAMING, text);
-      });
+      const modelOutput = await this.invoke(plannerMessages);
       if (!modelOutput) {
         throw new Error('Failed to validate planner output');
       }

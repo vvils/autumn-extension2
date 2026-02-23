@@ -34,7 +34,6 @@ export interface ExecutorExtraArgs {
   agentOptions?: Partial<AgentOptions>;
   generalSettings?: GeneralSettingsConfig;
   serverClient?: ServerClient | null;
-  hotelCapabilities?: string;
   connectedIntegrations?: string;
 }
 
@@ -73,11 +72,7 @@ export class Executor {
     this.generalSettings = extraArgs?.generalSettings;
     this.tasks.push(task);
     this.navigatorPrompt = new NavigatorPrompt(context.options.maxActionsPerStep);
-    this.plannerPrompt = new PlannerPrompt(
-      !!this.serverClient,
-      extraArgs?.hotelCapabilities,
-      extraArgs?.connectedIntegrations,
-    );
+    this.plannerPrompt = new PlannerPrompt(!!this.serverClient, extraArgs?.connectedIntegrations);
 
     const actionBuilder = new ActionBuilder(context, extractorLLM, this.serverClient, extraArgs?.connectedIntegrations);
     const navigatorActionRegistry = new NavigatorActionRegistry(actionBuilder.buildDefaultActions());

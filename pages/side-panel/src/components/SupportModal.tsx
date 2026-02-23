@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { X, Loader2, Camera } from 'lucide-react';
 import { canCaptureActiveTab, captureScreenshot } from '../utils/screenshotCapture';
-import { serverFetch } from '../utils/serverFetch';
+import { serverFetch } from '@extension/shared';
 
 interface SupportModalProps {
   open: boolean;

@@ -208,7 +208,10 @@ export const llmProviderStore: LLMProviderStorage = {
           }),
     };
 
-    console.log(`[llmProviderStore.setProvider] Saving config for ${providerId}:`, JSON.stringify(completeConfig));
+    console.log(
+      `[llmProviderStore.setProvider] Saving config for ${providerId}:`,
+      JSON.stringify({ ...completeConfig, apiKey: '[REDACTED]' }),
+    );
 
     const current = (await storage.get()) || { providers: {} };
     await storage.set({

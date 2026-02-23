@@ -2,20 +2,18 @@ import { commonSecurityRules } from './common';
 
 interface BuildPlannerSystemPromptOptions {
   serverAvailable?: boolean;
-  hotelCapabilities?: string;
   connectedIntegrations?: string;
 }
 
 export function buildPlannerSystemPrompt(options?: BuildPlannerSystemPromptOptions): string {
   const serverAvailable = options?.serverAvailable ?? false;
-  const hotelCapabilities = options?.hotelCapabilities;
   const connectedIntegrations = options?.connectedIntegrations;
 
   const responsibilitiesSection = serverAvailable
     ? `# RESPONSIBILITIES:
 1. Classify each task into one of three types and set the "task_type" field:
    - "general" — answer directly without browser or server (general knowledge, math, greetings, etc.)
-   - "domain_query" — the task asks about hotel-specific data (performance, rates, bookings, competitors, marketing) that the backend data pipeline can answer. Set done=true so the system routes to the synthesizer.${hotelCapabilities ? `\n     Available hotel data capabilities:\n${hotelCapabilities}` : ''}
+   - "domain_query" — the task asks about hotel-specific data (performance, rates, bookings, competitors, marketing) that the backend data pipeline can answer. Set done=true so the system routes to the synthesizer.
    - "browser" — the task requires navigating a website, clicking, form filling, or reading live web pages
 
 2. If task_type is "general", answer the task directly as a helpful assistant
@@ -100,13 +98,15 @@ ${
   serverAvailable
     ? `
 # WORKFLOW HINTS:
+- For any task that involves hotel-specific data, start with get_hotel_context to retrieve hotel name, timezone, currency, and room types.
 - OTA rate parity workflow — follow this EXACT sequence, do NOT skip steps or set done=true early:
-  1. query_hotel_data → fetch the hotel's direct rates for the requested date range
-  2. search_google → search for OTA prices on Google Travel Hotels. If no Google hotel card appears, navigate directly to booking.com and expedia.com to extract rates.
-  3. Extract OTA prices from the visible page (cache_content if scrolling is needed)
-  4. Use your "ask_user" response field to present the rate comparison table (markdown table in context field) and ask whether to push corrected rates to PMS.
-  5. If user confirms → push_rates_to_pms with the date range. If push fails due to "price pushing not enabled", inform the user they need to enable it in their Autumn dashboard.
-  CRITICAL: Task is NOT complete until step 4 (ask_user) has run. Do NOT set done=true before presenting the comparison to the user.
+  1. get_hotel_context → retrieve hotel name and metadata
+  2. query_hotel_data → fetch the hotel's direct rates for the requested date range
+  3. search_google → search for OTA prices on Google Travel Hotels using the hotel name. If no Google hotel card appears, navigate directly to booking.com and expedia.com to extract rates.
+  4. Extract OTA prices from the visible page (cache_content if scrolling is needed)
+  5. Use your "ask_user" response field to present the rate comparison table (markdown table in context field) and ask whether to push corrected rates to PMS.
+  6. If user confirms → push_rates_to_pms with the date range. If push fails due to "price pushing not enabled", inform the user they need to enable it in their Autumn dashboard.
+  CRITICAL: Task is NOT complete until step 5 (ask_user) has run. Do NOT set done=true before presenting the comparison to the user.
 `
     : ''
 }
@@ -147,6 +147,10 @@ IMPORTANT — Integration routing rules:
 `
     : ''
 }
+# MISSING INTEGRATION HANDLING:
+If the task references an integration action (e.g. run_integration_action, gmail-find-email, gmail-send-email) but the required app is not in the connected integrations list (or no integrations are connected), set done=true, task_type="general", and in final_answer name the specific service needed and include: [Connect in Settings](autumn://settings/integrations).
+Do NOT attempt browser automation as a fallback for integration actions.
+
 # TASK COMPLETION VALIDATION:
 When determining if a task is "done":
 1. Read the task description carefully - neither miss any detailed requirements nor make up any requirements

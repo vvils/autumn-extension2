@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { X, Loader2 } from 'lucide-react';
-import { serverFetch } from '../utils/serverFetch';
+import { serverFetch } from '@extension/shared';
 
 interface FeedbackModalProps {
   open: boolean;

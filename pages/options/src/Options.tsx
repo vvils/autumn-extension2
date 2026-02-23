@@ -1,7 +1,6 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import '@src/Options.css';
 import { withErrorBoundary, withSuspense } from '@extension/shared';
-import { FiSettings, FiShield, FiTrendingUp, FiServer, FiLink, FiZap } from 'react-icons/fi';
 import { GeneralSettings } from './components/GeneralSettings';
 import { FirewallSettings } from './components/FirewallSettings';
 import { AnalyticsSettings } from './components/AnalyticsSettings';
@@ -11,18 +10,62 @@ import { ShortcutSettings } from './components/ShortcutSettings';
 
 type TabTypes = 'general' | 'firewall' | 'analytics' | 'server' | 'integrations' | 'shortcuts';
 
-const TABS: { id: TabTypes; icon: React.ComponentType<{ className?: string }>; label: string }[] = [
-  { id: 'server', icon: FiServer, label: 'Server' },
-  { id: 'integrations', icon: FiLink, label: 'Integrations' },
-  { id: 'shortcuts', icon: FiZap, label: 'Shortcuts' },
-  { id: 'general', icon: FiSettings, label: 'General' },
-  { id: 'firewall', icon: FiShield, label: 'Firewall' },
-  { id: 'analytics', icon: FiTrendingUp, label: 'Analytics' },
+const ALL_TABS: { id: TabTypes; label: string; title: string; subtitle: string; devOnly?: boolean }[] = [
+  { id: 'server', label: 'Server', title: 'Server', subtitle: 'Connection and model configuration', devOnly: true },
+  {
+    id: 'integrations',
+    label: 'Integrations',
+    title: 'Integrations',
+    subtitle: 'Connect services and manage abilities',
+  },
+  { id: 'shortcuts', label: 'Shortcuts', title: 'Shortcuts', subtitle: 'Custom commands for quick actions' },
+  {
+    id: 'general',
+    label: 'General',
+    title: 'General',
+    subtitle: 'Agent behavior and display preferences',
+    devOnly: true,
+  },
+  {
+    id: 'firewall',
+    label: 'Firewall',
+    title: 'Firewall',
+    subtitle: 'URL access control and domain filtering',
+    devOnly: true,
+  },
+  {
+    id: 'analytics',
+    label: 'Analytics',
+    title: 'Analytics',
+    subtitle: 'Usage data and telemetry preferences',
+    devOnly: true,
+  },
 ];
 
+const TABS = ALL_TABS.filter(t => !t.devOnly || import.meta.env.DEV);
+const TAB_IDS = new Set<string>(TABS.map(t => t.id));
+
+function getTabFromHash(): TabTypes {
+  const hash = window.location.hash.slice(1);
+  return TAB_IDS.has(hash) ? (hash as TabTypes) : TABS[0].id;
+}
+
 const Options = () => {
-  const [activeTab, setActiveTab] = useState<TabTypes>('server');
+  const [activeTab, setActiveTab] = useState<TabTypes>(getTabFromHash);
+
+  const switchTab = useCallback((tab: TabTypes) => {
+    setActiveTab(tab);
+    window.location.hash = tab;
+  }, []);
+
+  useEffect(() => {
+    const onHashChange = () => setActiveTab(getTabFromHash());
+    window.addEventListener('hashchange', onHashChange);
+    return () => window.removeEventListener('hashchange', onHashChange);
+  }, []);
+
   const isDarkMode = false;
+  const currentTab = TABS.find(t => t.id === activeTab)!;
 
   const renderTabContent = () => {
     switch (activeTab) {
@@ -35,7 +78,7 @@ const Options = () => {
       case 'server':
         return <ServerSettings isDarkMode={isDarkMode} />;
       case 'integrations':
-        return <IntegrationSettings isDarkMode={isDarkMode} />;
+        return <IntegrationSettings />;
       case 'shortcuts':
         return <ShortcutSettings isDarkMode={isDarkMode} />;
       default:
@@ -44,30 +87,35 @@ const Options = () => {
   };
 
   return (
-    <div className="flex min-h-screen min-w-[768px] bg-[#f4f4f4] text-gray-900">
-      <nav className="w-48">
-        <div className="p-4">
-          <h1 className="mb-6 text-xl font-bold text-black">{'Settings'}</h1>
-          <ul className="space-y-0.5">
+    <div className="flex min-h-screen w-full flex-col overflow-x-hidden bg-white text-gray-900">
+      <nav className="sticky top-0 z-40 bg-white/80 backdrop-blur-sm">
+        <div className="mx-auto max-w-3xl px-8 lg:max-w-4xl xl:max-w-6xl 2xl:max-w-6xl">
+          <div className="scrollbar-hide flex items-center gap-4 overflow-x-auto py-4">
             {TABS.map(item => (
-              <li key={item.id}>
-                <button
-                  type="button"
-                  onClick={() => setActiveTab(item.id)}
-                  className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-[14px] font-medium transition-all duration-200 ${
-                    activeTab === item.id ? 'text-black' : 'text-black/30 hover:text-black/70'
-                  }`}>
-                  <item.icon className="h-4 w-4" />
-                  <span>{item.label}</span>
-                </button>
-              </li>
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => switchTab(item.id)}
+                className={`whitespace-nowrap rounded-md p-2 text-[15px] font-medium transition-all duration-200 ${
+                  activeTab === item.id ? 'text-black' : 'text-black/20 hover:text-black/80'
+                }`}>
+                {item.label}
+              </button>
             ))}
-          </ul>
+          </div>
         </div>
       </nav>
 
-      <main className="flex-1 p-8">
-        <div className="mx-auto min-w-[512px] max-w-screen-lg">{renderTabContent()}</div>
+      <main className="flex-1">
+        <div className="mx-auto w-full max-w-3xl px-8 pb-14 pt-8 lg:max-w-4xl xl:max-w-6xl 2xl:max-w-6xl">
+          <div className="pb-2">
+            <div className="space-y-3">
+              <h1 className="text-4xl font-semibold leading-tight text-black">{currentTab.title}</h1>
+              <p className="py-0.5 text-sm text-black/50">{currentTab.subtitle}</p>
+            </div>
+          </div>
+          {renderTabContent()}
+        </div>
       </main>
     </div>
   );

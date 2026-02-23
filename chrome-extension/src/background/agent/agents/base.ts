@@ -279,7 +279,10 @@ export abstract class BaseAgent<T extends z.ZodType, M = unknown> {
     } catch (error) {
       if (isAbortedError(error)) throw error;
 
-      logger.warning(`[${this.modelName}] Stream failed, falling back to invoke:`, error);
+      logger.debug(
+        `[${this.modelName}] Stream parse failed, falling back to invoke (expected for structured-output models):`,
+        error,
+      );
       return this.invoke(inputMessages);
     }
   }
@@ -305,7 +308,7 @@ export abstract class BaseAgent<T extends z.ZodType, M = unknown> {
       const extractedJson = extractJsonFromModelOutput(cleanedContent);
       return this.validateModelOutput(extractedJson);
     } catch (error) {
-      logger.warning('manuallyParseResponse failed', error);
+      logger.debug('manuallyParseResponse failed', error);
       return undefined;
     }
   }
