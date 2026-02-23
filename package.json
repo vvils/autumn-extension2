@@ -22,7 +22,6 @@
     "update-version": "bash update_version.sh"
   },
   "dependencies": {
-    "eslint-plugin-tailwindcss": "^3.17.4",
     "react": "18.3.1",
     "react-dom": "18.3.1"
   },
@@ -49,12 +48,11 @@
     "postcss": "^8.4.47",
     "prettier": "^3.3.3",
     "rimraf": "^6.1.2",
+    "eslint-plugin-tailwindcss": "^3.17.4",
     "tailwindcss": "^3.4.17",
-    "tslib": "^2.6.3",
     "typescript": "5.5.4",
     "turbo": "^2.5.3",
-    "vite": "^6.4.1",
-    "run-script-os": "^1.1.6"
+    "vite": "^6.4.1"
   },
   "lint-staged": {
     "*.{js,jsx,ts,tsx,json}": [
