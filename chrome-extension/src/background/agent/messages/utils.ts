@@ -1,5 +1,3 @@
-import type { BaseMessage } from '@langchain/core/messages';
-
 import { guardrails } from '@src/background/services/guardrails';
 import { ResponseParseError } from '../agents/errors';
 
@@ -129,10 +127,6 @@ export function extractJsonFromModelOutput(content: string): Record<string, unkn
   } catch (e) {
     throw new ResponseParseError(`Could not manually extract JSON from model output`);
   }
-}
-
-export function convertInputMessages(inputMessages: BaseMessage[], _modelName: string | null): BaseMessage[] {
-  return inputMessages;
 }
 
 /**

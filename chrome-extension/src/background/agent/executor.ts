@@ -16,7 +16,6 @@ import {
   ChatModelForbiddenError,
   ExtensionConflictError,
   RequestCancelledError,
-  MaxStepsReachedError,
   MaxFailuresReachedError,
 } from './agents/errors';
 import { URLNotAllowedError } from '../browser/views';

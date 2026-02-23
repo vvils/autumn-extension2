@@ -226,37 +226,6 @@ export class ExtensionConflictError extends Error {
 }
 
 /**
- * Custom error class for when maximum execution steps are reached
- */
-export class MaxStepsReachedError extends Error {
-  /**
-   * Creates a new MaxStepsReachedError
-   *
-   * @param message - The error message
-   * @param cause - The original error that caused this error
-   */
-  constructor(
-    message: string,
-    public readonly cause?: unknown,
-  ) {
-    super(message);
-    this.name = 'MaxStepsReachedError';
-
-    // Maintains proper stack trace for where our error was thrown
-    if (Error.captureStackTrace) {
-      Error.captureStackTrace(this, MaxStepsReachedError);
-    }
-  }
-
-  /**
-   * Returns a string representation of the error
-   */
-  toString(): string {
-    return `${this.name}: ${this.message}${this.cause ? ` (Caused by: ${this.cause})` : ''}`;
-  }
-}
-
-/**
  * Custom error class for when maximum consecutive failures are reached
  */
 export class MaxFailuresReachedError extends Error {

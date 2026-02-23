@@ -6,7 +6,6 @@ import type { BaseMessage, UsageMetadata } from '@langchain/core/messages';
 import { createLogger } from '@src/background/log';
 import type { Action } from '../actions/builder';
 import {
-  convertInputMessages,
   extractJsonFromModelOutput,
   extractStreamingFieldValue,
   removeThinkTags,
@@ -161,10 +160,9 @@ export abstract class BaseAgent<T extends z.ZodType, M = unknown> {
 
     // Fallback: Without structured output support, need to extract JSON from model output manually
     logger.debug(`[${this.modelName}] Using manual JSON extraction fallback method`);
-    const convertedInputMessages = convertInputMessages(inputMessages, this.modelName);
 
     try {
-      const response = await this.chatLLM.invoke(convertedInputMessages, {
+      const response = await this.chatLLM.invoke(inputMessages, {
         signal: this.context.controller.signal,
         ...this.callOptions,
       });
@@ -193,7 +191,6 @@ export abstract class BaseAgent<T extends z.ZodType, M = unknown> {
     const DEBOUNCE_MS = 100;
     const MIN_DELTA_CHARS = 5;
 
-    const convertedMessages = convertInputMessages(inputMessages, this.modelName);
     let buffer = '';
     let lastEmitted = '';
     let lastEmitTime = 0;
@@ -215,7 +212,7 @@ export abstract class BaseAgent<T extends z.ZodType, M = unknown> {
     };
 
     try {
-      const stream = await this.chatLLM.stream(convertedMessages, {
+      const stream = await this.chatLLM.stream(inputMessages, {
         signal: this.context.controller.signal,
         ...this.callOptions,
       });

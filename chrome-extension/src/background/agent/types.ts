@@ -158,14 +158,9 @@ export class AgentContext {
   }
 }
 
-export class AgentStepInfo {
+export interface AgentStepInfo {
   stepNumber: number;
   maxSteps: number;
-
-  constructor(params: { stepNumber: number; maxSteps: number }) {
-    this.stepNumber = params.stepNumber;
-    this.maxSteps = params.maxSteps;
-  }
 }
 
 export class ActionResult {
@@ -186,29 +181,11 @@ export class ActionResult {
   }
 }
 
-export type WrappedActionResult = ActionResult & {
-  toolCallId: string;
-};
-
-export class StepMetadata {
+export interface StepMetadata {
   stepStartTime: number;
   stepEndTime: number;
   inputTokens: number;
   stepNumber: number;
-
-  constructor(stepStartTime: number, stepEndTime: number, inputTokens: number, stepNumber: number) {
-    this.stepStartTime = stepStartTime;
-    this.stepEndTime = stepEndTime;
-    this.inputTokens = inputTokens;
-    this.stepNumber = stepNumber;
-  }
-
-  /**
-   * Calculate step duration in seconds
-   */
-  get durationSeconds(): number {
-    return this.stepEndTime - this.stepStartTime;
-  }
 }
 
 export const agentBrainSchema = z
