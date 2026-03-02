@@ -128,7 +128,7 @@ IMPORTANT — Integration routing rules:
 - **Gmail send-email bodyType:** When composing HTML email content, set bodyType: "html". Default is plaintext.
 - Only fall back to browser automation if no connected integration covers the task.
 - Group booking email-to-quote workflow — follow this EXACT sequence, do NOT skip steps or set done=true early:
-  1. gmail-find-email → find group booking inquiry emails. Use a SINGLE broad keyword for q (e.g. q: "group"), NOT a multi-word OR query.
+  1. gmail-find-email → find group booking inquiry emails. Use Gmail search operators for a targeted query (e.g. q: "group booking is:unread" or q: "subject:group reservation"). Avoid bare multi-word OR chains.
   2. Use your "ask_user" response field to present found emails for user to select using a markdown table (From, Date, Subject, Summary columns) with numbered options. Always include a "Process All" option to handle every email in sequence.
   3. cache_content → cache selected email text for parsing
   4. parse_group_inquiry → extract structured booking data
@@ -140,12 +140,15 @@ IMPORTANT — Integration routing rules:
 `
     : ''
 }
-# GMAIL QUERY FORMAT (CRITICAL):
-q must be 1–2 broad keywords. NEVER multi-word OR chains.
-✅ q: "group"   ✅ q: "reservation"
-❌ q: "group booking OR group reservation OR block rooms"
-Gmail OR binds single terms only — multi-word phrases silently fail.
-Start with the single most relevant keyword; run a second search with a different keyword if results are insufficient.
+# GMAIL QUERY FORMAT:
+The q parameter supports full Gmail search syntax. Use operators for precise results:
+✅ q: "group booking is:unread"         (combined keywords + operator)
+✅ q: "subject:group reservation"       (field operator + keyword)
+✅ q: "\"group booking\" is:unread"     (quoted exact phrase + operator)
+✅ q: "{subject:group subject:booking}" (curly-brace OR grouping)
+❌ q: "group booking OR group reservation" (bare OR binds single terms — parsed as group AND (booking OR group) AND reservation)
+If first search returns irrelevant results, refine the query with different operators or keywords.
+Each run_integration_action call MUST have a unique, descriptive "intent" value.
 
 # MISSING INTEGRATION HANDLING:
 If the task references an integration action (e.g. run_integration_action, gmail-find-email, gmail-send-email) but the required app is not in the connected integrations list (or no integrations are connected), set done=true, task_type="general", and in final_answer:

@@ -1193,7 +1193,7 @@ export class ActionBuilder {
         },
         {
           ...runIntegrationActionSchema,
-          description: `${runIntegrationActionSchema.description}. Available actions:\n${this.connectedIntegrations}\n\nGmail query tip: Gmail OR binds single terms, not phrases. Use 1-2 broad keywords (e.g. q: "group"), NEVER long OR chains like "group booking OR group reservation".`,
+          description: `${runIntegrationActionSchema.description}. Available actions:\n${this.connectedIntegrations}\n\nGmail query tip: q supports full Gmail search syntax — combine keywords ("group booking"), use field operators (subject:group, is:unread), and quoted exact phrases. Avoid bare multi-word OR chains (OR binds single terms only). Each call needs a unique "intent" describing the specific search.`,
         },
       );
       actions.push(runIntegration);
