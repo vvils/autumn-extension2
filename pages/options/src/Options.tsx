@@ -81,6 +81,8 @@ const Options = () => {
       <nav className="sticky top-0 z-40 bg-white/80 backdrop-blur-sm">
         <div className="mx-auto max-w-3xl px-8 lg:max-w-4xl xl:max-w-6xl 2xl:max-w-6xl">
           <div className="scrollbar-hide flex items-center gap-4 overflow-x-auto py-4">
+            <img src="/logo.svg" alt="Autumn" className="h-4 shrink-0" />
+            <div className="h-5 w-px shrink-0 bg-black/10" />
             {TABS.map(item => (
               <button
                 key={item.id}
