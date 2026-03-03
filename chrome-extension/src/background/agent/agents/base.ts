@@ -148,7 +148,12 @@ export abstract class BaseAgent<T extends z.ZodType, M = unknown> {
             return parsed;
           }
         }
-        logger.error(`[${this.modelName}] LLM call failed with error: \n${errorMessage}`);
+        logger.error(`[${this.modelName}] LLM call failed:`, {
+          message: errorMessage,
+          status: (error as { status?: number }).status,
+          cause: (error as { cause?: unknown }).cause,
+          error,
+        });
         throw new Error(`Failed to invoke ${this.modelName} with structured output: \n${errorMessage}`);
       }
     }

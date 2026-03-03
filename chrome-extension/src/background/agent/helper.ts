@@ -3,7 +3,9 @@ import { ProviderTypeEnum } from '@extension/storage';
 import { ChatOpenAI } from '@langchain/openai';
 import { ChatAnthropic } from '@langchain/anthropic';
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
+import { createLogger } from '@src/background/log';
 
+const logger = createLogger('helper');
 const maxTokens = 1024 * 4;
 
 function isOpenAIReasoningModel(modelName: string): boolean {
@@ -74,18 +76,37 @@ function createOpenAIChatModel(
 export function createChatModel(providerConfig: ProviderConfig, modelConfig: ModelConfig): BaseChatModel {
   const temperature = (modelConfig.parameters?.temperature ?? 0.1) as number;
 
+  logger.info('createChatModel', {
+    provider: modelConfig.provider,
+    model: modelConfig.modelName,
+    baseUrl: providerConfig.baseUrl ?? '(none)',
+    hasApiKey: !!providerConfig.apiKey,
+  });
+
   switch (modelConfig.provider) {
     case ProviderTypeEnum.OpenAI: {
       return createOpenAIChatModel(providerConfig, modelConfig, undefined);
     }
     case ProviderTypeEnum.Anthropic: {
+      if (!providerConfig.baseUrl && providerConfig.apiKey?.startsWith('apt_')) {
+        logger.error(
+          'Proxy token detected but no baseUrl configured — requests will go directly to Anthropic and fail',
+        );
+      }
       const args = {
         model: modelConfig.modelName,
         apiKey: providerConfig.apiKey,
         maxTokens,
         temperature,
-        clientOptions: {},
+        ...(providerConfig.baseUrl ? { anthropicApiUrl: providerConfig.baseUrl } : {}),
+        clientOptions: providerConfig.baseUrl ? { baseURL: providerConfig.baseUrl } : {},
       };
+      logger.info('ChatAnthropic args', {
+        model: args.model,
+        maxTokens: args.maxTokens,
+        temperature: args.temperature,
+        clientOptions: args.clientOptions,
+      });
       const model = new ChatAnthropic(args);
       // Anthropic API rejects top_p alongside temperature; langchain defaults topP to -1
       // for models not in its allowlist. Override to undefined so it's omitted from requests.

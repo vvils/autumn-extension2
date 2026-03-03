@@ -207,6 +207,9 @@ async function initServerClient() {
 
           if (serverKeys && Object.keys(serverKeys).length > 0) {
             for (const [id, config] of Object.entries(serverKeys)) {
+              if (import.meta.env.DEV && config.baseUrl) {
+                config.baseUrl = config.baseUrl.replace('https://api.autumnplatform.com', SERVER_URL);
+              }
               await llmProviderStore.setProvider(id, config);
             }
             logger.info(`Pulled ${Object.keys(serverKeys).length} provider keys from server`);
