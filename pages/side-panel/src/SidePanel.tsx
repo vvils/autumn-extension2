@@ -112,6 +112,7 @@ const SidePanel = () => {
   const prevChainCountRef = useRef(0);
   const plannerStreamingRef = useRef(false);
   const synthesizerStreamingRef = useRef(false);
+  const streamingRafRef = useRef(0);
   const portRef = useRef<chrome.runtime.Port | null>(null);
   const heartbeatIntervalRef = useRef<number | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -382,17 +383,21 @@ const SidePanel = () => {
             case ExecutionState.STEP_START:
               break;
             case ExecutionState.STEP_STREAMING:
-              setMessages(prev => {
-                if (plannerStreamingRef.current) {
-                  return [...prev.slice(0, -1), { actor, content: content || '', timestamp }];
-                } else {
-                  plannerStreamingRef.current = true;
-                  setIsStreamingPlanner(true);
-                  return [...prev, { actor, content: content || '', timestamp }];
-                }
+              cancelAnimationFrame(streamingRafRef.current);
+              streamingRafRef.current = requestAnimationFrame(() => {
+                setMessages(prev => {
+                  if (plannerStreamingRef.current) {
+                    return [...prev.slice(0, -1), { actor, content: content || '', timestamp }];
+                  } else {
+                    plannerStreamingRef.current = true;
+                    setIsStreamingPlanner(true);
+                    return [...prev, { actor, content: content || '', timestamp }];
+                  }
+                });
               });
               return;
             case ExecutionState.STEP_OK: {
+              cancelAnimationFrame(streamingRafRef.current);
               const wasStreaming = plannerStreamingRef.current;
               plannerStreamingRef.current = false;
               setIsStreamingPlanner(false);
@@ -471,18 +476,22 @@ const SidePanel = () => {
         case Actors.SYNTHESIZER:
           switch (state) {
             case ExecutionState.STEP_STREAMING:
-              setMessages(prev => {
-                if (synthesizerStreamingRef.current) {
-                  const last = prev[prev.length - 1];
-                  return [...prev.slice(0, -1), { actor, content: content || '', timestamp, widgets: last?.widgets }];
-                } else {
-                  synthesizerStreamingRef.current = true;
-                  setIsStreamingSynthesizer(true);
-                  return [...prev, { actor, content: content || '', timestamp }];
-                }
+              cancelAnimationFrame(streamingRafRef.current);
+              streamingRafRef.current = requestAnimationFrame(() => {
+                setMessages(prev => {
+                  if (synthesizerStreamingRef.current) {
+                    const last = prev[prev.length - 1];
+                    return [...prev.slice(0, -1), { actor, content: content || '', timestamp, widgets: last?.widgets }];
+                  } else {
+                    synthesizerStreamingRef.current = true;
+                    setIsStreamingSynthesizer(true);
+                    return [...prev, { actor, content: content || '', timestamp }];
+                  }
+                });
               });
               return;
             case ExecutionState.STEP_OK: {
+              cancelAnimationFrame(streamingRafRef.current);
               const wasStreaming = synthesizerStreamingRef.current;
               synthesizerStreamingRef.current = false;
               setIsStreamingSynthesizer(false);

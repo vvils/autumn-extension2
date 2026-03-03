@@ -207,7 +207,7 @@ export class NavigatorAgent extends BaseAgent<z.ZodType, NavigatorResult> {
       this.addModelOutputToMemory(modelOutput);
 
       // take the actions
-      actionResults = await this.doMultiAction(actions);
+      actionResults = await this.doMultiAction(actions, currentState);
       // logger.info('Action results', JSON.stringify(actionResults, null, 2));
 
       this.context.actionResults = actionResults;
@@ -369,13 +369,16 @@ export class NavigatorAgent extends BaseAgent<z.ZodType, NavigatorResult> {
     return actions;
   }
 
-  private async doMultiAction(actions: Record<string, unknown>[]): Promise<ActionResult[]> {
+  private async doMultiAction(
+    actions: Record<string, unknown>[],
+    cachedBrowserState: BrowserState,
+  ): Promise<ActionResult[]> {
     const results: ActionResult[] = [];
     let errCount = 0;
     logger.info('Actions', actions);
 
     const browserContext = this.context.browserContext;
-    const browserState = await browserContext.getState(this.context.options.useVision);
+    const browserState = cachedBrowserState;
     const cachedPathHashes = await calcBranchPathHashSet(browserState);
 
     await browserContext.removeHighlight();
@@ -437,8 +440,10 @@ export class NavigatorAgent extends BaseAgent<z.ZodType, NavigatorResult> {
         if (this.context.paused || this.context.stopped) {
           return results;
         }
-        // TODO: wait for 1 second for now, need to optimize this to avoid unnecessary waiting
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        if (i < actions.length - 1) {
+          const delayMs = browserContext.getConfig().waitBetweenActions * 1000;
+          await new Promise(resolve => setTimeout(resolve, delayMs));
+        }
       } catch (error) {
         if (error instanceof URLNotAllowedError) {
           throw error;
@@ -551,7 +556,7 @@ export class NavigatorAgent extends BaseAgent<z.ZodType, NavigatorResult> {
 
     // Filter out null values and cast to the expected type
     const validActions = updatedActions.filter((action): action is Record<string, unknown> => action !== null);
-    const result = await this.doMultiAction(validActions);
+    const result = await this.doMultiAction(validActions, state);
 
     // Wait for the specified delay
     await new Promise(resolve => setTimeout(resolve, delay));
