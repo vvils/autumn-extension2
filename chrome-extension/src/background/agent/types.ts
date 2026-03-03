@@ -7,6 +7,7 @@ import type { EventManager } from './event/manager';
 import { Actors, ExecutionState, AgentEvent } from './event/types';
 import { AgentStepHistory } from './history';
 import { CostTracker } from './cost';
+import { ContextWindowLogger } from './debug/contextLogger';
 
 export interface AgentOptions {
   maxSteps: number;
@@ -29,7 +30,7 @@ export const DEFAULT_AGENT_OPTIONS: AgentOptions = {
   maxErrorLength: 400,
   useVision: false,
   includeAttributes: DEFAULT_INCLUDE_ATTRIBUTES,
-  planningInterval: 3,
+  planningInterval: 5,
 };
 
 export class AgentContext {
@@ -49,6 +50,7 @@ export class AgentContext {
   history: AgentStepHistory;
   finalAnswer: string | null;
   costTracker: CostTracker;
+  contextLogger: ContextWindowLogger | null;
   userInputResolve: ((value: string) => void) | null;
 
   constructor(
@@ -75,6 +77,7 @@ export class AgentContext {
     this.history = new AgentStepHistory();
     this.finalAnswer = null;
     this.costTracker = new CostTracker();
+    this.contextLogger = import.meta.env.DEV ? new ContextWindowLogger(taskId) : null;
     this.userInputResolve = null;
   }
 
@@ -113,6 +116,7 @@ export class AgentContext {
     this.consecutiveFailures = 0;
     this.stateMessageAdded = false;
     this.finalAnswer = null;
+    this.contextLogger?.reset();
   }
 
   waitForUserInput(): Promise<string> {

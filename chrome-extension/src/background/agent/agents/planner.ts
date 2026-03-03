@@ -102,8 +102,12 @@ export class PlannerAgent extends BaseAgent<typeof plannerOutputSchema, PlannerO
       const messages = this.context.messageManager.getMessages();
       // Use full message history except the first one
       const plannerMessages = [this.prompt.getSystemMessage(), ...messages.slice(1)];
+      this.context.contextLogger?.logAgentContext('Planner', this.context.nSteps, plannerMessages);
 
+      const tLlm = performance.now();
       const modelOutput = await this.invoke(plannerMessages);
+      logger.info(`⏱ LLM invoke: ${Math.round(performance.now() - tLlm)}ms`);
+      this.context.contextLogger?.logAgentResponse('Planner', this.context.nSteps, modelOutput);
       if (!modelOutput) {
         throw new Error('Failed to validate planner output');
       }

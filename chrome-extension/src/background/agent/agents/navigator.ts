@@ -170,8 +170,10 @@ export class NavigatorAgent extends BaseAgent<z.ZodType, NavigatorResult> {
 
       const messageManager = this.context.messageManager;
       // add the browser state message
+      const tState = performance.now();
       await this.addStateMessageToMemory();
       const currentState = await this.context.browserContext.getCachedState();
+      logger.info(`⏱ State message: ${Math.round(performance.now() - tState)}ms`);
       browserStateHistory = new BrowserStateHistory(currentState);
 
       // check if the task is paused or stopped
@@ -182,7 +184,11 @@ export class NavigatorAgent extends BaseAgent<z.ZodType, NavigatorResult> {
 
       // call the model to get the actions to take
       const inputMessages = messageManager.getMessages();
+      this.context.contextLogger?.logAgentContext('Navigator', this.context.nSteps, inputMessages);
+      const tLlm = performance.now();
       const modelOutput = await this.invoke(inputMessages);
+      logger.info(`⏱ LLM invoke: ${Math.round(performance.now() - tLlm)}ms`);
+      this.context.contextLogger?.logAgentResponse('Navigator', this.context.nSteps, modelOutput);
 
       if (this.lastUsageMetadata) {
         this.context.costTracker.recordUsage(this.modelName, {
@@ -207,8 +213,9 @@ export class NavigatorAgent extends BaseAgent<z.ZodType, NavigatorResult> {
       this.addModelOutputToMemory(modelOutput);
 
       // take the actions
+      const tActions = performance.now();
       actionResults = await this.doMultiAction(actions, currentState);
-      // logger.info('Action results', JSON.stringify(actionResults, null, 2));
+      logger.info(`⏱ doMultiAction: ${Math.round(performance.now() - tActions)}ms`);
 
       this.context.actionResults = actionResults;
 

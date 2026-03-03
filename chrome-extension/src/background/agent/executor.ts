@@ -137,6 +137,7 @@ export class Executor {
     const allowedMaxSteps = this.context.options.maxSteps;
     const task = this.tasks[this.tasks.length - 1];
 
+    const taskStart = performance.now();
     try {
       this.context.emitEvent(Actors.SYSTEM, ExecutionState.TASK_START, this.context.taskId);
 
@@ -191,7 +192,9 @@ export class Executor {
         }
 
         // Run planner periodically (skip step 0 — already ran above)
-        if (step > 0 && this.planner && (context.nSteps % context.options.planningInterval === 0 || navigatorDone)) {
+        const intervalTrigger = context.nSteps % context.options.planningInterval === 0;
+        const shouldRunPlanner = navigatorDone || (intervalTrigger && context.consecutiveFailures > 0);
+        if (step > 0 && this.planner && shouldRunPlanner) {
           navigatorDone = false;
           latestPlanOutput = await this.runPlannerWithAskUser();
 
@@ -230,8 +233,10 @@ export class Executor {
         this.context.emitEvent(Actors.SYSTEM, ExecutionState.TASK_FAIL, `Task failed: \n\n${errorMessage}`);
       }
     } finally {
+      logger.info(`⏱ Total task: ${Math.round(performance.now() - taskStart)}ms`);
       if (import.meta.env.DEV) {
         logger.debug('Executor history', JSON.stringify(this.context.history, null, 2));
+        await this.context.contextLogger?.flush();
       }
       if (this.generalSettings?.replayHistoricalTasks) {
         const historyString = JSON.stringify(this.context.history);
@@ -368,15 +373,19 @@ export class Executor {
     try {
       // Add current browser state to memory
       let positionForPlan = 0;
+      const tState = performance.now();
       if (this.tasks.length > 1 || this.context.nSteps > 0 || this.context.actionResults.some(r => r.includeInMemory)) {
         await this.navigator.addStateMessageToMemory();
         positionForPlan = this.context.messageManager.length() - 1;
       } else {
         positionForPlan = this.context.messageManager.length();
       }
+      logger.info(`⏱ Planner state fetch: ${Math.round(performance.now() - tState)}ms`);
 
       // Execute planner
+      const tLlm = performance.now();
       const planOutput = await this.planner.execute();
+      logger.info(`⏱ Planner LLM: ${Math.round(performance.now() - tLlm)}ms`);
       if (planOutput.result) {
         this.context.messageManager.addPlan(JSON.stringify(planOutput.result), positionForPlan);
       }
@@ -410,7 +419,9 @@ export class Executor {
       if (context.paused || context.stopped) {
         return false;
       }
+      const tNav = performance.now();
       const navOutput = await this.navigator.execute();
+      logger.info(`⏱ Navigator step: ${Math.round(performance.now() - tNav)}ms`);
       // check if the task is paused or stopped
       if (context.paused || context.stopped) {
         return false;
